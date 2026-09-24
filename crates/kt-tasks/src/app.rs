@@ -96,6 +96,11 @@ impl App {
         Ok(App { replica, meta })
     }
 
+    /// Hand the replica to a transport driver (which needs shared ownership).
+    pub fn into_replica(self) -> Replica {
+        self.replica
+    }
+
     fn create_group_doc(&mut self, g: GroupId, name: &str) -> Result<DocId> {
         let d = self.replica.create_doc(&g).map_err(eng)?;
         {

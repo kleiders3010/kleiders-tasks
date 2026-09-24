@@ -39,6 +39,8 @@ const SNAPSHOT_EVERY: usize = 64;
 pub enum Message {
     Epoch(Vec<u8>),
     Envelope(Vec<u8>),
+    /// A member's signed per-document generation report (see `slots`).
+    Status(Vec<u8>),
 }
 
 impl Message {
@@ -461,6 +463,7 @@ impl Replica {
                 self.insert_epoch(g, rec, false)
             }
             Message::Envelope(b) => self.apply_envelope_bytes(&b, true),
+            Message::Status(b) => self.receive_status(&b),
         }
     }
 
@@ -661,6 +664,7 @@ impl Replica {
         if proposal.generation != cur_gen + 1 && !replacing {
             if proposal.generation > cur_gen + 1 && persist && self.parked.len() < 10_000 {
                 self.parked.push(bytes.to_vec());
+                self.events.push(Event::Parked);
             }
             return Ok(());
         }
@@ -687,6 +691,7 @@ impl Replica {
                 // We're missing ops the proposer had: wait until they arrive.
                 if persist && self.parked.len() < 10_000 {
                     self.parked.push(bytes.to_vec());
+                    self.events.push(Event::Parked);
                 }
                 return Ok(());
             }
@@ -743,6 +748,39 @@ impl Replica {
                 sem.rebase(base, local, &fresh)?;
                 rebased = true;
             }
+        }
+        // Our own ops of the generation we're leaving: members still on it may lack some of
+        // them (we may have edited right before switching), and the proposal can only be
+        // verified on top of them. Slots keep carrying them for FORWARD_WINDOW_MS.
+        let leaving = {
+            let state = self.groups.get(g).ok_or_else(|| Error::NotFound("group".into()))?;
+            let ds = state.docs.get(d).ok_or_else(|| Error::NotFound("doc".into()))?;
+            if ds.generation < generation {
+                let cur = ds.doc.oplog_vv().get(&me).copied().unwrap_or(0);
+                let head_key = state.epochs.head().and_then(|h| state.keys.get(&h).cloned().map(|k| (h, k)));
+                match head_key {
+                    Some((h, k)) if cur > ds.gen_base => {
+                        let span = IdSpan::new(me, ds.gen_base, cur);
+                        let update = ds.doc.export(ExportMode::updates_in_range(vec![span])).map_err(|e| Error::Loro(e.to_string()))?;
+                        let inner = Inner { group: *g, doc: *d, generation: ds.generation, kind: MessageKind::DocUpdate, peer: me, created_ms: now_ms(), payload: update };
+                        Some(Some(Envelope::seal(&self.identity, h, &k, &inner)?.encode()?))
+                    }
+                    _ => Some(None),
+                }
+            } else {
+                None // replacing a concurrent proposal of the same generation: keep what we have
+            }
+        };
+        match leaving {
+            Some(Some(env)) => {
+                let mut b = now_ms().to_le_bytes().to_vec();
+                b.extend_from_slice(&env);
+                storage::write_atomic(&self.layout.doc_dir(g, d).join("prevgen"), &b)?;
+            }
+            Some(None) => {
+                let _ = std::fs::remove_file(self.layout.doc_dir(g, d).join("prevgen"));
+            }
+            None => {}
         }
         let ds = self
             .groups

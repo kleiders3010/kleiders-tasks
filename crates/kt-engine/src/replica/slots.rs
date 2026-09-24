@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use super::{Message, Replica};
 use crate::crypto::{self, SymKey};
 use crate::envelope::{Envelope, Inner, MessageKind};
-use crate::ids::{EpochId, GroupId};
+use crate::ids::{DeviceId, DocId, EpochId, GroupId};
 use crate::{wire, Error, Result};
 use loro::{ExportMode, IdSpan};
 
@@ -67,6 +67,23 @@ pub struct ReadTopic {
     pub topic: [u8; 32],
 }
 
+/// "I'm on these document generations", signed by the member. Lets devices stop carrying
+/// their previous generation's ops (prevgen) once every member has switched.
+#[derive(Serialize, Deserialize)]
+struct StatusBody {
+    group: GroupId,
+    device: DeviceId,
+    generations: Vec<(DocId, u32)>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StatusRecord {
+    body: Vec<u8>,
+    sig: Vec<u8>,
+}
+
+const STATUS_TAG: [u8; 2] = *b"ST";
+
 #[derive(Serialize, Deserialize)]
 struct SlotPayload {
     group: GroupId,
@@ -82,6 +99,9 @@ pub struct SlotReport {
     pub failed: usize,
     /// Slots that didn't decrypt or had a wrong header.
     pub bad_slots: usize,
+    /// Messages parked waiting for something not yet received (epoch, earlier generation).
+    /// Parked messages live in memory only, so callers should read these slots again later.
+    pub parked: usize,
 }
 
 fn slot_aad(group: &GroupId, epoch: &EpochId, topic: &[u8; 32]) -> Vec<u8> {
@@ -188,6 +208,7 @@ impl Replica {
                 v.extend_from_slice(&ds.generation.to_le_bytes());
                 v.extend_from_slice(&cur.to_le_bytes());
                 v.extend_from_slice(&ds.gen_base.to_le_bytes());
+                v.push(self.prevgen_envelope(&t.group, d).is_some() as u8);
                 out.push(v);
             }
             out.push(t.epoch.0.to_vec());
@@ -195,19 +216,87 @@ impl Replica {
         Ok(out)
     }
 
+    /// Own ops of the previous document generation, carried while some current member isn't
+    /// known to have switched (and at most FORWARD_WINDOW_MS).
+    fn prevgen_envelope(&self, g: &GroupId, d: &DocId) -> Option<Vec<u8>> {
+        let b = std::fs::read(self.layout.doc_dir(g, d).join("prevgen")).ok()?;
+        if b.len() < 8 {
+            return None;
+        }
+        let at = u64::from_le_bytes(b[..8].try_into().ok()?);
+        if super::now_ms().saturating_sub(at) >= FORWARD_WINDOW_MS {
+            return None;
+        }
+        let state = self.groups.get(g)?;
+        let mine = state.docs.get(d)?.generation;
+        let me = self.identity.id();
+        let known = self.member_generations(g);
+        let head = state.epochs.head()?;
+        let lagging = state
+            .epochs
+            .recipients(&head)?
+            .keys()
+            .filter(|m| **m != me)
+            .any(|m| known.get(&(*m, *d)).copied().unwrap_or(0) < mine);
+        lagging.then(|| b[8..].to_vec())
+    }
+
+    fn status_record(&self, g: &GroupId) -> Result<Vec<u8>> {
+        let state = &self.groups[g];
+        let body = StatusBody {
+            group: *g,
+            device: self.identity.id(),
+            generations: state.docs.iter().map(|(d, ds)| (*d, ds.generation)).collect(),
+        };
+        let body = wire::encode(STATUS_TAG, 1, &body)?;
+        let sig = self.identity.sign(&body).to_vec();
+        postcard::to_stdvec(&StatusRecord { body, sig }).map_err(|e| Error::Encoding(e.to_string()))
+    }
+
+    /// Known document generations of other members: (device, doc) -> generation.
+    fn member_generations(&self, g: &GroupId) -> std::collections::BTreeMap<(DeviceId, DocId), u32> {
+        std::fs::read(self.layout.group_dir(g).join("member_gens"))
+            .ok()
+            .and_then(|b| postcard::from_bytes::<Vec<((DeviceId, DocId), u32)>>(&b).ok())
+            .map(|v| v.into_iter().collect())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn receive_status(&mut self, bytes: &[u8]) -> Result<()> {
+        let rec: StatusRecord = postcard::from_bytes(bytes).map_err(|e| Error::Encoding(e.to_string()))?;
+        let body: StatusBody = wire::decode(STATUS_TAG, 1, &rec.body)?.1;
+        let sig: [u8; 64] = rec.sig.as_slice().try_into().map_err(|_| Error::Crypto("bad signature length"))?;
+        crypto::verify(&body.device.0, &rec.body, &sig)?;
+        let state = self.groups.get(&body.group).ok_or_else(|| Error::NotFound("group".into()))?;
+        if !state.epochs.is_current_member(&body.device) {
+            return Err(Error::Rejected("status from a non-member".into()));
+        }
+        let mut known = self.member_generations(&body.group);
+        let mut changed = false;
+        for (d, gen_) in body.generations {
+            let e = known.entry((body.device, d)).or_insert(0);
+            if gen_ > *e {
+                *e = gen_;
+                changed = true;
+            }
+        }
+        if changed {
+            let v: Vec<_> = known.into_iter().collect();
+            let b = postcard::to_stdvec(&v).map_err(|e| Error::Encoding(e.to_string()))?;
+            crate::storage::write_atomic(&self.layout.group_dir(&body.group).join("member_gens"), &b)?;
+        }
+        Ok(())
+    }
+
     /// Epoch records this device carries: its own, plus those whose creator is no longer a
     /// member (nobody else would republish them).
     fn carried_records(&self, g: &GroupId) -> Result<Vec<Vec<u8>>> {
         let state = &self.groups[g];
         let me = self.identity.id();
-        let mut out = Vec::new();
-        for rec in state.epochs.all_records() {
-            let c = rec.body.creator;
-            if c == me || !state.epochs.is_current_member(&c) {
-                out.push(rec.encode()?);
-            }
-        }
-        Ok(out)
+        let mut recs: Vec<_> = state.epochs.all_records().filter(|r| r.body.creator == me || !state.epochs.is_current_member(&r.body.creator)).collect();
+        // Deterministic order (the store is a hash map): stable slot fingerprints across runs.
+        recs.sort_by_key(|r| (r.body.created_ms, r.id()));
+        recs.into_iter().map(|r| r.encode()).collect()
     }
 
     fn slot_messages(&mut self, t: &SlotTarget) -> Result<Vec<Vec<u8>>> {
@@ -227,6 +316,7 @@ impl Replica {
         }
         let key = state.keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("head key".into()))?;
         let docs: Vec<_> = state.docs.keys().copied().collect();
+        messages.push(Message::Status(self.status_record(&t.group)?).encode()?);
         for d in docs {
             let ds = &self.groups[&t.group].docs[&d];
             // The generation's proposal (the document's base), if nobody else carries it.
@@ -243,6 +333,9 @@ impl Replica {
                         }
                     }
                 }
+            }
+            if let Some(env) = self.prevgen_envelope(&t.group, &d) {
+                messages.push(Message::Envelope(env).encode()?);
             }
             let cur = ds.doc.oplog_vv().get(&me_peer).copied().unwrap_or(0);
             if cur > ds.gen_base {
@@ -308,11 +401,13 @@ impl Replica {
                 }
             }
         }
+        let parked_before = self.events.iter().filter(|e| matches!(e, super::Event::Parked)).count();
         for m in epochs.iter().chain(others.iter()) {
             if self.receive(m).is_err() {
                 report.failed += 1;
             }
         }
+        report.parked = self.events.iter().filter(|e| matches!(e, super::Event::Parked)).count().saturating_sub(parked_before);
         Ok(report)
     }
 }

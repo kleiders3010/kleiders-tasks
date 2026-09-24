@@ -6,8 +6,11 @@
 //! - Replica work (crypto, sandboxed imports) runs on blocking threads.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use kt_engine::replica::{ReadTopic, Replica};
 
@@ -32,9 +35,25 @@ pub struct ReadReport {
     pub rejected: usize,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct Written {
     fingerprint: [u8; 32],
-    at: Instant,
+    /// Unix seconds.
+    at: u64,
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+type Key = (usize, [u8; 32], [u8; 32]);
+
+/// What survives restarts (Android runs each background sync in a fresh process): without
+/// it every run would rewrite every slot and reopen every slot it had already applied.
+#[derive(Default, Serialize, Deserialize)]
+struct PersistedState {
+    written: Vec<(Key, Written)>,
+    seen: Vec<(Key, u64)>,
 }
 
 pub struct Syncer {
@@ -46,17 +65,41 @@ pub struct Syncer {
     seen: Mutex<HashMap<(usize, [u8; 32], [u8; 32]), u64>>,
     /// Slots the last read showed missing (force a rewrite).
     lost: Mutex<HashSet<(usize, [u8; 32], [u8; 32])>>,
+    state_file: Option<PathBuf>,
 }
 
 impl Syncer {
     pub fn new(replica: Arc<Mutex<Replica>>, mailboxes: Vec<Arc<dyn Mailbox>>) -> Arc<Syncer> {
+        Self::with_state(replica, mailboxes, None)
+    }
+
+    /// Like [`Syncer::new`], remembering what was written and read in `state_file`.
+    /// Mailbox indices must stay stable across runs for a given file.
+    pub fn with_state(replica: Arc<Mutex<Replica>>, mailboxes: Vec<Arc<dyn Mailbox>>, state_file: Option<PathBuf>) -> Arc<Syncer> {
+        let st: PersistedState = state_file
+            .as_ref()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| postcard::from_bytes(&b).ok())
+            .unwrap_or_default();
         Arc::new(Syncer {
             replica,
             mailboxes,
-            written: Mutex::new(HashMap::new()),
-            seen: Mutex::new(HashMap::new()),
+            written: Mutex::new(st.written.into_iter().collect()),
+            seen: Mutex::new(st.seen.into_iter().collect()),
             lost: Mutex::new(HashSet::new()),
+            state_file,
         })
+    }
+
+    fn save(&self) {
+        let Some(p) = &self.state_file else { return };
+        let st = PersistedState {
+            written: self.written.lock().expect("lock").iter().map(|(k, v)| (*k, v.clone())).collect(),
+            seen: self.seen.lock().expect("lock").iter().map(|(k, v)| (*k, *v)).collect(),
+        };
+        if let Ok(b) = postcard::to_stdvec(&st) {
+            let _ = kt_engine::storage::write_atomic(p, &b);
+        }
     }
 
     pub fn replica(&self) -> Arc<Mutex<Replica>> {
@@ -84,7 +127,7 @@ impl Syncer {
                         return true;
                     }
                     match self.written.lock().expect("lock").get(&key) {
-                        Some(w) => w.fingerprint != fp || w.at.elapsed() > REFRESH,
+                        Some(w) => w.fingerprint != fp || now_secs().saturating_sub(w.at) > REFRESH.as_secs(),
                         None => true,
                     }
                 })
@@ -106,7 +149,7 @@ impl Syncer {
                 match o {
                     WriteOutcome::Stored { .. } => {
                         report.written += 1;
-                        self.written.lock().expect("lock").insert(key, Written { fingerprint: fp, at: Instant::now() });
+                        self.written.lock().expect("lock").insert(key, Written { fingerprint: fp, at: now_secs() });
                         self.lost.lock().expect("lock").remove(&key);
                     }
                     WriteOutcome::Deferred { .. } => report.deferred += 1,
@@ -114,6 +157,7 @@ impl Syncer {
                 }
             }
         }
+        self.save();
         report
     }
 
@@ -139,6 +183,7 @@ impl Syncer {
             let reads = futures_util::future::join_all(self.mailboxes.iter().map(|m| m.read(&topic_ids))).await;
             // Group new slot versions by topic.
             let mut by_topic: HashMap<[u8; 32], Vec<Vec<u8>>> = HashMap::new();
+            let mut marked: HashMap<[u8; 32], Vec<Key>> = HashMap::new();
             for (mi, slots) in reads.into_iter().enumerate() {
                 let own: HashMap<[u8; 32], [u8; 32]> =
                     my_targets.iter().map(|t| (self.mailboxes[mi].writer_id(&t.writer_seed), t.topic)).collect();
@@ -155,6 +200,7 @@ impl Syncer {
                         continue;
                     }
                     seen.insert(key, s.version);
+                    marked.entry(s.topic).or_default().push(key);
                     by_topic.entry(s.topic).or_default().push(s.blob);
                 }
                 // Read-back: our own slots this mailbox should have returned.
@@ -171,6 +217,7 @@ impl Syncer {
             }
             for t in new_topics {
                 let Some(blobs) = by_topic.remove(&t.topic) else { continue };
+                let topic = t.topic;
                 let replica = self.replica.clone();
                 let res = tokio::task::spawn_blocking(move || {
                     let refs: Vec<&[u8]> = blobs.iter().map(|b| b.as_slice()).collect();
@@ -181,9 +228,18 @@ impl Syncer {
                     report.slots_opened += n;
                     report.messages += r.messages;
                     report.rejected += r.failed + r.bad_slots;
+                    if r.parked > 0 {
+                        // Something in these slots waits for data we don't have yet: read
+                        // them again next time instead of trusting in-memory parking.
+                        let mut seen = self.seen.lock().expect("lock");
+                        for k in marked.remove(&topic).unwrap_or_default() {
+                            seen.remove(&k);
+                        }
+                    }
                 }
             }
         }
+        self.save();
         report
     }
 
@@ -202,6 +258,7 @@ impl Syncer {
     /// Run until `stop` fires: write rounds every 30–60 s with jitter (D11), reads every
     /// `read_every`.
     pub async fn run(self: Arc<Self>, read_every: Duration, mut stop: tokio::sync::watch::Receiver<bool>) {
+        use std::time::Instant;
         let mut next_write = Instant::now();
         let mut next_read = Instant::now();
         loop {

@@ -1035,8 +1035,10 @@ dependencies = [
  "anyhow",
  "hex",
  "kt-engine",
+ "kt-net",
  "kt-tasks",
  "loro",
+ "tokio",
 ]
 
 [[package]]
@@ -1071,7 +1073,9 @@ dependencies = [
  "kt-engine",
  "loro",
  "nostr",
+ "postcard",
  "rand 0.8.5",
+ "serde",
  "thiserror 2.0.17",
  "tokio",
  "tokio-websockets",

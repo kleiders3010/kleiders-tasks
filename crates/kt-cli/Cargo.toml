@@ -15,3 +15,5 @@ kt-tasks = { path = "../kt-tasks" }
 loro.workspace = true
 anyhow.workspace = true
 hex.workspace = true
+kt-net = { path = "../kt-net" }
+tokio.workspace = true

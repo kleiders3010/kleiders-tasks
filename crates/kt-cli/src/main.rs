@@ -1,6 +1,6 @@
-//! kt: command-line prototype of Kleiders Tasks (M1). Headless; one "device" per --home dir.
+//! kt: command-line prototype of Kleiders Tasks. Headless; one "device" per --home dir.
 //!
-//! Devices exchange messages through files (a manual transport) until M2 adds real ones:
+//! Devices sync over Nostr relays (`kt sync`), or exchange messages through files:
 //!
 //! ```text
 //! kt --home A init                      kt --home B init
@@ -45,7 +45,10 @@ fn usage() -> &'static str {
   send FILE                    write this device's pending messages to FILE
   recv FILE                    apply messages from FILE
   epoch LIST                   propose a document epoch (compaction)
-  info LIST                    generation, members, sizes"
+  info LIST                    generation, members, sizes
+  sync [--relays U1,U2] [--rounds N] [--every SECS]
+                               sync over Nostr relays (default: the baseline relay list)
+  relay [--port P]             run a local test relay (no --home needed)"
 }
 
 fn main() {
@@ -118,8 +121,85 @@ fn print_tasks(ts: &[TaskView], depth: usize) {
     }
 }
 
+/// Baseline relay list shipped with the app (updated later via the operator manifest, §7b).
+/// The 8 relays that passed the E4 acceptance probe.
+const BASELINE_RELAYS: &[&str] = &[
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.primal.net",
+    "wss://nostr.mom",
+    "wss://offchain.pub",
+    "wss://nostr.oxtr.dev",
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.snort.social",
+];
+
+fn run_relay(port: u16) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let r = kt_net::testrelay::TestRelay::start(Some(format!("127.0.0.1:{port}").parse()?)).await?;
+        println!("test relay listening on {}", r.url());
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        }
+    })
+}
+
+fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every: u64) -> Result<()> {
+    use std::sync::{Arc, Mutex};
+    let urls: Vec<String> = match relays {
+        Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        None => BASELINE_RELAYS.iter().map(|s| s.to_string()).collect(),
+    };
+    let replica = Arc::new(Mutex::new(app.into_replica()));
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let url_refs: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
+        let mb = Arc::new(kt_net::nostr::NostrMailbox::new(&url_refs, kt_net::nostr::NostrPolicy::default()));
+        // One state file per relay set: mailbox indices must be stable for a given file.
+        let set_id = hex::encode(&kt_engine::crypto::hash("kt/relayset/v1", urls.join(",").as_bytes())[..6]);
+        let state = home.join("data").join(format!("sync-{set_id}.state"));
+        let syncer = kt_net::sync::Syncer::with_state(replica.clone(), vec![mb.clone() as Arc<dyn kt_net::mailbox::Mailbox>], Some(state));
+        for i in 0..rounds {
+            if i > 0 {
+                tokio::time::sleep(Duration::from_secs(every)).await;
+            }
+            let (w, r) = syncer.sync_once().await;
+            println!(
+                "round {}: wrote {} slot(s) ({} unchanged, {} waiting for budget, {} failed); read {} new slot(s), {} message(s), {} rejected",
+                i + 1, w.written, w.unchanged, w.deferred, w.failed, r.slots_opened, r.messages, r.rejected
+            );
+        }
+        for (url, h) in mb.health() {
+            if h != Default::default() {
+                println!(
+                    "  {url}: ok {} refused {} rate-limited {} unreachable {} read-back {}/{}",
+                    h.published_ok, h.published_refused, h.rate_limited, h.connect_failures, h.readback_hits, h.readback_hits + h.readback_misses
+                );
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    })?;
+    let events = replica.lock().expect("lock").take_events();
+    let parked = events.iter().filter(|e| matches!(e, kt_engine::replica::Event::Parked)).count();
+    if parked > 0 {
+        println!("  {parked} message(s) waiting for data not received yet");
+    }
+    for e in events {
+        match e {
+            kt_engine::replica::Event::Imported { .. } | kt_engine::replica::Event::EpochAccepted { .. } | kt_engine::replica::Event::Parked => {}
+            other => println!("  {other:?}"),
+        }
+    }
+    Ok(())
+}
+
 fn run() -> Result<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(|a| a.as_str()) == Some("relay") {
+        let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(7447);
+        return run_relay(port);
+    }
     let home = match args.iter().position(|a| a == "--home") {
         Some(i) if i + 1 < args.len() => {
             let h = PathBuf::from(args[i + 1].clone());
@@ -141,9 +221,15 @@ fn run() -> Result<()> {
     let out = take_flag(&mut args, "--out");
     let under = take_flag(&mut args, "--under");
     let group_flag = take_flag(&mut args, "--group");
+    let relays_flag = take_flag(&mut args, "--relays");
+    let rounds: usize = take_flag(&mut args, "--rounds").and_then(|x| x.parse().ok()).unwrap_or(1);
+    let every: u64 = take_flag(&mut args, "--every").and_then(|x| x.parse().ok()).unwrap_or(45);
     let cmd = args.first().cloned().unwrap_or_default();
     let arg = |i: usize| args.get(i).cloned().ok_or_else(|| anyhow!("{}", usage()));
     let mut app = open(&home)?;
+    if cmd == "sync" {
+        return run_sync(app, &home, relays_flag, rounds, every);
+    }
     match cmd.as_str() {
         "init" => println!("device ready: {}", &device_key(&app.replica.device_public())[..16]),
         "whoami" => println!("{}", device_key(&app.replica.device_public())),

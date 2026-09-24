@@ -17,6 +17,8 @@ rand.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 blake3.workspace = true
+serde.workspace = true
+postcard.workspace = true
 
 [dev-dependencies]
 loro.workspace = true
