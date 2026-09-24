@@ -8,7 +8,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 
 ## Critical: engine correctness and security
 
-### D1. Device identity must never be cloned (restore, backup, second instance)
+### D1. Device identity must never be cloned (restore, backup, second instance): ✅ KEEP (2026-09-24)
 - **Problem:** if two devices ever share a Loro PeerID, their documents **silently and permanently diverge**: every import reports success, and a real edit is lost for one side. The most likely cause is Android Auto Backup or device-to-device restore copying the app's files to a new phone, including PeerID, iroh key and Nostr slot keys. Running two desktop instances does the same.
 - **Evidence:** E1 §6 (reproduced), R3 (Loro docs: "Duplicate PeerIDs… corrupt the document"), R4 (Auto Backup / D2D restore clones identity files).
 - **Proposal:**
@@ -18,7 +18,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Alternatives:** none serious. This is a hard Loro constraint.
 - **Confidence:** high. **Not verified:** exact Auto Backup exclusion behavior on OEM backup services.
 
-### D2. Edits can be forged: sign updates and bind PeerIDs to device keys
+### D2. Edits can be forged: sign updates and bind PeerIDs to device keys: ✅ KEEP (2026-09-24; one person = personal group, one key per device underneath)
 - **Problem:** a member who uses another member's PeerID makes edits appear to come from the victim and **permanently splits the group's data** (B lost A's real edit). All imports report success.
 - **Evidence:** A5 §1 (reproduced), R7 claim 3, R3.
 - **Proposal:**
