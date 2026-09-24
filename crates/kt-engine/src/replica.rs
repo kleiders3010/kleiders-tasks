@@ -148,6 +148,8 @@ pub struct Replica {
     /// This device's current whereabouts (opaque, from the transport layer).
     whereabouts: Option<Vec<u8>>,
     invite_cache: invites::InviteCache,
+    /// Bumped on every local commit (lets live transports push right away).
+    local_changes: u64,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
 }
@@ -171,6 +173,7 @@ impl Replica {
             imported: std::collections::HashSet::new(),
             whereabouts: None,
             invite_cache: Default::default(),
+            local_changes: 0,
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
         };
@@ -306,8 +309,14 @@ impl Replica {
         self.groups.get(g)?.docs.get(d).map(|s| &s.doc)
     }
 
+    /// Counter of local commits in this session (compare to notice new local changes).
+    pub fn local_changes(&self) -> u64 {
+        self.local_changes
+    }
+
     /// Commit local edits made on [`Replica::doc`] and persist a snapshot.
     pub fn commit(&mut self, g: &GroupId, d: &DocId) -> Result<()> {
+        self.local_changes += 1;
         let state = self.groups.get_mut(g).ok_or_else(|| Error::NotFound("group".into()))?;
         let ds = state.docs.get_mut(d).ok_or_else(|| Error::NotFound("doc".into()))?;
         ds.doc.commit();

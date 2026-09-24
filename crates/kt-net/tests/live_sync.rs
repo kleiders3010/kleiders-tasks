@@ -99,3 +99,38 @@ async fn a_knock_makes_online_members_dial_each_other() {
     assert!(took.is_some(), "B learned A's address from the knock, dialed, and pulled the change");
     let _ = pa;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn open_apps_stay_in_sync_without_nostr() {
+    use kt_net::live::run_p2p_live;
+    let (ra, rb, g, d) = pair();
+    let a = Syncer::new(Arc::new(Mutex::new(ra)), vec![]);
+    let b = Syncer::new(Arc::new(Mutex::new(rb)), vec![]);
+    let cfg = P2pConfig { bind: Some("127.0.0.1:0".parse().unwrap()), ..Default::default() };
+    let pa = P2p::start(a.clone(), cfg.clone()).await.unwrap();
+    let pb = P2p::start(b.clone(), cfg).await.unwrap();
+    pa.publish_whereabouts();
+    pb.publish_whereabouts();
+    // They learned each other's address earlier (DHT, LAN, an old slot...): simulate one
+    // exchange of slots, then no mailbox at all.
+    for (from, to) in [(&a, &b), (&b, &a)] {
+        let targets = from.replica().lock().unwrap().slot_targets();
+        for t in targets {
+            let blob = from.replica().lock().unwrap().slot_blob(&t).unwrap();
+            let rt = to.replica().lock().unwrap().read_topics().into_iter().find(|x| x.topic == t.topic);
+            if let Some(rt) = rt {
+                let _ = to.replica().lock().unwrap().open_slot(&rt, &blob);
+            }
+        }
+    }
+    let (_s1, r1) = tokio::sync::watch::channel(false);
+    let (_s2, r2) = tokio::sync::watch::channel(false);
+    tokio::spawn(run_p2p_live(a.clone(), pa.clone(), r1));
+    tokio::spawn(run_p2p_live(b.clone(), pb.clone(), r2));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    a.replica().lock().unwrap().doc(&g, &d).unwrap().get_map("tasks").insert("t9", "pushed directly").unwrap();
+    a.replica().lock().unwrap().commit(&g, &d).unwrap();
+    let took = wait_for(&b, &g, &d, "pushed directly", 5).await;
+    assert!(took.is_some(), "pushed over P2P without any mailbox");
+    println!("direct push took {:?}", took.unwrap());
+}

@@ -73,3 +73,23 @@ pub async fn run_live(syncer: Arc<Syncer>, mb: Arc<NostrMailbox>, p2p: Option<Ar
         }
     }
 }
+
+/// Live mode without Nostr: whenever this device changes something, exchange with every
+/// reachable member at once (they apply and acknowledge), plus a slow background round.
+/// Two open apps stay in sync within about a second over direct or relayed connections.
+pub async fn run_p2p_live(syncer: Arc<Syncer>, p2p: Arc<P2p>, mut stop: watch::Receiver<bool>) {
+    let mut seen = syncer.replica().lock().expect("replica lock").local_changes();
+    let mut last_round = std::time::Instant::now() - Duration::from_secs(3600);
+    loop {
+        let now = syncer.replica().lock().expect("replica lock").local_changes();
+        if now != seen || last_round.elapsed() > Duration::from_secs(60) {
+            seen = now;
+            p2p.sync_round().await;
+            last_round = std::time::Instant::now();
+        }
+        tokio::select! {
+            _ = stop.changed() => return,
+            _ = tokio::time::sleep(Duration::from_millis(300)) => {}
+        }
+    }
+}
