@@ -222,7 +222,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Proposal:** WhatsApp-style states derived from version vectors: **Saved → Sent → On Alex's phone**. This changes the UX principles' "up to date" wording.
 - **Alternatives:** none serious.
 
-### D19. Drop phone helpers for strangers
+### D19. Drop phone helpers for strangers: ❌ OVERRIDDEN by user decision in D20 (2026-09-24). Phones help too
 - **Evidence:**
   - R8: Play's Device & Network Abuse policy allows "proxy services to third parties" only when that's the app's core purpose.
   - R8 verifier: the FGS fallback **can't even start** under background-start restrictions.
@@ -232,7 +232,17 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Alternatives:** none viable on Play.
 - **Confidence:** high.
 
-### D20. The helper network: keep as research, or drop?
+### D20. The helper network: ✅ DECIDED (2026-09-24): HIGH PRIORITY, on by default on ALL devices
+- **User decision:**
+  - The helper network is a core layer, built right after Nostr, not a late extra.
+  - **On by default on every device.** Options: *Wi-Fi and charging (plus Wi-Fi while open)* / *Wi-Fi while open* / *Off*.
+  - Off is easy but discouraged, with a short explanation of why helping matters. If ever needed, a minimum level of helping may be written into the privacy policy.
+- **Why it works with few helpers:** helper sets are chosen by reliability. 10 desktops at 70% uptime give a 0.0006% chance that all are off at once. Document epochs keep each group's mailbox at a few KB (≈25 MB per desktop at 5k groups × 10 copies).
+- **Main remaining risk:** correlated downtime (all helpers in one time zone sleeping at night). Mitigation: time-zone and ASN diversity in selection.
+- **Play risk for phone helpers (not verified):** "proxy services to third parties" policy (R8). Assessment: helpers store encrypted sync data for the same app's users rather than proxying internet traffic; BitTorrent clients on Play are the closest precedent. Mitigations: plain disclosure in the listing and Data safety form, and a ready fallback Play build where phones help only their own groups.
+- **Technical limit:** phones help only during charging jobs and while open (no FGS: R4, R8).
+
+#### Original analysis (kept for reference)
 - **Evidence against:**
   - R5: no precedent of volunteers serving offline phones. Opt-in operator participation is 0.01–0.3% (Syncthing ~100 relays / 1M devices).
   - Churn is correlated by time zone, and "trust through people" makes it worse.
