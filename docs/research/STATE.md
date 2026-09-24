@@ -54,6 +54,23 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 ### P5: Final report
 - [x] `docs/research/REPORT.md`: what held, what failed, what changed, what's still open
 
+### P6: Data distribution layers (added 2026-09-24 at the user's request; highest priority: "this system defines this app and many others")
+Prioritize layers that cover what we lack or doubt:
+- **G1** offline store-and-forward independent of Nostr (acceptance and rate risk);
+- **G2** internet P2P connectivity independent of n0 (address discovery + hole-punch coordination);
+- **G3** waking sleeping Android phones without our own server;
+- **G4** free relaying for failed hole punches (~30%, mostly phone↔phone on carrier NAT);
+- **G5** discovery and presence signaling;
+- **G6** large blob transfer.
+
+Steps:
+- [ ] L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
+- [ ] Synthesis: `docs/research/LAYERS.md` (candidate → gaps covered → verdict → evidence)
+- [ ] Safe local experiments for the top candidates (no load on public infrastructure)
+- [ ] DECISIONS.md: new "Distribution layers" section (proposals only; the user decides)
+
+Note: WebSearch is exhausted for this session. Agents use WebFetch on known documentation URLs, `gh search` / `gh api`, crates.io / docs.rs APIs.
+
 ## Current state
 - P1 research workflow launched (2026-09-24).
 - E0 done (Rust 1.98.1, NDK 29.0.14206865, cargo-ndk 4.1.2, hashcat 7.1.2). E1, E2, A1 done.
@@ -61,7 +78,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-**DONE.** All phases complete. Waiting for the user's Keep / Change / Drop decisions in DECISIONS.md. A loop firing now should stop.
+**P6 in progress:** data distribution layers research (see P6 below). Launch or collect the layers workflow, run safe local experiments where useful, then write `docs/research/LAYERS.md` and add a "Distribution layers" section to DECISIONS.md.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
