@@ -31,10 +31,10 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] E1 Loro: history growth for realistic workloads, shallow snapshots, importing updates that depend on trimmed history, large-list performance
 - [x] E2 Argon2id: timing across parameters on this PC; attacker GPU rate (hashcat benchmark if available)
 - [ ] E3 iroh: two local endpoints, local relay, connection paths, binary size impact
-- [ ] E4 Nostr: local relay (addressable replacement, size limits, rates) + polite acceptance probe of candidate public relays
-- [ ] E5 Helper network simulation: churn, replication factor, availability, reputation, eclipse
+- [x] E4 Nostr: local relay (addressable replacement, size limits, rates) + polite acceptance probe of candidate public relays
+- [x] E5 Helper network simulation: churn, replication factor, availability, reputation, eclipse
 - [ ] E6 Android size: release build of engine prototype (iroh + Loro) for arm64-v8a, stripped
-- [ ] E7 Invite codes: EFF list, entropy, derivation, expiry
+- [x] E7 Invite codes: EFF list, entropy, derivation, expiry
 - [ ] E8 Key epochs: rotation prototype and tests
 
 ### P3: Fixes
@@ -57,9 +57,14 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - P1 research workflow launched (2026-09-24).
 - E0 done (Rust 1.98.1, NDK 29.0.14206865, cargo-ndk 4.1.2, hashcat 7.1.2). E1, E2, A1 done.
 
+- E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
+
 ## Next action
 Collect the P1 reports when the workflow finishes, then continue with P2 experiments.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
 - E1: 5 years of daily shared-list use = 0.35 MB, so size claims held. NEW: deleted items stay in Loro state forever; trash purge needs "document epochs" (re-create from live state). CRITICAL NEW: PeerID reuse (restore, two instances) silently diverges docs. Must regenerate the PeerID on restore, keep it out of backups, run the desktop as a single instance. See E1-loro.md
+- E4: 8/8 major free relays accepted new keys + addressable kind 30078 + custom kind 31234, opaque 60 KB content; replacement correct. Most run strfry (128 KB msg limit; damus/primal 1 MB) -> chunking required; monoculture risk. Use NIP-78 kind 30078.
+- E5: RAM-only phone-heavy helpers need r~15-20 for ~99% without member refresh; member refresh is essential; reputation gives +6-10 pts vs dishonest helpers; r>=20 tolerates 50% dishonest.
+- E7: EFF large list: 34% of words have a valid 1-typo neighbor -> typos silently become other valid codes (92% of 6-word codes). Proposal: 8 words from EFF short list 2.0 (3-letter autocomplete, 0 typo neighbors, 82.7 bits > 77.5).

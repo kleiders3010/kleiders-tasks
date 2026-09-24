@@ -1,0 +1,1 @@
+{"description":"High-performance in-memory Nostr relay","limitation":{"idle_timeout":10,"max_limit":5000,"max_message_length":524288,"max_subscriptions":300},"name":"memlay","software":"https://github.com/v0l/memlay","supported_nips":[1,9,11],"version":"0.2.0"}

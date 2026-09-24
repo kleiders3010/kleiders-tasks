@@ -1,0 +1,25 @@
+{
+  "id": "wss://relay.wellorder.net/",
+  "name": "wellorder-relay",
+  "description": "Relay for the (NIP-05 verified) Nostr community.",
+  "pubkey": "35d26e4690cbe1a898af61cc3515661eb5fa763b57bd0b42e45099c8b32fd50f",
+  "supported_nips": [
+    1,
+    2,
+    9,
+    11,
+    12,
+    15,
+    16,
+    20,
+    22,
+    33,
+    40
+  ],
+  "software": "https://git.sr.ht/~gheartsfield/nostr-rs-relay",
+  "version": "0.9.0",
+  "limitation": {
+    "payment_required": false,
+    "restricted_writes": false
+  }
+}

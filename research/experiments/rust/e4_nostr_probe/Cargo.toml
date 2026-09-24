@@ -1,0 +1,10 @@
+[package]
+name = "e4_nostr_probe"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.23.1"
+nostr-sdk = "0.45"
+rand = "0.8"
+tokio = { version = "1.53.1", features = ["full"] }

@@ -1,0 +1,8 @@
+{"relay": "wss://relay.damus.io", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://nos.lol", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://relay.primal.net", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://nostr.mom", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://offchain.pub", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://nostr.oxtr.dev", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://nostr-pub.wellorder.net", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, ""]}
+{"relay": "wss://relay.snort.social", "small_v1": [true, ""], "small_v2": [true, ""], "large_60kb": [true, ""], "query_returned": 1, "replaced_correctly": true, "large_readback": true, "deletion": [true, "deleted 2 event(s)"]}
