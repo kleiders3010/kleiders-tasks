@@ -50,7 +50,6 @@
 ## 2. Invites and linking
 
 **D8 / D7 remainder.**
-- **Expiry length** for the one invite (code = link = QR): 1 day, or longer (e.g. 3 or 7 days) for invites sent by chat and opened later. Expiry doesn't affect brute-force safety.
 - **Confirm the word list:** 8 words from the EFF short list, 3-letter autocomplete (option a). The alternative evaluated was 6 words from a curated large list (b).
 
 **D6. Device linking against phishing.**
