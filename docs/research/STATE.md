@@ -66,7 +66,7 @@ Prioritize layers that cover what we lack or doubt:
 Steps:
 - [ ] (running: workflow wf_6f1ff1cc-d9e) L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
 - [ ] Synthesis: `docs/research/LAYERS.md` (candidate → gaps covered → verdict → evidence)
-- [ ] Safe local experiments for the top candidates (no load on public infrastructure). In progress: E9 arm64 size builds of libp2p (relay client + DCUtR + identify + kad + QUIC), str0m, webrtc-rs and veilid-core (`research/experiments/rust/e9_*`)
+- [x] Safe local experiments: E9 sizes done (E9-stack-sizes.md), E5b diurnal helper sim done (E5b-diurnal-helpers.md). Was: E9 arm64 size builds of libp2p (relay client + DCUtR + identify + kad + QUIC), str0m, webrtc-rs and veilid-core (`research/experiments/rust/e9_*`)
 - [ ] DECISIONS.md: new "Distribution layers" section (proposals only; the user decides)
 
 Note: WebSearch is exhausted for this session. Agents use WebFetch on known documentation URLs, `gh search` / `gh api`, crates.io / docs.rs APIs.

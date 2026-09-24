@@ -289,3 +289,54 @@ GitHub:
 
 Precedent:
 - Joplin notebook sharing (Joplin Cloud only): https://github.com/laurent22/joplin/blob/dev/readme/apps/share_notebook.md
+
+---
+
+## Independent verification
+
+*Skeptical second pass, 2026-09-24. I re-fetched the primary sources with WebFetch, checked robots.txt with curl, checked crate metadata through the crates.io API and checked issue status with `gh api`. Nothing was installed, no accounts were used, and no files were uploaded.*
+
+### Verdict checks
+
+| Candidate | Researcher | Result | Notes |
+|---|---|---|---|
+| Drive public-link mailbox (API-key readers) | CONSIDER, low | **Upheld** (CONSIDER, low) | All the quoted numbers still match *Usage limits* (updated 2026-09-11): 1,000,000 units/min per project, 325,000 per user per project, 400,000,000 units/day and 1 TB/day egress "before charges", and costs of read 5, list 100, download 200, edit 50. Going over returns `403: User rate limit exceeded` or `429`. The *tools-safety* page (2026-09-03) confirms that Drive is in the tiering rollout: "API usage over standard daily thresholds will generate charges" later in 2026, with 90 days' notice. The credentials guide still says API keys "anonymously access… files shared using the 'Anyone on the Internet with this link' sharing setting". `permissions.create` accepts `drive.file`. Drive push (`watch`) needs an HTTPS webhook with a valid certificate, so it doesn't help G3. **Correction:** the API-key read path is not the only documented account-free read path. See "Missed 1" below: a variant that moves the reads off the metered API raises the ceiling roughly 4–5x. The layer stays CONSIDER and is still capped by writes. |
+| Drive as blob store (G6) | CONSIDER, medium | **Upheld, with a correction** | The abuse rule is confirmed: "Files identified as abusive… are only downloadable by the file owner". **Missed limit:** the **1 TB/day per-project egress** limit binds before the 400M-unit limit whenever the average blob is over about 500 KB (400M / 200 = 2M downloads, and 1 TB / 2M = 500 KB). At 1–3 MB photos the real ceiling is about 0.3–1M blob downloads/day for all users combined, not 2M. It is still the strongest G6 option in this dimension, because DECISIONS already records that free Blossom servers are media-only or delete after about 60 days. |
+| Dropbox shared links | REJECT, medium | **Upheld, but part of the reasoning is weaker than stated** | The Developer Terms (effective 2025-03-01) confirm that production approval is "in its sole discretion", along with the 50-user/2-week freeze and the Basic limit of 20 GB and 100,000 downloads/day (help page updated 2026-08-14). **The AUP argument is overstated.** "Use the Services to back up, or as infrastructure for, your own cloud services" targets services that resell or back onto Dropbox. A per-user **app folder** that the user connects on purpose is the ordinary third-party pattern Dropbox itself documents. The Developer Terms have no clause against app-data storage. The only related ban in the developer guide is "build publicly searchable file sharing networks on top of Dropbox", and encrypted group slots are not that. The REJECT holds on reach, discretionary approval and the 24 h sharing-pause penalty, not on the AUP. |
+| OneDrive | REJECT, high | **Upheld** | Issues #1929 (2026-08-23) and #1930 (2026-08-25) are still **open**. `onedrive-api` 0.11.0 was last published 2026-01-21. |
+| MEGA | REJECT, high | **Upheld** | Crate `mega` 0.8.0 was last published 2024-10-09 (stale). |
+| 0x0.st-type hosts / Gists | REJECT, high | **Upheld** | No new evidence against. |
+| usercontent URL scraping | REJECT | **Upheld** | Google ToS (effective 2026-07-30) contains the robots.txt / automated-means clause, verbatim. gdown #406 is closed and was attributed to Google rate limiting. |
+
+Library facts were re-checked on crates.io: `google-drive3` 7.0.0+20251218 (MIT, 2026-01-01, about 3.0M downloads), `yup-oauth2` 12.1.2 (MIT/Apache-2.0), and `dropbox-sdk` 0.20.3 (Apache-2.0, 2026-07-29). All match the report.
+
+### Missed or under-weighted
+
+1. **"Publish to the web" Google Sheet as the read path (not evaluated in the report).**
+   - **What it is:** the Drive `revisions` resource has `published` / `publishAuto` / `publishedLink` fields for Docs Editors files. A writer holding `drive.file` could create a Sheet, publish it, and rewrite it.
+   - **Readers need no account and no API key.** They fetch `docs.google.com/spreadsheets/d/e/…/pub?output=csv`.
+   - **This read path is allowed by robots.txt.** `docs.google.com/robots.txt` has `Allow: /spreadsheet` (a prefix, so it matches `/spreadsheets/…`) and `Crawl-delay: 1`. That is unlike `drive.usercontent.google.com`, which has `Disallow: /`.
+   - **Effect on quota:** reads leave the metered project quota entirely. Only writes are metered.
+   - **Write cost:** at about 20 writes/device/day × 50 units, the ceiling rises to about 400k devices, versus about 87k. It also removes the embedded reader API key, which is both the quota-DoS surface and the open-source credentials conflict.
+   - **Caveats:**
+     - Help center: republishing "might take a few minutes". That is acceptable for a poll-only layer.
+     - Work and school admins can disable publishing.
+     - Slot bytes have to fit in cells, so base64 would need to be split across cells.
+     - Writing through the Sheets API is far worse: 300 writes/min per project, about 21k devices. Writes must therefore go through Drive `files.update` with a converting upload. **Unverified:** whether that update keeps the published revision and the `publishAuto` setting.
+     - Unknown throttling of heavily polled published CSVs from CGNAT.
+   - **Suggested experiment X8:** publish a test Sheet, rewrite it through the Drive API, and measure lag and staleness.
+2. **Blob egress cap** (see the table above). Add the 1 TB/day per-project egress limit to the X7 cost model.
+3. **Apps Script web app in the writer's own account.**
+   - **What it is:** `script.google.com/macros/s/…/exec` with ContentService.
+   - **Quotas are per user, not per project:** "Quotas are per user"; consumer accounts get 30 simultaneous executions per user and 50,000 properties reads/writes per day.
+   - **Robots:** `script.google.com/robots.txt` returns 404, so no restrictions apply. HTTP access is the documented purpose of web apps.
+   - **Why it is probably a REJECT:**
+     - Deploying one needs the Apps Script API, which each user must enable themselves ("you must grant them access to your script projects", via the user-settings toggle).
+     - It probably needs a sensitive `script.*` scope.
+     - It means pushing executable code into users' accounts.
+   - Listed so it is not rediscovered later as a "free" path.
+4. **Users' own email as the mailbox (the Delta Chat pattern) is closed on Google.** The Gmail scopes page lists `https://mail.google.com/`, `gmail.readonly`, `gmail.modify`, `gmail.insert` and `gmail.metadata` as **restricted**, which requires a security assessment. `gmail.send` is sensitive. The Gmail API is also inside the 2026 tiering model. Record this so the idea isn't reopened.
+5. **Grandfathering is temporary.** "Projects created on or after May 1, 2026 are subject to new quotas; earlier projects retain previously set limits", but only "for at least 60 days" per the tiering page. An older Cloud project is not a durable escape from the threshold.
+
+### Bottom line
+The researcher's numbers and quotes hold up. No verdict flips. The main thing missed is a Drive variant: publishing the file to the web from a Sheet, which moves the reads onto a robots-allowed host. It is documented and not metered for readers. It should be considered alongside the API-key variant before the Drive mailbox layer is designed.

@@ -407,3 +407,89 @@ Gaps that each candidate is judged against:
 
 **Internal**
 - `docs/DESIGN.md` §6–§8; `docs/research/DECISIONS.md` D11–D23; `docs/research/REPORT.md`; `docs/research/R1-iroh.md`; `docs/research/R5-prior-art.md`.
+
+---
+
+## Independent verification
+
+*2026-09-24, separate verifier. Sources: GitHub API reads of the upstream source (hyperdht, peeroxide, pear, pubky/mainline, pkarr, n0-mainline, iroh, Quiet), crates.io API, the Tor GitLab API, bittorrent.org and docs.syncthing.net. I sent no traffic to any DHT, relay or overlay.*
+
+### Verdict checks
+
+| Candidate | Report | Result | Corrected verdict |
+|---|---|---|---|
+| HyperDHT via peeroxide | CONSIDER, medium | **Partly upheld.** The "our NATed helpers can be the relays" claim is weaker than reported. | CONSIDER, **low-medium** |
+| Mainline BEP44 (mainline / pkarr) | ADOPT, medium-high in the body, medium in the summary | **Upheld, but narrower.** The partial-G2 claim is overstated. | ADOPT for **presence and endpoint records only**, **medium** |
+| Tor onion services via Arti | CONSIDER narrow, low | Upheld | Unchanged |
+| Syncthing relay pool | REJECT, medium | Upheld, with a nuance | Unchanged |
+
+**1. HyperDHT: confirmed**
+- Bootstrap is 3 nodes. The README says "publicly served on behalf of the commons" and "at least one persistent node" (lib/constants.js, README l.84).
+- The `BIRTHDAY_SOCKETS = 256` and 1,750-probe loops are real.
+- It aborts with `HOLEPUNCH_DOUBLE_RANDOMIZED_NATS` when both sides have random NATs.
+- The relay is reached with `c.dht.connect(publicKey)` (connect.js l.809).
+- peeroxide: created 2026-04-25; 18 stars; one human committer (32 commits) plus a bot; MIT OR Apache-2.0 per the workspace Cargo.toml.
+
+**1. HyperDHT: missed, and it changes the relay story**
+- **Node hyperdht allows only one random-NAT punch at a time per DHT instance, with at least 20 s between them.** Source: `index.js` l.54-56 has `this._randomPunchLimit = 1 // set to one for extra safety for now` and `randomPunchInterval` defaults to 20000.
+  - The check runs on both sides (`connect.js` l.681-690, `server.js` l.588-592).
+  - When the limit is hit, the server replies `TRY_LATER`. A connection that has no relay token of its own aborts instead of queueing. A client connecting *to* a relay is exactly that case.
+- **What this means for a helper behind a consistent NAT.** Phones on random carrier NATs are the only users who need a relay. Each of them costs the helper one random punch (up to ~35 s).
+  - So a NATed helper can admit about one such phone per 20-55 s.
+  - Relaying two phones takes two serialized punches, so session setup takes 20 s or more.
+  - peeroxide's own relay docs say a relay "should usually run at a stable, reachable UDP address... not designed to depend on its own holepunching sequence".
+- **What the report gets right.** Pear added `pear blind-relay start` in Aug 2026: ordinary peers running `blind-relay` behind `dht.createServer`. So peer-run relays are an upstream pattern.
+- **Corrected claim:** relays should be helpers that are **OPEN**: UPnP/PCP-mapped desktops (DESIGN §6 layer 4) or public-IP machines. NATed helpers are a slow last resort. X1 must measure this throttle.
+- **Divergence risk.** A grep of peeroxide's `hyperdht.rs` and `holepuncher.rs` finds no equivalent throttle, so the Rust and Node implementations may already behave differently (not confirmed).
+- **peeroxide has had no commit since 2026-07-12 (74 days).** In that time hyperdht shipped 6.33.1, 6.33.2 and 6.34.0. The commit titles look like bug fixes (orphaned holepunchers, suspended handshakes) rather than wire changes. The drift risk is real but slower than "every few weeks" suggests.
+
+**2. Mainline BEP44: confirmed**
+- BEP42: "all DHT responses SHOULD include a top-level field called ip".
+- BEP44: "MAY expire in 2 hours... SHOULD be re-announced once an hour". It also says "Any node that's interested in keeping a blob in the DHT alive may announce it... without having the private key", so the desktop re-put plan is spec-sanctioned.
+- pkarr `DEFAULT_RELAYS` are `pkarr.pubky.app` and `pkarr.pubky.org`. The README says "The default native client configures both DHT and relay backends" and that `ClientBuilder` can select DHT-only.
+- Crate versions: mainline 8.0.0 and pkarr 8.0.2.
+
+**2. Mainline BEP44: missed**
+- **Reliability.** The maintainers' own `mainline-next/docs/problem-statement.md` (in pubky/mainline) says "The current architecture is unreliable and hard to diagnose under concurrency, network failures, and hostile traffic". It lists:
+  - packet loss under concurrent queries (#38, open since 2024-11);
+  - applications can't tell absent data from bootstrap or connectivity failure (#104, #61);
+  - panics (#19, #23, #47).
+  - A rewrite started in the same repo on 2026-09-22. Expect API churn.
+  - One maintainer dominates: 416 commits against 35 for the next contributor.
+  - So "Rust maturity: High" should read **medium**.
+- **IPv4-only.** BEP32 isn't among the supported BEPs, and the rewrite's milestone 1 is "the IPv4 client". R-L6-3 (IPv4-only) applies to Mainline as much as to HyperDHT.
+- **Latency.** pkarr's docs: "Traversing the DHT can take several seconds on a cache miss". There's no subscribe or push. That's fine for presence and endpoint records. It isn't a channel for time-critical hole-punch coordination, so the summary's "small signaling" wording should be narrowed.
+- **The BEP42 reflexive-address claim needs one more condition.** The `ip` field reports the NAT mapping of *the socket that sent the query*.
+  - To help iroh punch, the DHT queries must leave from iroh's own UDP socket.
+  - Otherwise only the public IP is useful. The port is useful only on port-preserving EIM NATs, which carrier CGNAT rarely is.
+  - `Endpoint::add_external_addr` exists in iroh, but socket sharing hasn't been verified. Add it to X5.
+- **The default mode is Adaptive.** In that mode a desktop becomes a full BitTorrent DHT server after 15 min, and the server has "no rate-limiting".
+  - Puts and re-puts don't need server mode.
+  - Keep desktops in client mode unless we deliberately decide otherwise. The alternative means user PCs store torrent peer lists and draw BitTorrent-classified traffic, which some networks block.
+- **Alternative library.** `n0-mainline` 0.6.0 is n0's fork of the same code, used by iroh's address lookup and pushed 2026-09-23. Compare it with pubky `mainline` before choosing.
+
+**3. Tor via Arti**
+- **Confirmed:**
+  - `doc/OnionService.md` still says "suitable for testing and experimentation only", and its last content edit was 2025-03.
+  - It is also stale: it lists missing Vanguards, which have since shipped.
+  - The CHANGELOG has "Removed security disclaimer about onion service support".
+  - Crate versions: arti 2.6.0, arti-client and tor-hsservice 0.46.0 (2026-09-02).
+- **Caveat on the Quiet evidence.** Quiet #2152 dates from 2023-12 and involved C tor plus Node and IPFS, so it says little about Arti's own battery cost.
+- **Missed precedent.** Tor's GitLab hosts "Tor VPN for Android" (built on `onionmasq`, an "Experimental Tunnel interface for Arti"). The Tor Project itself is productizing Arti on Android as a *client*. That supports "phones as Tor clients" but not phones as hosts.
+
+**4. Syncthing relays**
+- **Verdict upheld.** The docs say relays join the pool "and be available to Syncthing users".
+- **Nuance:** calling it "impersonation" overstates it. The relay-v1 spec says it is "general enough that could be reused by other protocols", and `bep-relay` is simply the relay protocol's name.
+- The real blockers are the scope of the volunteers' consent and the permanent TCP join on Android.
+
+### Anything else missed
+- R5 and FINDINGS already cover Keet's blind *peers* (the storage side). I found no L6-scope overlay that closes G1 or G3, so the negative result stands.
+
+### Net effect on the plan
+- The HyperDHT relay plan becomes "use OPEN (port-mapped or public) helpers as blind relays". "Any NATed helper" is a slow fallback.
+- The Mainline plan stays but narrows:
+  - client mode only, DHT-only;
+  - presence and endpoint records only;
+  - IPv4-only is noted;
+  - pick between `mainline` and `n0-mainline`;
+  - verify socket sharing with iroh in X5.
