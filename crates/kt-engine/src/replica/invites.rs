@@ -220,6 +220,83 @@ impl Replica {
         Ok(out)
     }
 
+    fn ahead_path(&self, g: &GroupId) -> std::path::PathBuf {
+        self.layout.group_dir(g).join("invites_ahead")
+    }
+
+    fn ahead_done(&self, g: &GroupId) -> std::collections::BTreeSet<([u8; 32], u32)> {
+        std::fs::read(self.ahead_path(g)).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default()
+    }
+
+    /// Copies of every open invite for each day from `today` until it expires, not yet
+    /// published ahead: (group, invite id, day, lookup key, sealed record). Publishing
+    /// them to storing layers (helpers, Nostr) lets a joiner find the invite on any day
+    /// even while every member is offline. Security is unchanged: a guess still tests only
+    /// one day's copies, and each day's copies are the invites valid that day.
+    /// Costs one Argon2id run per new day (a one-time background job per invite).
+    #[allow(clippy::type_complexity)]
+    pub fn invite_publications_ahead(
+        &mut self,
+        today: u32,
+        names: &dyn Fn(&GroupId) -> (String, String),
+    ) -> Result<Vec<(GroupId, [u8; 32], u32, [u8; 32], Vec<u8>)>> {
+        let me = self.identity.id();
+        let mut out = Vec::new();
+        let gids: Vec<GroupId> = self.groups.keys().copied().collect();
+        for g in gids {
+            let (head, key) = {
+                let state = &self.groups[&g];
+                let Some(head) = state.epochs.head() else { continue };
+                if !state.epochs.is_current_member(&me) {
+                    continue;
+                }
+                let Some(key) = state.keys.get(&head).cloned() else { continue };
+                (head, key)
+            };
+            let done = self.ahead_done(&g);
+            let open: Vec<OpenInvite> = self.invites(&g).into_iter().filter(|i| self.invite_is_open(i)).collect();
+            for inv in open {
+                let last_day = invite::day_of(inv.expires_ms);
+                for day in today..=last_day {
+                    if done.contains(&(inv.id(), day)) {
+                        continue;
+                    }
+                    let (lookup, rkey) = invite::derive(&inv.code, inv.kind, day)?;
+                    let (group_name, inviter_name) = names(&g);
+                    let rec = InviteRecord {
+                        kind: inv.kind,
+                        group: g,
+                        epoch: head,
+                        epoch_key: key.0,
+                        invite_id: inv.id(),
+                        expires_ms: inv.expires_ms,
+                        group_name,
+                        inviter_name,
+                        whereabouts: self.whereabouts.clone(),
+                        published_ms: super::now_ms(),
+                        hints: self.invite_hints(&g),
+                    };
+                    out.push((g, inv.id(), day, lookup, invite::seal_record(&rec, &lookup, &rkey)?));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Remember that these (invite, day) copies were published ahead.
+    pub fn mark_published_ahead(&mut self, done: &[(GroupId, [u8; 32], u32)]) -> Result<()> {
+        let mut by_group: HashMap<GroupId, Vec<([u8; 32], u32)>> = HashMap::new();
+        for (g, id, d) in done {
+            by_group.entry(*g).or_default().push((*id, *d));
+        }
+        for (g, items) in by_group {
+            let mut set = self.ahead_done(&g);
+            set.extend(items);
+            crate::storage::write_atomic(&self.ahead_path(&g), &postcard::to_stdvec(&set).map_err(|e| Error::Encoding(e.to_string()))?)?;
+        }
+        Ok(())
+    }
+
     /// Start joining a group from an opened invite record. Refuses link codes (D6).
     pub fn begin_join(&mut self, rec: &InviteRecord) -> Result<()> {
         if rec.kind == CodeKind::Link {

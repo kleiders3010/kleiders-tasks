@@ -120,6 +120,45 @@ pub async fn publish(syncer: &Arc<Syncer>, layers: &InviteLayers, names: &(dyn F
     report
 }
 
+/// Publish every open invite's copies for each remaining day to the layers that keep data
+/// (helpers, Nostr), once per (invite, day): a joiner finds the invite on any day even while
+/// every member is offline. Members still re-post daily with the current key when online.
+pub async fn publish_ahead(syncer: &Arc<Syncer>, layers: &InviteLayers, names: &(dyn Fn(&kt_engine::GroupId) -> (String, String) + Sync)) -> usize {
+    let replica = syncer.replica();
+    let names_owned: std::collections::HashMap<kt_engine::GroupId, (String, String)> = {
+        let g = replica.lock().expect("replica lock").groups();
+        g.into_iter().map(|g| (g, names(&g))).collect()
+    };
+    let r = replica.clone();
+    let day = today();
+    let copies = tokio::task::spawn_blocking(move || {
+        r.lock().expect("replica lock").invite_publications_ahead(day, &|g| names_owned.get(g).cloned().unwrap_or_default()).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
+    let mut done = Vec::new();
+    for (g, id, d, lookup, sealed) in copies {
+        let mut ok = false;
+        if let Some(h) = &layers.helpers {
+            let w = SlotWrite { topic: lookup, writer_seed: writer_seed(&lookup), blob: sealed.clone() };
+            ok |= matches!(h.write(&w).await, crate::mailbox::WriteOutcome::Stored { .. });
+        }
+        if let (Some(n), Some(keys)) = (&layers.nostr, nostr_keys(&lookup)) {
+            let t = hex::encode(tag16(&lookup));
+            let content = base64::engine::general_purpose::STANDARD.encode(&sealed);
+            if let Ok(ev) = EventBuilder::new(Kind::Custom(INVITE_KIND), content).tags([Tag::identifier(t.clone()), Tag::hashtag(t)]).finalize(&keys) {
+                ok |= n.publish_on(&lookup, ev).await > 0;
+            }
+        }
+        if ok {
+            done.push((g, id, d));
+        }
+    }
+    let n = done.len();
+    let _ = replica.lock().expect("replica lock").mark_published_ahead(&done);
+    n
+}
+
 /// Where a fetched record came from (diagnostics, tests).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -133,7 +172,11 @@ pub enum Source {
 /// Find the record for a code on every layer at once; newest valid record wins.
 /// `direct`: device addresses carried by a link or QR. `lan_wait`: how long to listen.
 pub async fn fetch(layers: &InviteLayers, code: &Code, kind: CodeKind, direct: &[EndpointAddr], lan_wait: Duration) -> Option<(InviteRecord, Source)> {
-    let day = today();
+    fetch_on_day(layers, code, kind, direct, lan_wait, today()).await
+}
+
+/// [`fetch`] as if today were `day` (UTC day number); tests and clock-skew retries.
+pub async fn fetch_on_day(layers: &InviteLayers, code: &Code, kind: CodeKind, direct: &[EndpointAddr], lan_wait: Duration, day: u32) -> Option<(InviteRecord, Source)> {
     for d in [day, day.saturating_sub(1)] {
         let c = *code;
         let Ok(Ok((lookup, key))) = tokio::task::spawn_blocking(move || invite::derive(&c, kind, d)).await else { continue };

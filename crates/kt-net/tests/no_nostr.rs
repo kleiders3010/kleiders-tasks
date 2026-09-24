@@ -50,7 +50,11 @@ struct Device {
 
 impl Device {
     async fn new(tag: &str, bootstrap: &[String]) -> Device {
-        let rep = Arc::new(Mutex::new(replica(tag)));
+        Self::from_replica(Arc::new(Mutex::new(replica(tag))), bootstrap).await
+    }
+
+    /// The same device starting again (new endpoint, same data), e.g. after being offline.
+    async fn from_replica(rep: Arc<Mutex<Replica>>, bootstrap: &[String]) -> Device {
         // One syncer for everything: the helper mailbox is added once the endpoint exists.
         let s = Syncer::new(rep.clone(), vec![]);
         let p2p = P2p::start(s.clone(), cfg(false)).await.unwrap();
@@ -170,4 +174,71 @@ async fn everything_works_with_nostr_completely_down() {
         c.s.sync_once().await;
         c.value(&g, &d).contains("eggs")
     });
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 6)]
+async fn joining_days_later_while_the_inviter_is_offline() {
+    use kt_net::invite_net::{fetch_on_day, publish_ahead};
+    let testnet = Testnet::builder(10).build().unwrap();
+    let bs = testnet.bootstrap.clone();
+    let day = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64 / 86_400_000) as u32;
+    let mut helpers = Vec::new();
+    for i in 0..3 {
+        let s = Syncer::new(Arc::new(Mutex::new(replica(&format!("oh{i}")))), vec![]);
+        let p = P2p::start(s.clone(), cfg(true)).await.unwrap();
+        let d = DhtDiscovery::new(s.replica(), Some(bs.clone()), Some(Ipv4Addr::LOCALHOST)).unwrap();
+        assert!(d.announce_helper(&HelperRef::from_addr(&p.where_data().to_addr().unwrap()), p.endpoint().secret_key(), day).await);
+        helpers.push(p);
+    }
+
+    // A invites (valid 6 days), publishes every day's copy, then goes offline.
+    let a = Device::new("oa", &bs).await;
+    let a_rep = a.s.replica();
+    let (g, d) = {
+        let mut r = a_rep.lock().unwrap();
+        let g = r.create_group().unwrap();
+        let d = r.create_doc(&g).unwrap();
+        r.doc(&g, &d).unwrap().get_map("tasks").insert("t1", "milk").unwrap();
+        r.commit(&g, &d).unwrap();
+        (g, d)
+    };
+    a.maintain().await;
+    let (code, _) = a_rep.lock().unwrap().create_invite(&g, CodeKind::Invite, 6 * 86_400_000 - 60_000).unwrap();
+    a.maintain().await;
+    let ahead = publish_ahead(&a.s, &a.layers(), &|_| ("Family".into(), "Alex".into())).await;
+    assert!(ahead >= 6, "a copy for each day: {ahead}");
+    a.s.write_round().await;
+    a.p2p.close().await;
+    drop(a);
+
+    // Three days later, B finds that day's copy on the helpers.
+    let b = Device::new("ob", &bs).await;
+    b.maintain().await;
+    let (rec, source) = fetch_on_day(&b.layers(), &code, CodeKind::Invite, &[], Duration::from_millis(0), day + 3).await.expect("found days later");
+    assert!(matches!(source, kt_net::invite_net::Source::Helpers), "{source:?}");
+    assert!(!join(&b.s, Some(&b.p2p), &rec).await.unwrap(), "A is offline: not in yet");
+    b.s.sync_once().await;
+    assert!(b.value(&g, &d).contains("milk"), "B already sees the list while waiting");
+    assert!(!b.member_of(&g));
+    // B edits while waiting.
+    {
+        let r = b.s.replica();
+        let mut r = r.lock().unwrap();
+        r.doc(&g, &d).unwrap().get_map("tasks").insert("t2", "from B while waiting").unwrap();
+        r.commit(&g, &d).unwrap();
+    }
+
+    // A comes back: its device reads the request at the helpers and lets B in.
+    let a = Device::from_replica(a_rep, &bs).await;
+    for _ in 0..3 {
+        a.maintain().await;
+        a.s.sync_once().await;
+        b.maintain().await;
+        b.s.sync_once().await;
+        if b.member_of(&g) && a.value(&g, &d).contains("from B while waiting") {
+            break;
+        }
+    }
+    assert!(b.member_of(&g), "A accepted B when it came back");
+    assert!(a.value(&g, &d).contains("from B while waiting"), "B's waiting edit arrived");
 }
