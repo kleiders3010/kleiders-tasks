@@ -14,8 +14,10 @@
 //!   Both sides then open what's new through the same path as mailbox slots (sealed,
 //!   individually verified, sandboxed imports). Because the store holds every member's
 //!   latest slot, a member device relays the others' changes ("relay through a member").
-//! - Only endpoints listed in a current member's whereabouts are served, and only for
-//!   topics the responder itself reads.
+//! - Only member devices are served, and only for topics the responder itself reads: the
+//!   endpoint must be listed in a member's whereabouts, or the dialer's `Hello` carries a
+//!   device-signed whereabouts record naming this very endpoint (iroh authenticates
+//!   endpoint IDs, so the proof can't be replayed from another endpoint).
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -97,6 +99,9 @@ impl From<WireSlot> for SlotRead {
 struct Hello {
     topics: Vec<[u8; 32]>,
     have: Summary,
+    /// The dialer's device-signed whereabouts for the group: proves that this endpoint
+    /// belongs to a current member device, even if the responder hasn't heard of it yet.
+    proof: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -257,10 +262,10 @@ impl P2p {
     pub async fn sync_round(&self) -> P2pReport {
         // Make sure our own current slots are in the store.
         self.syncer.write_round().await;
-        let jobs: Vec<(EndpointAddr, Vec<[u8; 32]>)> =
-            self.members().into_iter().map(|(g, a)| (a, self.topics_of(&g))).filter(|(_, t)| !t.is_empty()).collect();
+        let jobs: Vec<(GroupId, EndpointAddr, Vec<[u8; 32]>)> =
+            self.members().into_iter().map(|(g, a)| (g, a, self.topics_of(&g))).filter(|(_, _, t)| !t.is_empty()).collect();
         let mut report = P2pReport { peers_tried: jobs.len(), ..Default::default() };
-        let results = futures_util::future::join_all(jobs.into_iter().map(|(a, t)| self.exchange(a, t))).await;
+        let results = futures_util::future::join_all(jobs.into_iter().map(|(g, a, t)| self.exchange(g, a, t))).await;
         for (sent, confirmed, rr) in results.into_iter().flatten() {
             report.peers_reached += 1;
             report.sent += sent;
@@ -273,11 +278,12 @@ impl P2p {
         report
     }
 
-    async fn exchange(&self, addr: EndpointAddr, topics: Vec<[u8; 32]>) -> Result<(usize, usize, ReadReport), String> {
+    async fn exchange(&self, g: GroupId, addr: EndpointAddr, topics: Vec<[u8; 32]>) -> Result<(usize, usize, ReadReport), String> {
         let conn = self.connection(addr).await?;
         let (mut s, mut r) = conn.open_bi().await.map_err(|e| e.to_string())?;
         let store = self.syncer.store();
-        send_frame(&mut s, &Hello { topics: topics.clone(), have: store.summary(&topics) }).await?;
+        let proof = self.syncer.replica().lock().expect("replica lock").own_whereabouts_record(&g);
+        send_frame(&mut s, &Hello { topics: topics.clone(), have: store.summary(&topics), proof }).await?;
         let reply: Reply = recv_frame(&mut r).await?;
         let push: Vec<WireSlot> = store.newer_than(&topics, &reply.have).into_iter().map(WireSlot::from).collect();
         let sent = push.len();
@@ -295,26 +301,38 @@ impl P2p {
             tokio::spawn(async move {
                 let Ok(conn) = inc.await else { return };
                 let remote = conn.remote_id();
-                // Serve only member devices, and only for the groups they're members of.
-                let groups: Vec<GroupId> = me.members().into_iter().filter(|(_, a)| a.id == remote).map(|(g, _)| g).collect();
-                if groups.is_empty() {
-                    conn.close(1u32.into(), b"not a member");
-                    return;
-                }
-                let allowed: Vec<[u8; 32]> = groups.iter().flat_map(|g| me.topics_of(g)).collect();
                 while let Ok((s, r)) = conn.accept_bi().await {
                     let me2 = me.clone();
-                    let allowed = allowed.clone();
                     tokio::spawn(async move {
-                        let _ = me2.serve(s, r, &allowed).await;
+                        let _ = me2.serve(remote, s, r).await;
                     });
                 }
             });
         }
     }
 
-    async fn serve(&self, mut s: SendStream, mut r: RecvStream, allowed: &[[u8; 32]]) -> Result<(), String> {
+    /// Groups whose members may use this connection: known member endpoints, or a valid
+    /// membership proof for this very endpoint.
+    fn allowed_topics(&self, remote: EndpointId, proof: Option<&[u8]>) -> Vec<[u8; 32]> {
+        let mut groups: Vec<GroupId> = self.members().into_iter().filter(|(_, a)| a.id == remote).map(|(g, _)| g).collect();
+        if let Some(p) = proof {
+            let res = self.syncer.replica().lock().expect("replica lock").accept_whereabouts_record(p);
+            if let Ok((g, _device, data)) = res {
+                let bound = postcard::from_bytes::<WhereData>(&data).map(|w| w.endpoint == *remote.as_bytes()).unwrap_or(false);
+                if bound && !groups.contains(&g) {
+                    groups.push(g);
+                }
+            }
+        }
+        groups.iter().flat_map(|g| self.topics_of(g)).collect()
+    }
+
+    async fn serve(&self, remote: EndpointId, mut s: SendStream, mut r: RecvStream) -> Result<(), String> {
         let hello: Hello = recv_frame(&mut r).await?;
+        let allowed = self.allowed_topics(remote, hello.proof.as_deref());
+        if allowed.is_empty() {
+            return Err("not a member".into());
+        }
         let topics: Vec<[u8; 32]> = hello.topics.into_iter().filter(|t| allowed.contains(t)).collect();
         let store = self.syncer.store();
         let slots = store.newer_than(&topics, &hello.have).into_iter().map(WireSlot::from).collect();

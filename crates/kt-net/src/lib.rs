@@ -6,6 +6,7 @@
 
 pub mod dht;
 pub mod helper_relay;
+pub mod lan;
 pub mod mailbox;
 pub mod manifest;
 pub mod nostr;

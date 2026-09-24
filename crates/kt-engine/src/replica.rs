@@ -29,7 +29,7 @@ use crate::{crypto, wire, Error, Result};
 
 mod discovery;
 mod slots;
-pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX};
+pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX, LAN_WINDOW_SECS};
 pub use slots::{topic_for, MemberWhereabouts, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
 
 const MSG_TAG: [u8; 2] = *b"MS";

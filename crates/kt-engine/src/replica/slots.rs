@@ -284,6 +284,12 @@ impl Replica {
             .unwrap_or_default()
     }
 
+    /// The device a whereabouts record claims to be from (unverified).
+    pub(super) fn whereabouts_device(&self, bytes: &[u8]) -> Option<DeviceId> {
+        let rec = postcard::from_bytes::<StatusRecord>(bytes).ok()?;
+        Some(wire::decode::<WhereBody>(WHERE_TAG, 1, &rec.body).ok()?.1.device)
+    }
+
     /// Whether a whereabouts record claims (and is signed by) `device`.
     pub(super) fn whereabouts_signed_by(&self, bytes: &[u8], device: &DeviceId) -> bool {
         let Ok(rec) = postcard::from_bytes::<StatusRecord>(bytes) else { return false };
@@ -298,6 +304,20 @@ impl Replica {
         let body = wire::encode(WHERE_TAG, 1, &body)?;
         let sig = self.identity.sign(&body).to_vec();
         Ok(Some(postcard::to_stdvec(&StatusRecord { body, sig }).map_err(|e| Error::Encoding(e.to_string()))?))
+    }
+
+    /// Our own signed whereabouts record for `g` (a peer-to-peer membership proof).
+    pub fn own_whereabouts_record(&self, g: &GroupId) -> Option<Vec<u8>> {
+        self.whereabouts_record(g).ok().flatten()
+    }
+
+    /// Verify and store a whereabouts record received directly from a peer. Returns the
+    /// group, the (current member) device and the transport data it signed.
+    pub fn accept_whereabouts_record(&mut self, bytes: &[u8]) -> Result<(GroupId, DeviceId, Vec<u8>)> {
+        self.receive_whereabouts(bytes)?;
+        let rec: StatusRecord = postcard::from_bytes(bytes).map_err(|e| Error::Encoding(e.to_string()))?;
+        let body: WhereBody = wire::decode(WHERE_TAG, 1, &rec.body)?.1;
+        Ok((body.group, body.device, body.data))
     }
 
     pub(super) fn receive_whereabouts(&mut self, bytes: &[u8]) -> Result<()> {

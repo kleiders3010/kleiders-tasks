@@ -11,6 +11,9 @@ use crate::crypto::{self, SymKey};
 use crate::ids::{DeviceId, EpochId, GroupId};
 use crate::{Error, Result};
 
+/// LAN beacon tags rotate every this many seconds (D57: no stable identifiers on the LAN).
+pub const LAN_WINDOW_SECS: u64 = 600;
+
 /// Max sealed value size (BEP44 mutable items hold up to 1000 bytes).
 pub const DHT_VALUE_MAX: usize = 1000;
 
@@ -98,5 +101,67 @@ impl Replica {
             return Err(Error::Rejected("whereabouts record not from that device".into()));
         }
         self.receive_whereabouts(&rec)
+    }
+}
+
+fn lan_tag(epoch_key: &SymKey, epoch: &EpochId, window: u64) -> [u8; 16] {
+    let mut m = Vec::with_capacity(72);
+    m.extend_from_slice(&epoch_key.0);
+    m.extend_from_slice(&epoch.0);
+    m.extend_from_slice(&window.to_le_bytes());
+    crypto::hash("kt/lan-tag/v1", &m)[..16].try_into().expect("16")
+}
+
+fn lan_key(epoch_key: &SymKey, epoch: &EpochId) -> SymKey {
+    crypto::derive(&epoch_key.0, "kt/lan-value/v1", &epoch.0)
+}
+
+fn lan_aad(tag: &[u8; 16]) -> Vec<u8> {
+    let mut v = b"kt/lan/v1".to_vec();
+    v.extend_from_slice(tag);
+    v
+}
+
+impl Replica {
+    /// Entries for a LAN beacon in time window `window` (unix seconds / LAN_WINDOW_SECS):
+    /// (rotating tag, sealed device-signed whereabouts), one per group with other members.
+    pub fn lan_beacon_entries(&self, window: u64) -> Vec<([u8; 16], Vec<u8>)> {
+        let me = self.identity.id();
+        let mut out = Vec::new();
+        for (g, state) in &self.groups {
+            let Some(head) = state.epochs.head() else { continue };
+            if !state.epochs.is_current_member(&me) || state.epochs.recipients(&head).is_none_or(|r| r.len() < 2) {
+                continue;
+            }
+            let (Some(key), Ok(Some(rec))) = (state.keys.get(&head), self.whereabouts_record(g)) else { continue };
+            let tag = lan_tag(key, &head, window);
+            out.push((tag, crypto::seal(&lan_key(key, &head), &lan_aad(&tag), &rec)));
+        }
+        out
+    }
+
+    /// Try one beacon entry (untrusted). Accepts tags of the current and previous window
+    /// (clock skew, window edges). Returns true if it was ours to open and was applied.
+    pub fn open_lan_entry(&mut self, window: u64, tag: &[u8; 16], sealed: &[u8]) -> bool {
+        let me = self.identity.id();
+        let mut hit: Option<(GroupId, SymKey, EpochId)> = None;
+        'outer: for (g, state) in &self.groups {
+            let Some(head) = state.epochs.head() else { continue };
+            let Some(key) = state.keys.get(&head) else { continue };
+            for w in [window, window.saturating_sub(1), window + 1] {
+                if lan_tag(key, &head, w) == *tag {
+                    hit = Some((*g, key.clone(), head));
+                    break 'outer;
+                }
+            }
+        }
+        let Some((_, key, head)) = hit else { return false };
+        let Ok(rec) = crypto::open(&lan_key(&key, &head), &lan_aad(tag), sealed) else { return false };
+        // Must be a current member's own signed record (and not ours echoed back).
+        let Some(device) = self.whereabouts_device(&rec) else { return false };
+        if device == me || !self.whereabouts_signed_by(&rec, &device) {
+            return false;
+        }
+        self.receive_whereabouts(&rec).is_ok()
     }
 }
