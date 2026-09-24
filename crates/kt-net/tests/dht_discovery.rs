@@ -60,3 +60,42 @@ async fn members_find_each_other_on_the_dht_and_sync_directly() {
     assert!(v.contains("found via DHT"), "{v}");
     let _ = pb;
 }
+
+fn cfg(helper: bool) -> P2pConfig {
+    P2pConfig {
+        bind: Some("127.0.0.1:0".parse().unwrap()),
+        helper: helper.then(|| kt_net::helper::HelperLimits { base_pow_bits: 4, ..Default::default() }),
+        ..Default::default()
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn helpers_are_found_on_the_dht_with_no_nostr_and_no_known_helper() {
+    use kt_net::dht::DhtDiscovery;
+    use std::net::Ipv4Addr;
+    let testnet = mainline::Testnet::builder(10).build().unwrap();
+    let bs = Some(testnet.bootstrap.clone());
+    let day = (std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64 / 86_400_000) as u32;
+    // Three helpers post themselves in the DHT slots.
+    let mut helpers = Vec::new();
+    for i in 0..3 {
+        let s = Syncer::new(Arc::new(Mutex::new(replica(&format!("dh{i}")))), vec![]);
+        let p = P2p::start(s.clone(), cfg(true)).await.unwrap();
+        let d = DhtDiscovery::new(s.replica(), bs.clone(), Some(Ipv4Addr::LOCALHOST)).unwrap();
+        let me = kt_net::helper::HelperRef::from_addr(&p.where_data().to_addr().unwrap());
+        assert!(d.announce_helper(&me, p.endpoint().secret_key(), day).await);
+        helpers.push((p, d));
+    }
+    // A device that knows no helper and has no Nostr finds them.
+    let rep = Arc::new(Mutex::new(replica("dx")));
+    let ap = P2p::start(Syncer::new(rep.clone(), vec![]), cfg(false)).await.unwrap();
+    let hmb = kt_net::helper::HelperMailbox::new(ap, vec![]);
+    let s = Syncer::new(rep, vec![]);
+    let mb = kt_net::nostr::NostrMailbox::new(&["ws://127.0.0.1:9"], kt_net::nostr::NostrPolicy::default());
+    let dir = kt_net::helper_dir::HelperDirectory::new(None);
+    let d = DhtDiscovery::new(s.replica(), bs, Some(Ipv4Addr::LOCALHOST)).unwrap();
+    let found = d.find_helpers(day).await;
+    assert_eq!(found.len(), 3, "all helpers found in the DHT slots");
+    let r = kt_net::helper_dir::maintain_with_dht(&s, &hmb, &mb, &dir, Some(&d)).await;
+    assert!(r.discovered >= 3 && dir.candidates().len() == 3, "{r:?}");
+}

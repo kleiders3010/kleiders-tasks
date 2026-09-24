@@ -99,7 +99,7 @@ impl HelperDirectory {
         HelperDirectory { inner: Mutex::new(p), path }
     }
 
-    fn save(&self) {
+    pub fn save(&self) {
         if let Some(p) = &self.path {
             if let Ok(b) = postcard::to_stdvec(&*self.inner.lock().expect("lock")) {
                 let _ = kt_engine::storage::write_atomic(p, &b);
@@ -235,12 +235,87 @@ pub struct HelperKeeperReport {
     pub sets_repaired: usize,
 }
 
-/// Keep announcements, candidates and every group's helper set up to date.
+/// Learn helpers without Nostr: every helper in any of our groups' sets (groups overlap,
+/// so helpers spread through the social graph), plus peer exchange: ask a few known
+/// helpers which helpers they know. If we help, introduce ourselves to a few of them.
+pub async fn exchange_peers(syncer: &Arc<Syncer>, hmb: &HelperMailbox, dir: &HelperDirectory) -> usize {
+    let before = dir.candidates().len();
+    {
+        let r = syncer.replica();
+        let r = r.lock().expect("replica lock");
+        for g in r.groups() {
+            let (cur, prev) = r.mailbox_set(&g, LAYER);
+            for e in cur.into_iter().chain(prev).flat_map(|s| s.endpoints) {
+                if let Some(h) = decode_ref(&e) {
+                    dir.add(h);
+                }
+            }
+        }
+    }
+    let asked: Vec<HelperRef> = dir.ordered(hmb, None).into_iter().take(4).collect();
+    let me = hmb.p2p().helper().map(|_| HelperRef::from_addr(&hmb.p2p().where_data().to_addr().expect("own address")));
+    for h in asked {
+        let Some(addr) = h.to_addr() else { continue };
+        for p in hmb.ask_peers(&addr).await {
+            if p.to_addr().is_some() {
+                dir.add(p);
+            }
+        }
+        if let (Some(me), Some(store)) = (&me, hmb.p2p().helper()) {
+            if hmb.introduce(&addr, me.clone()).await {
+                store.learn_peer(h.clone());
+            }
+        }
+    }
+    // A helper also offers the helpers it has heard of.
+    if let Some(store) = hmb.p2p().helper() {
+        for p in store.known_peers() {
+            dir.add(p);
+        }
+    }
+    dir.save();
+    dir.candidates().len().saturating_sub(before)
+}
+
+/// Keep announcements, candidates and every group's helper set up to date. Nostr is one
+/// source among several: group data, peer exchange and the DHT keep it going without it.
 pub async fn maintain(syncer: &Arc<Syncer>, hmb: &HelperMailbox, mb: &NostrMailbox, dir: &HelperDirectory) -> HelperKeeperReport {
+    maintain_with_dht(syncer, hmb, mb, dir, None).await
+}
+
+/// [`maintain`] plus the DHT helper slots (announce when helping; read when this device
+/// knows few working helpers).
+pub async fn maintain_with_dht(
+    syncer: &Arc<Syncer>,
+    hmb: &HelperMailbox,
+    mb: &NostrMailbox,
+    dir: &HelperDirectory,
+    dht: Option<&crate::dht::DhtDiscovery>,
+) -> HelperKeeperReport {
     let mut report = HelperKeeperReport { announced: announce(hmb, mb).await, ..Default::default() };
-    if dir.discovery_due() {
+    let due = dir.discovery_due();
+    if due {
         report.discovered = dir.discover(mb).await;
     }
+    if let Some(dht) = dht {
+        let p2p = hmb.p2p();
+        if p2p.helper().is_some() && due {
+            let me = HelperRef::from_addr(&p2p.where_data().to_addr().expect("own address"));
+            if dht.announce_helper(&me, p2p.endpoint().secret_key(), today()).await {
+                report.announced += 1;
+            }
+        }
+        let working = dir.ordered(hmb, None).iter().filter(|h| iroh::EndpointId::from_bytes(&h.endpoint).is_ok_and(|i| !hmb.is_failing(&i))).count();
+        if due || working < 4 {
+            for h in dht.find_helpers(today()).await {
+                if h.endpoint != *p2p.endpoint().id().as_bytes() {
+                    dir.add(h);
+                    report.discovered += 1;
+                }
+            }
+        }
+    }
+    report.discovered += exchange_peers(syncer, hmb, dir).await;
     hmb.set_pool(dir.ordered(hmb, None).into_iter().filter_map(|h| h.to_addr()).take(HELPER_SET).collect());
     let replica = syncer.replica();
     let day = today();

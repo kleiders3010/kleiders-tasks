@@ -85,6 +85,10 @@ enum Request {
     Put { put: SignedPut, fanout: Vec<HelperRef> },
     Get { topics: Vec<[u8; 32]>, have: Vec<([u8; 32], [u8; 32], u64)> },
     Info,
+    /// A helper introducing itself (helper peer exchange).
+    Hello(HelperRef),
+    /// Which other helpers do you know?
+    Peers,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,6 +119,8 @@ enum Response {
     /// Slots newer than asked, plus the requested slots evicted for space this session.
     Slots(Vec<(([u8; 32], [u8; 32]), u64, Vec<u8>)>, Vec<([u8; 32], [u8; 32])>),
     Info(HelperInfo),
+    Ok,
+    Peers(Vec<HelperRef>),
 }
 
 async fn send_frame<T: Serialize>(s: &mut SendStream, v: &T) -> Result<(), String> {
@@ -221,15 +227,41 @@ pub struct HelperStore {
     session_start_ms: u64,
     inner: Mutex<(HashMap<([u8; 32], [u8; 32]), Entry>, HashMap<[u8; 32], TopicInfo>, u64)>,
     evicted: Mutex<std::collections::HashSet<([u8; 32], [u8; 32])>>,
+    /// Other helpers this helper has heard of (introductions, replication fan-out lists).
+    peers: Mutex<HashMap<[u8; 32], (HelperRef, u64)>>,
 }
 
+const MAX_PEERS: usize = 512;
+
 impl HelperStore {
+    /// Remember another helper (bounded; oldest forgotten first).
+    pub fn learn_peer(&self, h: HelperRef) {
+        if h.ips.len() > 16 || h.relays.len() > 8 {
+            return;
+        }
+        let mut p = self.peers.lock().expect("lock");
+        p.insert(h.endpoint, (h, now_ms()));
+        if p.len() > MAX_PEERS {
+            if let Some(oldest) = p.iter().min_by_key(|(_, v)| v.1).map(|(k, _)| *k) {
+                p.remove(&oldest);
+            }
+        }
+    }
+
+    /// Up to 32 known helpers, most recently heard first.
+    pub fn known_peers(&self) -> Vec<HelperRef> {
+        let mut v: Vec<(HelperRef, u64)> = self.peers.lock().expect("lock").values().cloned().collect();
+        v.sort_by_key(|x| std::cmp::Reverse(x.1));
+        v.into_iter().take(32).map(|x| x.0).collect()
+    }
+
     pub fn new(limits: HelperLimits) -> Arc<HelperStore> {
         Arc::new(HelperStore {
             limits,
             session_start_ms: now_ms(),
             inner: Mutex::new((HashMap::new(), HashMap::new(), 0)),
             evicted: Mutex::new(std::collections::HashSet::new()),
+            peers: Mutex::new(HashMap::new()),
         })
     }
 
@@ -330,6 +362,9 @@ impl HelperStore {
         let resp = match req {
             Request::Put { put, fanout } => {
                 let fanout: Vec<HelperRef> = fanout.into_iter().take(32).collect();
+                for h in &fanout {
+                    self.learn_peer(h.clone());
+                }
                 let reply = self.put_signed(put.clone(), fanout.clone());
                 if reply == PutReply::Stored && !fanout.is_empty() {
                     forward = Some((put, fanout));
@@ -341,6 +376,11 @@ impl HelperStore {
                 Response::Slots(self.get(&topics, &have), ev)
             }
             Request::Info => Response::Info(self.info()),
+            Request::Hello(h) => {
+                self.learn_peer(h);
+                Response::Ok
+            }
+            Request::Peers => Response::Peers(self.known_peers()),
         };
         send_frame(&mut s, &resp).await?;
         let _ = s.finish();
@@ -531,6 +571,19 @@ impl HelperMailbox {
                 None
             }
         }
+    }
+
+    /// Ask a helper which other helpers it knows (helper peer exchange).
+    pub async fn ask_peers(&self, h: &EndpointAddr) -> Vec<HelperRef> {
+        match self.call(h, &Request::Peers).await {
+            Some(Response::Peers(v)) => v.into_iter().take(32).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Introduce ourselves (as a helper) to another helper.
+    pub async fn introduce(&self, h: &EndpointAddr, me: HelperRef) -> bool {
+        matches!(self.call(h, &Request::Hello(me)).await, Some(Response::Ok))
     }
 
     async fn info(&self, h: &EndpointAddr) -> Option<HelperInfo> {

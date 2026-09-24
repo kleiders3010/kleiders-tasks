@@ -114,3 +114,47 @@ async fn members_discover_helpers_agree_on_a_set_and_repair_it() {
     assert!(new_set.len() < set_a.len(), "dead helpers dropped: {} -> {}", set_a.len(), new_set.len());
     assert!(has(&b, &g, &d, "after-5"));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn helpers_are_found_without_nostr() {
+    // No Nostr at all: every relay URL is dead.
+    let dead = "ws://127.0.0.1:9";
+    let mut helpers = Vec::new();
+    for i in 0..4 {
+        let p = P2p::start(Syncer::new(Arc::new(Mutex::new(replica(&format!("nh{i}")))), vec![]), cfg(true)).await.unwrap();
+        helpers.push(p);
+    }
+    let h1 = kt_net::helper::HelperRef::from_addr(&helpers[0].where_data().to_addr().unwrap());
+    // The others introduce themselves to h1 (as helpers do with any helper they know).
+    for p in &helpers[1..] {
+        let hm = HelperMailbox::new(p.clone(), vec![]);
+        let me = kt_net::helper::HelperRef::from_addr(&p.where_data().to_addr().unwrap());
+        assert!(hm.introduce(&h1.to_addr().unwrap(), me).await);
+    }
+
+    let (mut ra, mut rb) = (replica("na"), replica("nb"));
+    let g = ra.create_group().unwrap();
+    let d = ra.create_doc(&g).unwrap();
+    ra.doc(&g, &d).unwrap().get_map("tasks").insert("t0", "x").unwrap();
+    ra.commit(&g, &d).unwrap();
+    ra.add_member(&g, rb.device_public()).unwrap();
+    rb.accept_group(g);
+    for m in ra.export_group(&g).unwrap() {
+        let _ = rb.receive(&m);
+    }
+    let _ = ra.outbox();
+    let a = member(ra, dead).await;
+    let b = member(rb, dead).await;
+    // Each knows only h1 (an invite record carries a few of the group's helpers).
+    a.dir.add(h1.clone());
+    b.dir.add(h1);
+
+    set(&a, &g, &d, "no-nostr");
+    for _ in 0..3 {
+        round(&[&a, &b]).await;
+    }
+    assert!(a.dir.candidates().len() >= 4, "peer exchange found the others: {}", a.dir.candidates().len());
+    let set_a = a.s.replica().lock().unwrap().mailbox_set(&g, LAYER).0.unwrap().endpoints;
+    assert_eq!(set_a.len(), 4);
+    assert!(has(&b, &g, &d, "no-nostr"), "synced through helpers found without Nostr");
+}
