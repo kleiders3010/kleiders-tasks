@@ -27,6 +27,9 @@ use crate::sandbox::{self, Quarantine, SandboxConfig, Verdict};
 use crate::storage::{self, Layout};
 use crate::{crypto, wire, Error, Result};
 
+mod slots;
+pub use slots::{topic_for, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
+
 const MSG_TAG: [u8; 2] = *b"MS";
 const MSG_VERSION: u16 = 1;
 /// Save a fresh snapshot after this many imported updates.
@@ -82,6 +85,9 @@ struct DocState {
     sent_counter: i32,
     imported_since_snapshot: usize,
     generation: u32,
+    /// Own counter at the start of this generation (non-zero for the proposer: its rebuild
+    /// ops travel in the proposal). Slots carry own ops from here on.
+    gen_base: i32,
     /// Set after switching generations: lets a better concurrent proposal replace ours.
     prev: Option<PrevGen>,
 }
@@ -96,7 +102,7 @@ struct PrevGen {
 }
 
 fn new_doc_state(doc: LoroDoc, generation: u32) -> DocState {
-    DocState { doc, sent_counter: 0, imported_since_snapshot: 0, generation, prev: None }
+    DocState { doc, sent_counter: 0, imported_since_snapshot: 0, generation, gen_base: 0, prev: None }
 }
 
 struct GroupState {
@@ -168,8 +174,13 @@ impl Replica {
                     .ok()
                     .and_then(|b| b.try_into().ok().map(i32::from_le_bytes))
                     .unwrap_or(0);
+                let gen_base = std::fs::read(self.layout.doc_dir(&g, &d).join("genbase"))
+                    .ok()
+                    .and_then(|b| b.try_into().ok().map(i32::from_le_bytes))
+                    .unwrap_or(0);
                 let mut st = new_doc_state(doc, generation);
                 st.sent_counter = sent;
+                st.gen_base = gen_base;
                 self.groups.get_mut(&g).expect("inserted").docs.insert(d, st);
                 // Re-apply logged envelopes (idempotent): restores pending changes too.
                 for env in storage::read_records(&self.layout.doc_updates(&g, &d))? {
@@ -512,6 +523,15 @@ impl Replica {
             }
             return Ok(());
         }
+        // Already have all these ops (mailboxes resend whole slots): skip the sandbox.
+        {
+            let meta = LoroDoc::decode_import_blob_meta(&inner.payload, true).map_err(|e| Error::Loro(e.to_string()))?;
+            let end = meta.partial_end_vv.get(&inner.peer).copied().unwrap_or(0);
+            let have = self.groups[&g].docs[&inner.doc].doc.oplog_vv().get(&inner.peer).copied().unwrap_or(0);
+            if end <= have {
+                return Ok(());
+            }
+        }
         let payload_hash = crypto::hash("kt/payload/v1", &inner.payload);
         if self.quarantine.is_quarantined(&payload_hash) {
             return Err(Error::Rejected("quarantined update".into()));
@@ -609,8 +629,10 @@ impl Replica {
         self.switch_generation(g, d, fresh, generation, self.identity.id(), None, &env_bytes)?;
         let ds = self.groups.get_mut(g).expect("exists").docs.get_mut(d).expect("exists");
         ds.sent_counter = ds.doc.oplog_vv().get(&me).copied().unwrap_or(0);
+        ds.gen_base = ds.sent_counter;
         let sent = ds.sent_counter;
         self.save_sent_counter(g, d, sent)?;
+        storage::write_atomic(&self.layout.doc_dir(g, d).join("genbase"), &sent.to_le_bytes())?;
         self.queue_out(Message::Envelope(env_bytes).encode()?)?;
         Ok(())
     }
@@ -734,8 +756,10 @@ impl Replica {
         ds.prev = Some(PrevGen { doc: prev_doc, proposer, start });
         ds.generation = generation;
         ds.sent_counter = 0;
+        ds.gen_base = 0;
         ds.imported_since_snapshot = 0;
         storage::write_atomic(&self.layout.doc_dir(g, d).join("sent"), &0i32.to_le_bytes())?;
+        storage::write_atomic(&self.layout.doc_dir(g, d).join("genbase"), &0i32.to_le_bytes())?;
         let snap = ds.doc.export(ExportMode::Snapshot).map_err(|e| Error::Loro(e.to_string()))?;
         storage::write_atomic(&self.layout.doc_snapshot(g, d), &snap)?;
         storage::write_atomic(&self.layout.doc_dir(g, d).join("generation"), &generation.to_le_bytes())?;
