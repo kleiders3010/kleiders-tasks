@@ -1,0 +1,11 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:49896","[::]:48404"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.9.0.2:49896"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:36955","10.9.0.2:49896"],"relays":[],"t":53.9}
+{"ev":"stun_side","local_port":56752,"mapped":["7.7.7.29:56752","7.7.7.29:56752"],"port_preserved":true,"public_ip":"7.7.7.29","t":163.8,"varies_by_dest":false}
+{"addr":"7.7.7.29:49896","ev":"stun_predicted","t":163.9}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:36955","7.7.7.29:49896","10.9.0.2:49896"],"relays":[],"t":164.0}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:36955","7.7.7.29:49896","10.9.0.2:49896"],"relays":[],"t":3164.8}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","rtt_ms":84.950471,"sel":true}],"remote_addr":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3324.6}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","rtt_ms":84.950471,"sel":true}],"since_ms":86.162281,"t":3324.7}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","rtt_ms":86.849524,"sel":false},{"id":"PathId(1)","relay":false,"remote":"Ip(7.7.7.24:59570)","rtt_ms":42.007540000000006,"sel":true}],"since_ms":240.371371,"t":3478.9}

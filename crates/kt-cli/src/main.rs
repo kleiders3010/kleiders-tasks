@@ -4,9 +4,10 @@
 //!
 //! ```text
 //! kt --home A init                      kt --home B init
-//! kt --home A new-list Groceries        kt --home B whoami        -> <B's device key>
+//! kt --home A new-group Family          kt --home B whoami        -> <B's device key>
+//! kt --home A new-list Groceries --group Family
 //! kt --home A add Groceries milk
-//! kt --home A share Groceries <B key> --out join.bin
+//! kt --home A share Family <B key> --out join.bin
 //!                                       kt --home B join join.bin
 //!                                       kt --home B add Groceries eggs
 //!                                       kt --home B send b.msgs
@@ -29,15 +30,18 @@ fn usage() -> &'static str {
   init                         create this device (identity + personal group)
   whoami                       print this device's public key
   name [NEW]                   show or set your display name
-  new-list NAME                create a list
-  lists                        show lists
+  new-group NAME               create a group (a circle of people; holds several lists)
+  groups                       show groups
+  new-list NAME [--group G]    create a list (default: your personal group = solo list)
+  lists                        show lists by group
+  move-list LIST GROUP         move a list into another group
   add LIST TITLE [--under TASK]  add a task (TASK = id prefix)
   tasks LIST                   show tasks
   done LIST TASK / undone LIST TASK
   rename LIST TASK TITLE
   rm LIST TASK
-  share LIST DEVICE_KEY --out FILE   add a device to a list; write its join bundle
-  join FILE                    join a list from a bundle
+  share GROUP DEVICE_KEY --out FILE  add a device to a group; write its join bundle
+  join FILE                    join a group from a bundle
   send FILE                    write this device's pending messages to FILE
   recv FILE                    apply messages from FILE
   epoch LIST                   propose a document epoch (compaction)
@@ -136,6 +140,7 @@ fn run() -> Result<()> {
     };
     let out = take_flag(&mut args, "--out");
     let under = take_flag(&mut args, "--under");
+    let group_flag = take_flag(&mut args, "--group");
     let cmd = args.first().cloned().unwrap_or_default();
     let arg = |i: usize| args.get(i).cloned().ok_or_else(|| anyhow!("{}", usage()));
     let mut app = open(&home)?;
@@ -146,15 +151,39 @@ fn run() -> Result<()> {
             Some(n) => app.set_display_name(n).map_err(|e| anyhow!("{e}"))?,
             None => println!("{}", app.display_name()),
         },
+        "new-group" => {
+            let g = app.create_group(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
+            println!("created group '{}' ({})", g.name, g.group.short());
+        }
+        "groups" => {
+            for g in app.groups() {
+                let members = app.replica.epochs(&g.group).and_then(|e| e.head().and_then(|h| e.recipients(&h).map(|r| r.len()))).unwrap_or(0);
+                println!("{}  {}{}  ({} device{})", g.group.short(), g.name, if g.personal { " (personal)" } else { "" }, members, if members == 1 { "" } else { "s" });
+            }
+        }
         "new-list" => {
-            let l = app.create_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
-            println!("created list '{}' ({})", l.name, l.group.short());
+            let group = match &group_flag {
+                Some(k) => Some(app.find_group(k).map_err(|e| anyhow!("{e}"))?.group),
+                None => None,
+            };
+            let l = app.create_list(group, &arg(1)?).map_err(|e| anyhow!("{e}"))?;
+            println!("created list '{}' in '{}' ({})", l.name, l.group_name, l.doc.short());
         }
         "lists" => {
+            let mut current = String::new();
             for l in app.lists() {
-                let members = app.replica.epochs(&l.group).and_then(|e| e.head().and_then(|h| e.recipients(&h).map(|r| r.len()))).unwrap_or(0);
-                println!("{}  {}  ({} device{})", l.group.short(), l.name, members, if members == 1 { "" } else { "s" });
+                if l.group_name != current {
+                    println!("{}:", l.group_name);
+                    current = l.group_name.clone();
+                }
+                println!("  {}  ({})", l.name, l.doc.short());
             }
+        }
+        "move-list" => {
+            let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
+            let g = app.find_group(&arg(2)?).map_err(|e| anyhow!("{e}"))?;
+            let moved = app.move_list(&l, g.group).map_err(|e| anyhow!("{e}"))?;
+            println!("moved '{}' to '{}'", moved.name, moved.group_name);
         }
         "add" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
@@ -186,21 +215,22 @@ fn run() -> Result<()> {
             res.map_err(|e| anyhow!("{e}"))?;
         }
         "share" => {
-            let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
+            let g = app.find_group(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
             let dev = parse_device_key(&arg(2)?)?;
             let out = PathBuf::from(out.ok_or_else(|| anyhow!("share needs --out FILE"))?);
-            let mut msgs = vec![l.group.0.to_vec()];
-            msgs.extend(app.share_with_device(&l, dev).map_err(|e| anyhow!("{e}"))?);
+            let mut msgs = vec![g.group.0.to_vec()];
+            msgs.extend(app.share_group_with_device(g.group, dev).map_err(|e| anyhow!("{e}"))?);
             write_messages(&out, &msgs)?;
-            println!("wrote join bundle for '{}' to {}", l.name, out.display());
+            println!("wrote join bundle for group '{}' to {}", g.name, out.display());
         }
         "join" => {
             let msgs = read_messages(Path::new(&arg(1)?))?;
             let (head, rest) = msgs.split_first().ok_or_else(|| anyhow!("empty bundle"))?;
             let g = GroupId(head.as_slice().try_into().map_err(|_| anyhow!("bad bundle"))?);
             app.join_from_bundle(g, rest).map_err(|e| anyhow!("{e}"))?;
-            let name = app.lists().into_iter().find(|l| l.group == g).map(|l| l.name).unwrap_or_default();
-            println!("joined '{}' ({})", name, g.short());
+            let name = app.groups().into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
+            let lists: Vec<String> = app.lists().into_iter().filter(|l| l.group == g).map(|l| l.name).collect();
+            println!("joined group '{}' ({}) with lists: {}", name, g.short(), lists.join(", "));
         }
         "send" => {
             let msgs = app.replica.outbox().map_err(|e| anyhow!("{e}"))?;
@@ -235,7 +265,7 @@ fn run() -> Result<()> {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
             let doc = app.replica.doc(&l.group, &l.doc).unwrap();
             let size = doc.export(loro::ExportMode::Snapshot).map(|s| s.len()).unwrap_or(0);
-            println!("list '{}' group {} doc {}", l.name, l.group.short(), l.doc.short());
+            println!("list '{}' in group '{}' ({}), doc {}", l.name, l.group_name, l.group.short(), l.doc.short());
             println!("generation {}  snapshot {} bytes", app.replica.doc_generation(&l.group, &l.doc).unwrap_or(0), size);
             if let Some(e) = app.replica.epochs(&l.group) {
                 if let Some(h) = e.head() {

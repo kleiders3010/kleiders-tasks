@@ -1,0 +1,6 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:49034","[::]:40955"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.11.0.2:49034"],"relays":[],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.11.0.2:49034"],"relays":[],"t":3001.2}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","rtt_ms":83.417394,"sel":true}],"remote_addr":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3178.6}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394] })","rtt_ms":83.417394,"sel":true}],"since_ms":84.93152900000001,"t":3178.7}
