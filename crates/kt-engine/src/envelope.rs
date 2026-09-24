@@ -127,7 +127,7 @@ mod tests {
         let mut ge = GroupEpochs::new(g);
         ge.insert(epochs::genesis(&ds[0], g)).unwrap();
         for d in &ds[1..] {
-            let add = ge.create_add(&ds[0], d.public()).unwrap();
+            let add = ge.create_add(&ds[0], d.public(), &Default::default()).unwrap();
             ge.insert(add).unwrap();
         }
         (ds, g, ge)

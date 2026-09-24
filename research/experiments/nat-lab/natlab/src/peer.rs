@@ -317,6 +317,11 @@ fn filter_peer(mut addr: EndpointAddr, a: &Args) -> EndpointAddr {
         TransportAddr::Custom(_) => !a.flag("no-peer-custom"),
         _ => true,
     });
+    // Endpoint::addr() never contains custom-transport addresses (watch_addr merges only IP +
+    // relay), so "our signaling" adds the peer's custom address explicitly.
+    if a.get("ct-relay").is_some() && !a.flag("no-peer-custom") {
+        addr.addrs.insert(TransportAddr::Custom(crate::ct::to_addr(&addr.id)));
+    }
     for extra in a.all("peer-extra-ip") {
         if let Ok(s) = extra.parse::<SocketAddr>() {
             addr.addrs.insert(TransportAddr::Ip(s));

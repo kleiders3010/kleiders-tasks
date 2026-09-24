@@ -37,7 +37,9 @@ const VERSION: u16 = 1;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EpochKind {
     Genesis,
-    Add { device: DevicePublic },
+    /// `history`: keys of earlier epochs, wrapped for the added device only, so a new member
+    /// can read the group's existing content (sharing a list shares its contents).
+    Add { device: DevicePublic, history: BTreeMap<EpochId, WrappedKey> },
     Remove { device: DeviceId, cutoffs: BTreeMap<DocId, i32> },
     Rotate,
     Merge,
@@ -93,6 +95,15 @@ fn wrap_aad(group: &GroupId, parents: &[EpochId], creator: &DeviceId, created_ms
     }
     v.extend_from_slice(&creator.0);
     v.extend_from_slice(&created_ms.to_le_bytes());
+    v.extend_from_slice(&recipient.0);
+    v
+}
+
+fn history_aad(group: &GroupId, epoch: &EpochId, recipient: &DeviceId) -> Vec<u8> {
+    let mut v = Vec::with_capacity(100);
+    v.extend_from_slice(b"kt/history/v1");
+    v.extend_from_slice(&group.0);
+    v.extend_from_slice(&epoch.0);
     v.extend_from_slice(&recipient.0);
     v
 }
@@ -223,7 +234,7 @@ impl GroupEpochs {
         let inherited: BTreeSet<DeviceId> = parents.iter().flat_map(|p| p.body.removed.iter().copied()).collect();
         match &b.kind {
             EpochKind::Genesis => return bad("genesis with parents"),
-            EpochKind::Add { device } => {
+            EpochKind::Add { device, .. } => {
                 if parents.len() != 1 {
                     return bad("add must have one parent");
                 }
@@ -311,7 +322,7 @@ impl GroupEpochs {
                 x != e && !ancestors[x].contains(e) && self.records[x].body.removed.contains(&creator)
             });
             let invalid_here = match &r.body.kind {
-                EpochKind::Add { device } => {
+                EpochKind::Add { device, .. } => {
                     // A device removed in any epoch that doesn't descend from this Add was
                     // removed before or concurrently: this Add is a (re-)add after removal.
                     let dev = DeviceId(device.sign);
@@ -417,14 +428,43 @@ impl GroupEpochs {
         Ok(&self.records[&h])
     }
 
-    pub fn create_add(&self, me: &DeviceIdentity, device: DevicePublic) -> Result<EpochRecord> {
+    /// Add a device. `history_keys` are the earlier epoch keys this device holds; they are
+    /// wrapped for the new device so it can read existing content.
+    pub fn create_add(
+        &self,
+        me: &DeviceIdentity,
+        device: DevicePublic,
+        history_keys: &std::collections::HashMap<EpochId, SymKey>,
+    ) -> Result<EpochRecord> {
         let head = self.single_head()?;
-        if self.removed_devices().contains(&DeviceId(device.sign)) {
+        let new_dev = DeviceId(device.sign);
+        if self.removed_devices().contains(&new_dev) {
             return Err(Error::Rejected("device was removed and can't be re-added".into()));
         }
+        let history = history_keys
+            .iter()
+            .map(|(e, k)| (*e, crypto::wrap_key(&device.kex, k, &history_aad(&head.body.group, e, &new_dev))))
+            .collect();
         let mut recipients = head.body.recipients.clone();
-        recipients.insert(DeviceId(device.sign), device.kex);
-        Ok(build(me, head.body.group, vec![head.id()], EpochKind::Add { device }, recipients, head.body.removed.clone()))
+        recipients.insert(new_dev, device.kex);
+        Ok(build(me, head.body.group, vec![head.id()], EpochKind::Add { device, history }, recipients, head.body.removed.clone()))
+    }
+
+    /// Keys of earlier epochs delivered to this device by the Add epoch(s) that added it.
+    pub fn history_keys_for(&self, me: &DeviceIdentity) -> Vec<(EpochId, SymKey)> {
+        let mut out = Vec::new();
+        for e in &self.valid {
+            if let EpochKind::Add { device, history } = &self.records[e].body.kind {
+                if DeviceId(device.sign) == me.id() {
+                    for (eid, w) in history {
+                        if let Ok(k) = crypto::unwrap_key(me.secret(), w, &history_aad(&self.records[e].body.group, eid, &me.id())) {
+                            out.push((*eid, k));
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     pub fn create_remove(&self, me: &DeviceIdentity, device: DeviceId, cutoffs: BTreeMap<DocId, i32>) -> Result<EpochRecord> {
@@ -483,7 +523,7 @@ mod tests {
         let mut ge = GroupEpochs::new(g);
         ge.insert(genesis(&ds[0], g)).unwrap();
         for d in &ds[1..] {
-            let add = ge.create_add(&ds[0], d.public()).unwrap();
+            let add = ge.create_add(&ds[0], d.public(), &Default::default()).unwrap();
             ge.insert(add).unwrap();
         }
         (ds, ge)
@@ -501,7 +541,7 @@ mod tests {
         let h2 = ge.head().unwrap();
         assert!(ge.key_for(&h2, &ds[1]).is_ok());
         assert!(ge.key_for(&h2, &ds[2]).is_err(), "removed device can't read the new epoch");
-        assert!(ge.create_add(&ds[0], ds[2].public()).is_err(), "strong remove");
+        assert!(ge.create_add(&ds[0], ds[2].public(), &Default::default()).is_err(), "strong remove");
     }
 
     #[test]
@@ -513,7 +553,7 @@ mod tests {
         let rec = ge.records[&head].clone();
         let mut recipients = rec.body.recipients.clone();
         recipients.insert(outsider.id(), outsider.public().kex);
-        let ghost = build(&outsider, rec.body.group, vec![head], EpochKind::Add { device: outsider.public() }, recipients, rec.body.removed.clone());
+        let ghost = build(&outsider, rec.body.group, vec![head], EpochKind::Add { device: outsider.public(), history: BTreeMap::new() }, recipients, rec.body.removed.clone());
         assert!(ge.insert(ghost).is_err());
     }
 
@@ -558,7 +598,7 @@ mod tests {
         let mut a = ge.clone();
         let rm = a.create_remove(&ds[0], ds[2].id(), BTreeMap::new()).unwrap();
         // ds[2] concurrently adds a newcomer before learning it was removed.
-        let add = ge.create_add(&ds[2], newcomer.public()).unwrap();
+        let add = ge.create_add(&ds[2], newcomer.public(), &Default::default()).unwrap();
         a.insert(rm).unwrap();
         a.insert(add).unwrap();
         assert!(!a.is_current_member(&newcomer.id()), "strong remove: removed device can't add");

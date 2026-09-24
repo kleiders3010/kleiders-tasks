@@ -1,6 +1,17 @@
 [package]
 name = "kt-cli"
-version = "0.1.0"
-edition = "2024"
+description = "Command-line prototype of Kleiders Tasks"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "kt"
+path = "src/main.rs"
 
 [dependencies]
+kt-engine = { path = "../kt-engine" }
+kt-tasks = { path = "../kt-tasks" }
+loro.workspace = true
+anyhow.workspace = true
+hex.workspace = true

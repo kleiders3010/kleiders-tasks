@@ -11,6 +11,8 @@
 
 use std::collections::BTreeMap;
 
+pub mod app;
+
 use kt_engine::limits::TEXT_ATTACHMENT_THRESHOLD;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID, ValueOrContainer};
 use rand::RngCore;

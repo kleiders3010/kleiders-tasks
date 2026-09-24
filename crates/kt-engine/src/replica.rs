@@ -118,8 +118,6 @@ pub struct Replica {
     parked: Vec<Vec<u8>>,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
-    /// Messages produced outside `outbox` (e.g. document epoch proposals).
-    pending_out: Vec<Vec<u8>>,
 }
 
 impl Replica {
@@ -140,7 +138,6 @@ impl Replica {
             parked: Vec::new(),
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
-            pending_out: Vec::new(),
         };
         r.load()?;
         Ok(r)
@@ -167,7 +164,13 @@ impl Replica {
                     .ok()
                     .and_then(|b| b.try_into().ok().map(u32::from_le_bytes))
                     .unwrap_or(0);
-                self.groups.get_mut(&g).expect("inserted").docs.insert(d, new_doc_state(doc, generation));
+                let sent = std::fs::read(self.layout.doc_dir(&g, &d).join("sent"))
+                    .ok()
+                    .and_then(|b| b.try_into().ok().map(i32::from_le_bytes))
+                    .unwrap_or(0);
+                let mut st = new_doc_state(doc, generation);
+                st.sent_counter = sent;
+                self.groups.get_mut(&g).expect("inserted").docs.insert(d, st);
                 // Re-apply logged envelopes (idempotent): restores pending changes too.
                 for env in storage::read_records(&self.layout.doc_updates(&g, &d))? {
                     let _ = self.apply_envelope_bytes(&env, false);
@@ -275,7 +278,8 @@ impl Replica {
     }
 
     pub fn add_member(&mut self, g: &GroupId, device: DevicePublic) -> Result<()> {
-        let rec = self.groups.get(g).ok_or_else(|| Error::NotFound("group".into()))?.epochs.create_add(&self.identity, device)?;
+        let state = self.groups.get(g).ok_or_else(|| Error::NotFound("group".into()))?;
+        let rec = state.epochs.create_add(&self.identity, device, &state.keys)?;
         self.insert_epoch(*g, rec, true)
     }
 
@@ -327,6 +331,9 @@ impl Replica {
                     }
                 }
             }
+            for (id, k) in state.epochs.history_keys_for(me) {
+                state.keys.entry(id).or_insert(k);
+            }
         }
     }
 
@@ -339,20 +346,47 @@ impl Replica {
 
     /// Everything this device should send now: its new epoch records and its own new ops.
     pub fn outbox(&mut self) -> Result<Vec<Vec<u8>>> {
-        let mut out = std::mem::take(&mut self.pending_out);
+        self.flush_own_ops()?;
+        let path = self.outbox_path();
+        let msgs = storage::read_records(&path)?;
+        if path.exists() {
+            std::fs::remove_file(&path)?;
+        }
+        Ok(msgs)
+    }
+
+    fn outbox_path(&self) -> std::path::PathBuf {
+        self.layout.root().join("outbox.log")
+    }
+
+    /// Queue an outgoing message durably (survives the app being killed before sending).
+    fn queue_out(&self, msg: Vec<u8>) -> Result<()> {
+        storage::append_record(&self.outbox_path(), &msg)
+    }
+
+    fn save_sent_counter(&self, g: &GroupId, d: &DocId, counter: i32) -> Result<()> {
+        storage::write_atomic(&self.layout.doc_dir(g, d).join("sent"), &counter.to_le_bytes())
+    }
+
+    /// Seal this device's unsent own ops (and new epoch records) into messages: appended to
+    /// the local log (for relaying to new members) and queued for the next `outbox`.
+    fn flush_own_ops(&mut self) -> Result<()> {
         let me_peer = self.identity.peer_id();
         let gids: Vec<GroupId> = self.groups.keys().copied().collect();
         for g in gids {
             let state = self.groups.get_mut(&g).expect("exists");
-            for rec in state.new_records.drain(..) {
-                out.push(Message::Epoch(rec.encode()?).encode()?);
-            }
-            let Some(head) = state.epochs.head() else { continue };
-            if !state.epochs.is_current_member(&self.identity.id()) {
-                continue;
-            }
-            let Some(key) = state.keys.get(&head).cloned() else { continue };
+            let records: Vec<EpochRecord> = state.new_records.drain(..).collect();
             let mut envs = Vec::new();
+            let head_and_key = match state.epochs.head() {
+                Some(h) if state.epochs.is_current_member(&self.identity.id()) => state.keys.get(&h).cloned().map(|k| (h, k)),
+                _ => None,
+            };
+            let Some((head, key)) = head_and_key else {
+                for rec in records {
+                    self.queue_out(Message::Epoch(rec.encode()?).encode()?)?;
+                }
+                continue;
+            };
             for (d, ds) in state.docs.iter_mut() {
                 let current = ds.doc.oplog_vv().get(&me_peer).copied().unwrap_or(0);
                 if current <= ds.sent_counter {
@@ -362,21 +396,25 @@ impl Replica {
                 let update = ds.doc.export(ExportMode::updates_in_range(vec![span])).map_err(|e| Error::Loro(e.to_string()))?;
                 let inner = Inner { group: g, doc: *d, generation: ds.generation, kind: MessageKind::DocUpdate, peer: me_peer, created_ms: now_ms(), payload: update };
                 let env = Envelope::seal(&self.identity, head, &key, &inner)?;
-                let env_bytes = env.encode()?;
                 ds.sent_counter = current;
-                envs.push((*d, env_bytes));
+                envs.push((*d, env.encode()?, current));
             }
-            for (d, env_bytes) in envs {
+            for rec in records {
+                self.queue_out(Message::Epoch(rec.encode()?).encode()?)?;
+            }
+            for (d, env_bytes, counter) in envs {
                 storage::append_record(&self.layout.doc_updates(&g, &d), &env_bytes)?;
-                out.push(Message::Envelope(env_bytes).encode()?);
+                self.queue_out(Message::Envelope(env_bytes).encode()?)?;
+                self.save_sent_counter(&g, &d, counter)?;
             }
         }
-        Ok(out)
+        Ok(())
     }
 
     /// Everything a new member of `g` needs to catch up: all epoch records and all stored
     /// envelopes (own and relayed, each still signed by its author).
-    pub fn export_group(&self, g: &GroupId) -> Result<Vec<Vec<u8>>> {
+    pub fn export_group(&mut self, g: &GroupId) -> Result<Vec<Vec<u8>>> {
+        self.flush_own_ops()?;
         let mut out = Vec::new();
         for rec in storage::read_records(&self.layout.control_log(g))? {
             out.push(Message::Epoch(rec).encode()?);
@@ -571,7 +609,9 @@ impl Replica {
         self.switch_generation(g, d, fresh, generation, self.identity.id(), None, &env_bytes)?;
         let ds = self.groups.get_mut(g).expect("exists").docs.get_mut(d).expect("exists");
         ds.sent_counter = ds.doc.oplog_vv().get(&me).copied().unwrap_or(0);
-        self.pending_out.push(Message::Envelope(env_bytes).encode()?);
+        let sent = ds.sent_counter;
+        self.save_sent_counter(g, d, sent)?;
+        self.queue_out(Message::Envelope(env_bytes).encode()?)?;
         Ok(())
     }
 
@@ -695,6 +735,7 @@ impl Replica {
         ds.generation = generation;
         ds.sent_counter = 0;
         ds.imported_since_snapshot = 0;
+        storage::write_atomic(&self.layout.doc_dir(g, d).join("sent"), &0i32.to_le_bytes())?;
         let snap = ds.doc.export(ExportMode::Snapshot).map_err(|e| Error::Loro(e.to_string()))?;
         storage::write_atomic(&self.layout.doc_snapshot(g, d), &snap)?;
         storage::write_atomic(&self.layout.doc_dir(g, d).join("generation"), &generation.to_le_bytes())?;
