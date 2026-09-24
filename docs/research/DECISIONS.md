@@ -6,12 +6,6 @@
 
 ## 1. Delivery system (defines this app and future ones)
 
-**D47. Doorbell without a server** (wakes sleeping phones; replaces D17(b))
-- (a) Web Push to Google's push endpoint, sent by member devices, with no server of ours. Behind an off switch until tested. Risks: an undocumented registration path, and Google sees who rings whom.
-- (b) UnifiedPush only, for users who have a distributor app.
-- (c) No doorbell: honest "last synced" times + "Tell Alex".
-- **Needs your approval to test (a) on your phone** (a small test app for ~10 days).
-
 **D49. Internet P2P and relaying without n0**
 - (a) Helper desktops as iroh relays (Let's Encrypt IP-address certificates; public-IPv4 helpers only for now).
 - (b) IPv6 / router-mapped direct connections + our own signaling.
@@ -105,7 +99,6 @@ No real alternative was found for these (platform facts or single fixes). Detail
 - **Optional bonuses re-eligible under the clarified C2** (rejected earlier only for being developer-run): a doorbell worker (backup to D47's no-server path); Cloudflare Realtime TURN free tier (developer key; bills above 1,000 GB/month) for failed hole punches. Evaluate later as manifest entries.
 
 ## 7. Outward actions awaiting approval (none run)
-- The doorbell test on your phone (D47).
 - A Drive test on your Google account (D48d / D52b).
 - Small probes: Nostr ephemeral events on 3–4 relays, one STUN request per operator, a read-only attach to the Veilid network.
 - Contacting n0, Session's foundation, chatmail or Send operators.
