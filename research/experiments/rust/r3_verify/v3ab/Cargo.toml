@@ -1,0 +1,10 @@
+[package]
+name = "v3ab"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loro = "=1.16.2"
+
+[profile.release]
+opt-level = 1

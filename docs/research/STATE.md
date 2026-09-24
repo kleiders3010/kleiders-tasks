@@ -43,13 +43,13 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
 - [x] A1 Invite-code brute force (measured rates, not estimates)
-- [ ] A2 Rollback / withholding by helpers
-- [ ] A3 Junk flooding of helpers (fake groups)
-- [ ] A4 Eclipse / fake-helper positioning
+- [x] A2 Rollback / withholding by helpers
+- [x] A3 Junk flooding of helpers (fake groups)
+- [x] A4 Eclipse / fake-helper positioning
 - [x] A5 Malicious group member (mass delete, huge documents, format bombs, replaying old epochs, writing after removal)
 - [x] A6 Parser fuzzing of engine message formats
-- [ ] A7 Metadata leakage analysis (relays, DHT, helpers)
-- [ ] A8 Invite / link / clipboard / QR exposure paths (keyboards, cloud clipboard, screenshots)
+- [x] A7 Metadata leakage analysis (relays, DHT, helpers)
+- [x] A8 Invite / link / clipboard / QR exposure paths (keyboards, cloud clipboard, screenshots)
 
 ### P5: Final report
 - [ ] `docs/research/REPORT.md`: what held, what failed, what changed, what's still open
@@ -61,7 +61,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-Collect the P1 reports when the workflow finishes, then continue with P2 experiments.
+Remaining: E8 key-epoch analysis (use R7), collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
@@ -73,3 +73,5 @@ Collect the P1 reports when the workflow finishes, then continue with P2 experim
 - E6: full Rust core arm64 = 7.07 MB installed / 4.33 MB compressed (iroh 4.6, loro 1.7, nostr 1.5, crypto 0.3). Estimated app ~15-20 MB installed, ~10 MB download: targets hold.
 - A6 CRITICAL: fuzzing Loro 1.16.2 import (checksum recomputed like an attacker would) aborts the process within seconds; 4 distinct panic sites, 85-byte minimum input; double panic (poisoned lock) -> abort, catch_unwind can't help. Any member or disk corruption = app crash loop. Proposals: process-isolated import, crash-loop breaker, upstream report (needs the user's OK to publish).
 - A5 CRITICAL: a member reusing another's PeerID causes permanent silent divergence (a real edit lost for one member) and frames the victim as author. Proposal: PeerID = hash(device key), signed updates, own-ops-only per device, checked on the isolated copy; drop the shared snapshot slot in favor of verified document epochs. Mass delete is recoverable via history (keep a min 30-day window). Size bombs: a 50 MB update is imported with no limit; add engine limits.
+- A2-A4 (analysis): rollback only delays (monotonic signed reads); flooding degrades helpers but not delivery; gap: helpers can't tell legit reads, so cap young groups. Eclipse: the bootstrap hash must be keyed with the group secret; add IP/ASN diversity against sleepers.
+- A7: one global iroh endpoint ID links a device's groups; the DHT discovery key must rotate with the secret. A8: link/QR carry the permanent secret, so every leak (clipboard history, cloud clipboard, browser sync, photo backups) is permanent. Proposal: links/QR carry short-lived invites (same mechanism as codes).

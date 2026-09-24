@@ -1,0 +1,10 @@
+[package]
+name = "v3nc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loro = { version = "=1.16.2", default-features = false }
+
+[profile.release]
+opt-level = 1
