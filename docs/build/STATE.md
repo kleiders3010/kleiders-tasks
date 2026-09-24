@@ -41,6 +41,8 @@
 - [ ] Helper relay TLS: Let's Encrypt IP certificates via ACME (validated in E10 against a local CA; needs a publicly reachable machine to test for real)
 - [ ] iroh P2P (LAN with rotating IDs, direct, relays per D49 outcome, member relaying)
 - [x] Discovery via slots (whereabouts) and the **Mainline DHT** (`kt-net/src/dht.rs`, engine `replica/discovery.rs`): sealed, device-signed records at member-only locations that rotate with key epochs. Local testnet test + **public DHT from the tablet**: published and found by the other member device, ~20 s per publish+lookup round
+- [x] LAN discovery (`kt-net/src/lan.rs`, D57): beacons with 10-minute rotating tags and sealed device-signed whereabouts, padded entry counts; members learn LAN addresses and dial directly; outsiders learn nothing. Tested on loopback; multicast on a real LAN not yet tested (it would trigger a Windows firewall prompt on this PC)
+- [x] P2P membership proof: `Hello` carries the dialer's device-signed whereabouts naming its endpoint, so a responder serves a member it hasn't heard of yet
 - [ ] n0 DNS discovery as an optional best-effort layer (a config flag on the iroh endpoint)
 - [ ] Helper storage protocol (basic) + reliability records
 - [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
@@ -74,8 +76,9 @@
 - Fixed during M1: new members couldn't read pre-join history (Add epochs now carry wrapped history keys); the outgoing queue and own-op send positions are now persisted (the CLI's short-lived processes exposed both).
 
 ## Next action
-1. LAN discovery with rotating IDs; simultaneous dial timing via Nostr ephemeral events.
-2. Discovery beyond slots (pkarr/DHT on a local testnet, n0 DNS as an option), Nostr live subscriptions + simultaneous-dial signaling, helper storage protocol for strangers (RAM).
+1. Nostr live subscriptions (near-real-time sync while apps are open) + knock signaling for simultaneous dial.
+2. Helper storage protocol for strangers (RAM), reliability records, selection.
+3. Then M3 (invites, device linking).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
