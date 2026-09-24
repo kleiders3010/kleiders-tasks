@@ -14,8 +14,10 @@
 //!    device that actually holds the current keys, signed with that device's key.
 //! 4. **Every new epoch excludes every removal its creator knows about** (removed sets are
 //!    inherited from all parents).
-//! 5. A removal carries the remover's version-vector digest (opaque here; the document
-//!    layer uses it to reject the removed author's ops outside it).
+//! 5. A removal carries **per-document cutoffs** for the removed device: the counter up to
+//!    which the remover had seen that device's ops. Receivers reject the removed device's
+//!    ops beyond the cutoff, and the post-removal document epoch is rebuilt at the cutoff,
+//!    so all members converge even if some imported late ops before learning of the removal.
 //!
 //! Mutual removal (A removes B while B removes A) removes both: removal epochs are never
 //! invalidated by a concurrent removal of their creator.
@@ -26,7 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::crypto::{self, DevicePublic, SymKey, WrappedKey};
 use crate::identity::DeviceIdentity;
-use crate::ids::{DeviceId, EpochId, GroupId};
+use crate::ids::{DeviceId, DocId, EpochId, GroupId};
 use crate::{wire, Error, Result};
 
 const TAG: [u8; 2] = *b"EP";
@@ -36,7 +38,7 @@ const VERSION: u16 = 1;
 pub enum EpochKind {
     Genesis,
     Add { device: DevicePublic },
-    Remove { device: DeviceId, remover_vv_digest: [u8; 32] },
+    Remove { device: DeviceId, cutoffs: BTreeMap<DocId, i32> },
     Rotate,
     Merge,
 }
@@ -355,6 +357,23 @@ impl GroupEpochs {
         self.records.get(id).map(|r| &r.body.recipients)
     }
 
+    /// Per-document cutoffs for a removed device, merged across all valid removal epochs
+    /// (the smallest cutoff wins: the most conservative view of what was legitimately seen).
+    pub fn cutoffs_for(&self, device: &DeviceId) -> Option<BTreeMap<DocId, i32>> {
+        let mut out: Option<BTreeMap<DocId, i32>> = None;
+        for e in &self.valid {
+            if let EpochKind::Remove { device: d, cutoffs } = &self.records[e].body.kind {
+                if d == device {
+                    let acc = out.get_or_insert_with(BTreeMap::new);
+                    for (doc, c) in cutoffs {
+                        acc.entry(*doc).and_modify(|v| *v = (*v).min(*c)).or_insert(*c);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Devices removed as known across all valid epochs.
     pub fn removed_devices(&self) -> BTreeSet<DeviceId> {
         self.valid.iter().flat_map(|e| self.records[e].body.removed.iter().copied()).collect()
@@ -408,12 +427,12 @@ impl GroupEpochs {
         Ok(build(me, head.body.group, vec![head.id()], EpochKind::Add { device }, recipients, head.body.removed.clone()))
     }
 
-    pub fn create_remove(&self, me: &DeviceIdentity, device: DeviceId, remover_vv_digest: [u8; 32]) -> Result<EpochRecord> {
+    pub fn create_remove(&self, me: &DeviceIdentity, device: DeviceId, cutoffs: BTreeMap<DocId, i32>) -> Result<EpochRecord> {
         let head = self.single_head()?;
         let mut removed = head.body.removed.clone();
         removed.insert(device);
         let recipients = head.body.recipients.iter().filter(|(d, _)| !removed.contains(d)).map(|(d, k)| (*d, *k)).collect();
-        Ok(build(me, head.body.group, vec![head.id()], EpochKind::Remove { device, remover_vv_digest }, recipients, removed))
+        Ok(build(me, head.body.group, vec![head.id()], EpochKind::Remove { device, cutoffs }, recipients, removed))
     }
 
     pub fn create_rotate(&self, me: &DeviceIdentity) -> Result<EpochRecord> {
@@ -477,7 +496,7 @@ mod tests {
         for d in &ds {
             assert!(ge.key_for(&h, d).is_ok());
         }
-        let rm = ge.create_remove(&ds[0], ds[2].id(), [0; 32]).unwrap();
+        let rm = ge.create_remove(&ds[0], ds[2].id(), BTreeMap::new()).unwrap();
         ge.insert(rm).unwrap();
         let h2 = ge.head().unwrap();
         assert!(ge.key_for(&h2, &ds[1]).is_ok());
@@ -511,8 +530,8 @@ mod tests {
         let (ds, ge) = setup(4);
         let mut a = ge.clone();
         let mut b = ge.clone();
-        let ra = a.create_remove(&ds[0], ds[2].id(), [0; 32]).unwrap();
-        let rb = b.create_remove(&ds[1], ds[3].id(), [0; 32]).unwrap();
+        let ra = a.create_remove(&ds[0], ds[2].id(), BTreeMap::new()).unwrap();
+        let rb = b.create_remove(&ds[1], ds[3].id(), BTreeMap::new()).unwrap();
         a.insert(ra.clone()).unwrap();
         b.insert(rb.clone()).unwrap();
         a.insert(rb).unwrap();
@@ -537,7 +556,7 @@ mod tests {
         let (ds, ge) = setup(3);
         let newcomer = DeviceIdentity::generate();
         let mut a = ge.clone();
-        let rm = a.create_remove(&ds[0], ds[2].id(), [0; 32]).unwrap();
+        let rm = a.create_remove(&ds[0], ds[2].id(), BTreeMap::new()).unwrap();
         // ds[2] concurrently adds a newcomer before learning it was removed.
         let add = ge.create_add(&ds[2], newcomer.public()).unwrap();
         a.insert(rm).unwrap();
@@ -563,7 +582,7 @@ mod tests {
                 }
                 let target = rng.gen_range(0..n);
                 let rec = if rng.gen_bool(0.7) && target != actor {
-                    views[actor].create_remove(&ds[actor], ds[target].id(), [0; 32]).ok()
+                    views[actor].create_remove(&ds[actor], ds[target].id(), BTreeMap::new()).ok()
                 } else {
                     views[actor].create_rotate(&ds[actor]).ok()
                 };

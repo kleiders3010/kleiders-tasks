@@ -8,6 +8,7 @@ pub mod epochs;
 pub mod ids;
 pub mod identity;
 pub mod limits;
+pub mod replica;
 pub mod sandbox;
 pub mod storage;
 pub mod wire;
