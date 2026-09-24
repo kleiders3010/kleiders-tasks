@@ -10,25 +10,7 @@ Split in two:
 
 # Part A: your decisions
 
-**D51. Should default-on helpers also relay *live* connections for strangers?** *(storage helping is already decided: on)*
-- *User direction: relay capability must exist; a developer-run select relay (your PC or a free server) is the early guarantee. Final choice waits for the D49 lab data on how many helpers are reachable.*
-- **D49 lab data (E10), now in:**
-  - **Some pairs can only ever connect through a relay:** 5 of the 13 NAT pairs tested, including phone↔phone on carrier NAT. So without n0, *someone's* relay is required for those users to connect live. Offline sync still works through mailboxes (Nostr, helpers) either way.
-  - **Who can be a relay:** only a device with a public IPv4 address or a UPnP router (the certificate check must reach it). Phones and carrier-NAT homes can't. So relaying falls on a minority of desktops.
-  - **Cost per relaying desktop:**
-    - about 48 MB of memory and under 1% of one core with 100 clients and 50 relayed connections;
-    - bulk data costs about 25 core-seconds per GB, so a per-relay bandwidth cap is needed (it doesn't change the choice).
-  - **Access can be limited to a group token**, but the relay's address-discovery answers anyone who asks. That reveals little: that a relay exists, not who uses it.
-  - Not measured: real ISP reactions and the real share of desktops with public IPv4 or UPnP.
-- (a) Default-on, like storage helping: maximum coverage.
-- (b) A separate opt-in relay level.
-- (c) Own groups only.
-- **The trade-off is exposure, not engineering:**
-  - a relaying user's IP address and bandwidth carry strangers' encrypted traffic;
-  - some ISPs' terms forbid running servers;
-  - abuse complaints are possible;
-  - desktops show a firewall prompt.
-- How ISPs react at this traffic level is **not verified**.
+*Nothing open right now (D51 decided 2026-09-24: see DECIDED.md).*
 
 ---
 

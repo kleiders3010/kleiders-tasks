@@ -49,6 +49,7 @@ Hard constraints. Every design decision must satisfy all of them:
 | Notify me when others change a list | On | All |
 | Help others sync: *Wi-Fi and charging (+ Wi-Fi while open)* / *Wi-Fi while open* / *Off* | Wi-Fi and charging. Turning it off is easy but explained (§7a) | All (desktop: On / Off) |
 | Backup: connect Google Drive, or choose a folder (desktop); export / import | Android's built-in backup is always on (§11). Cloud / folder backup off, but prompted once on devices with no other peers | All |
+| Relay connections for others (carry encrypted live traffic for devices that can't connect directly; separate from "Help others sync") | On (D51). Only works on reachable desktops (public IPv4 or a UPnP router); others silently don't relay | Desktop only |
 | Start with computer | On | Desktop |
 
 Sub-options found only under their parent setting: "Memory for helping others" and "Keep this PC awake while plugged in" (under Help others sync, §7a).
@@ -170,7 +171,7 @@ All layers run in parallel (principle 4). **Preference order when several work**
 | Direct internet | iroh over IPv6, router port mapping (UPnP/NAT-PMP/PCP), public IP | Networks that allow it | Addresses advertised through our own discovery (below). ⏳ D49 lab |
 | Hole punching | iroh QUIC NAT traversal, **in-band**: it needs an existing relayed connection to coordinate | A relay (n0, helper or select relay) | iroh **no longer uses STUN**; it learns public addresses through its relays (QAD). ~70% realistic success (independent study); phone↔phone on carrier NAT usually needs a relay. |
 | Relay through a member | Engine logic | A reachable member device | |
-| Helper relays | Helper desktops running an iroh relay (Let's Encrypt IP-address or domain certificate) | Reachable helpers | ⏳ D49 (lab running) / D51 (strangers' live traffic) |
+| Helper relays | Helper desktops running an iroh relay (Let's Encrypt IP-address or domain certificate), **for strangers too, on by default (D51)** | Reachable desktops | D49: built first (E10); phones never relay |
 | Select relays | Developer-run relays via the operator manifest (§7b), e.g. `relay.jurisgames.com` on the developer's PC or a free VM | Optional bonus | Hosting evaluation queued after D49 |
 | n0 public relays | iroh default relays | n0 ("development and hobby use only") | Best-effort only (D50). May drift from old iroh versions over years. |
 | Mailboxes | Nostr (§7), helpers (§7a), member devices | See sections | |
@@ -228,7 +229,7 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
 - **Attacks:** smearing impossible from outside; DoS only lowers rank temporarily; junk-filling countered by load-scaled proof of work on new slots, per-group quotas and priority for established, actually-read groups; **young groups get capped capacity** so new (real or fake) groups can't displace established ones quickly.
 - **Trust tiers:** 1) member devices (own groups, on disk); 2) **select nodes** from the operator manifest (§7b); 3) earned helpers. An own always-on machine simply joins as a member.
 - **Caps and eviction:** memory scaled to the device (e.g. 16–32 MB phones, 64–256 MB desktops, adjustable under "Memory for helping others"). Per-group quota; slots unrefreshed for ~2 weeks become first to evict when space is needed; background sync by any member refreshes them.
-- **Relaying live connections for strangers:** ⏳ D51 (waits for lab data). Relay capability exists regardless; developer select relays are the early guarantee.
+- **Relaying live connections for strangers (D51, decided):** on by default on **desktops only**, as its own setting ("Relay connections for others"), separate from storage helping. Only reachable desktops (public IPv4 or UPnP) can serve; a per-client bandwidth cap applies (E10: ~25 core-seconds per GB). Phones never relay live traffic. The privacy text discloses that a relaying desktop's IP and bandwidth carry strangers' encrypted traffic.
 - **Exposure, disclosed in the privacy text:** a helper's IP is visible to the devices it serves; it sees encrypted data and who uses it, never content.
 
 ## 7b. Operator manifest (optional developer capacity, D56)
