@@ -29,7 +29,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Alternatives evaluated:** per-author signed attestations inside shared snapshots. **Not viable:** it needs deterministic hashing of a peer's op range, which Loro doesn't expose (A5 §1b).
 - **Confidence:** medium-high. **Not verified:** the epoch state-equality check on large docs (performance) and in the engine.
 
-### D3. One malformed update crashes every member's app, in a loop: ✅ KEEP parts 1–3 (2026-09-24). Part 4 (upstream report) pending. To measure in the engine phase: Android helper-process memory and latency on a low-end device
+### D3. One malformed update crashes every member's app, in a loop: ✅ KEEP parts 1–3; part 4 (upstream report) ❌ DROPPED (2026-09-24). To measure in the engine phase: Android helper-process memory and latency on a low-end device
 - **Problem:** fuzzing Loro 1.16.2 import (with the checksum recomputed, as any member can) **aborts the process** within seconds. 4 distinct crash sites; smallest input 85 bytes. A double panic (poisoned lock) means `catch_unwind` can't catch it. In a mailbox slot, that's a crash on every sync and launch for every member. Loro has had similar bugs reported this month (#1088, #1106).
 - **Evidence:** A6 (fuzzer, 40/40 sessions abort, crash inputs saved), R7, R3.
 - **Proposal:**
@@ -38,6 +38,10 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   3. Release builds use `panic = "unwind"` (so non-aborting panics become errors through UniFFI), not `abort` as §10 says.
   4. Report the crash inputs to Loro upstream. **This posts publicly on GitHub, so it needs your OK.**
 - **Alternatives evaluated:** in-process `catch_unwind` only. **Tested, fails** (the double panic aborts).
+- **Checked: Loro has no built-in safe-import mode** (loro-internal 1.16.2 source):
+  - its policy is that malformed input returns `Err` (tests `import_rejects_malformed_change_block_without_panic`, `import_rejects_huge_sstable_meta_block_count_without_panic`), so panics are per-case bugs;
+  - batch import catches a panic only to reattach the document and then deliberately re-raises it (`resume_unwind`: "that document is unusable either way");
+  - poisoned locks panic on the next use by design (`test_poisoned_lock_panics_after_unwind`).
 - **Confidence:** high that (1) contains crashes. **Not verified:** the cost of a separate process on Android, especially inside background jobs.
 
 ### D4. No size limits: one member can push 50 MB to everyone
