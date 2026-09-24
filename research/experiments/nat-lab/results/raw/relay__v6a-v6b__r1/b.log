@@ -1,0 +1,16 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:33405","[::]:55565"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.8.0.2:33405","[2001:db8:8::2]:55565"],"relays":[],"t":0.2}
+{"ev":"relay_status","relays":[],"t":0.2}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.28:16572","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":425.3,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:16572","10.8.0.2:33405","[2001:db8:8::2]:55565"],"relays":[],"t":425.4}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:16572","10.8.0.2:33405","[2001:db8:8::2]:55565"],"relays":["https://7.7.7.10/"],"t":425.5}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":425.6}
+{"ev":"online","ms":550.03093,"t":550.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":550.2}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:16572","10.8.0.2:33405","[2001:db8:8::2]:55565"],"relays":["https://7.7.7.10/"],"t":3550.9}
+{"ev":"dial_start","peer":{"customs":[],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:58521","10.7.0.2:60464","[2001:db8:7::2]:53752"],"relays":["https://7.7.7.10/"]},"t":3602.4}
+{"ev":"connected","ms":84.400792,"paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.21266800000001,"sel":true}],"t":3686.8}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.21266800000001,"sel":true}],"since_ms":84.479546,"t":3686.9}
+{"ev":"ttfb","ms":181.54176,"t":3783.9}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.086309,"sel":false},{"id":"PathId(1)","relay":false,"remote":"Ip([2001:db8:7::2]:53752)","rtt_ms":82.156037,"sel":true}],"since_ms":340.392315,"t":3942.8}
+{"alive_after":true,"connect_ms":84.400792,"connected":true,"direct":true,"direct_ms":340.392315,"ev":"summary","final_selected":{"relay":false,"remote":"Ip([2001:db8:7::2]:53752)","rtt_ms":94.03170800000001},"first_path_direct":false,"mbps":null,"n_paths":2,"t":9868.1,"ttfb_ms":181.54176}

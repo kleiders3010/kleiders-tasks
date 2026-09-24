@@ -1,0 +1,13 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:47022","[::]:57689"],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.7.0.2:47022","[2001:db8:7::2]:57689"],"relays":[],"t":0.0}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.27:31138","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":411.0,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:31138","10.7.0.2:47022","[2001:db8:7::2]:57689"],"relays":[],"t":411.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:31138","10.7.0.2:47022","[2001:db8:7::2]:57689"],"relays":["https://7.7.7.10/"],"t":411.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":411.2}
+{"ev":"online","ms":535.501441,"t":535.5}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":535.6}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:31138","10.7.0.2:47022","[2001:db8:7::2]:57689"],"relays":["https://7.7.7.10/"],"t":3537.1}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":84.739174,"sel":true}],"remote_addr":"Relay { url: RelayUrl(\"https://7.7.7.10/\"), endpoint_id: PublicKey(8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394) }","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3664.4}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":84.739174,"sel":true}],"since_ms":85.654524,"t":3664.5}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":84.125542,"sel":false},{"id":"PathId(1)","relay":false,"remote":"Ip([2001:db8:8::2]:33335)","rtt_ms":83.091068,"sel":true}],"since_ms":340.240414,"t":3919.2}
