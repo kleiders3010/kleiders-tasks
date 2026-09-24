@@ -6,17 +6,6 @@
 
 ## 1. Delivery system (defines this app and future ones)
 
-**D13. Accept the Nostr risk for launch?**
-- Nostr works today: 8/8 relays accepted our test.
-- But it has hard rate limits (~8 writes/min per IP), a ~64 KB event limit, operators hostile to "relays as storage", one software running most relays, and relay churn.
-- Without Nostr, everything keeps working except the "nobody online, no helpers yet" case and invites (see D55).
-- **Yes / No.** "No" means revisiting a constraint.
-
-**D55. Invites without Nostr** *(new)*
-- Invite records (code / link / QR lookup) were designed around Nostr.
-- **Proposal:** also store them with helpers and in the BitTorrent DHT (an encrypted invite fits its 1,000-byte records; ~2 h lifetime, so the inviter's app keeps re-posting).
-- **Not evaluated in depth yet.**
-
 **D47. Doorbell without a server** (wakes sleeping phones; replaces D17(b))
 - (a) Web Push to Google's push endpoint, sent by member devices, with no server of ours. Behind an off switch until tested. Risks: an undocumented registration path, and Google sees who rings whom.
 - (b) UnifiedPush only, for users who have a distributor app.
