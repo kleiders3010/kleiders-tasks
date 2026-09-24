@@ -724,6 +724,13 @@ dependencies = [
 [[package]]
 name = "kt-tasks"
 version = "0.1.0"
+dependencies = [
+ "hex",
+ "kt-engine",
+ "loro",
+ "rand",
+ "thiserror 2.0.17",
+]
 
 [[package]]
 name = "lazy_static"

@@ -15,7 +15,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
-use loro::{ExportMode, IdSpan, LoroDoc};
+use loro::{ExportMode, IdSpan, LoroDoc, VersionVector};
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::{DevicePublic, SymKey};
@@ -47,6 +47,24 @@ impl Message {
     }
 }
 
+/// App-specific knowledge the engine needs for document epochs (D24). The engine stays
+/// generic (principle 7); the domain crate implements this.
+pub trait DocSemantics {
+    /// Canonical representation of the live state; equal means "same list for the user".
+    fn normalized(&self, doc: &LoroDoc) -> Vec<u8>;
+    /// A fresh document with the same live state (no history, no tombstones), authored by `peer`.
+    fn rebuild(&self, doc: &LoroDoc, peer: u64) -> Result<LoroDoc>;
+    /// Re-apply the changes that turned `base` into `local` onto `target`, as new ops.
+    fn rebase(&self, base: &LoroDoc, local: &LoroDoc, target: &LoroDoc) -> Result<()>;
+}
+
+#[derive(Serialize, Deserialize)]
+struct EpochProposal {
+    generation: u32,
+    base_vv: Vec<u8>,
+    snapshot: Vec<u8>,
+}
+
 /// Things the host (UI, logs, tests) may want to know about.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
@@ -55,6 +73,7 @@ pub enum Event {
     Quarantined { author: DeviceId },
     Parked,
     EpochAccepted { group: GroupId, epoch: EpochId },
+    DocEpochSwitched { group: GroupId, doc: DocId, generation: u32, rebased: bool },
 }
 
 struct DocState {
@@ -62,6 +81,22 @@ struct DocState {
     /// Own ops already sent (counter end, exclusive). Resent after restart (idempotent).
     sent_counter: i32,
     imported_since_snapshot: usize,
+    generation: u32,
+    /// Set after switching generations: lets a better concurrent proposal replace ours.
+    prev: Option<PrevGen>,
+}
+
+struct PrevGen {
+    /// The document before the switch.
+    doc: LoroDoc,
+    /// Who proposed the generation we switched to.
+    proposer: DeviceId,
+    /// The new document right after the switch (before our later edits).
+    start: LoroDoc,
+}
+
+fn new_doc_state(doc: LoroDoc, generation: u32) -> DocState {
+    DocState { doc, sent_counter: 0, imported_since_snapshot: 0, generation, prev: None }
 }
 
 struct GroupState {
@@ -82,6 +117,9 @@ pub struct Replica {
     accepted_groups: BTreeSet<GroupId>,
     parked: Vec<Vec<u8>>,
     events: Vec<Event>,
+    semantics: Option<Box<dyn DocSemantics>>,
+    /// Messages produced outside `outbox` (e.g. document epoch proposals).
+    pending_out: Vec<Vec<u8>>,
 }
 
 impl Replica {
@@ -101,6 +139,8 @@ impl Replica {
             accepted_groups: BTreeSet::new(),
             parked: Vec::new(),
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
+            semantics: None,
+            pending_out: Vec::new(),
         };
         r.load()?;
         Ok(r)
@@ -123,7 +163,11 @@ impl Replica {
                     Err(_) => LoroDoc::new(),
                 };
                 doc.set_peer_id(self.identity.peer_id()).map_err(|e| Error::Loro(e.to_string()))?;
-                self.groups.get_mut(&g).expect("inserted").docs.insert(d, DocState { doc, sent_counter: 0, imported_since_snapshot: 0 });
+                let generation = std::fs::read(self.layout.doc_dir(&g, &d).join("generation"))
+                    .ok()
+                    .and_then(|b| b.try_into().ok().map(u32::from_le_bytes))
+                    .unwrap_or(0);
+                self.groups.get_mut(&g).expect("inserted").docs.insert(d, new_doc_state(doc, generation));
                 // Re-apply logged envelopes (idempotent): restores pending changes too.
                 for env in storage::read_records(&self.layout.doc_updates(&g, &d))? {
                     let _ = self.apply_envelope_bytes(&env, false);
@@ -143,6 +187,15 @@ impl Replica {
 
     pub fn device_public(&self) -> DevicePublic {
         self.identity.public()
+    }
+
+    /// Install the app's document semantics (enables document epochs).
+    pub fn set_semantics(&mut self, s: Box<dyn DocSemantics>) {
+        self.semantics = Some(s);
+    }
+
+    pub fn doc_generation(&self, g: &GroupId, d: &DocId) -> Option<u32> {
+        self.groups.get(g)?.docs.get(d).map(|s| s.generation)
     }
 
     pub fn take_events(&mut self) -> Vec<Event> {
@@ -199,7 +252,7 @@ impl Replica {
         if !state.docs.contains_key(d) {
             let doc = LoroDoc::new();
             doc.set_peer_id(peer).map_err(|e| Error::Loro(e.to_string()))?;
-            state.docs.insert(*d, DocState { doc, sent_counter: 0, imported_since_snapshot: 0 });
+            state.docs.insert(*d, new_doc_state(doc, 0));
             std::fs::create_dir_all(self.layout.doc_dir(g, d))?;
         }
         Ok(())
@@ -286,7 +339,7 @@ impl Replica {
 
     /// Everything this device should send now: its new epoch records and its own new ops.
     pub fn outbox(&mut self) -> Result<Vec<Vec<u8>>> {
-        let mut out = Vec::new();
+        let mut out = std::mem::take(&mut self.pending_out);
         let me_peer = self.identity.peer_id();
         let gids: Vec<GroupId> = self.groups.keys().copied().collect();
         for g in gids {
@@ -307,7 +360,7 @@ impl Replica {
                 }
                 let span = IdSpan::new(me_peer, ds.sent_counter, current);
                 let update = ds.doc.export(ExportMode::updates_in_range(vec![span])).map_err(|e| Error::Loro(e.to_string()))?;
-                let inner = Inner { group: g, doc: *d, kind: MessageKind::DocUpdate, peer: me_peer, created_ms: now_ms(), payload: update };
+                let inner = Inner { group: g, doc: *d, generation: ds.generation, kind: MessageKind::DocUpdate, peer: me_peer, created_ms: now_ms(), payload: update };
                 let env = Envelope::seal(&self.identity, head, &key, &inner)?;
                 let env_bytes = env.encode()?;
                 ds.sent_counter = current;
@@ -391,8 +444,8 @@ impl Replica {
                 return Err(e);
             }
         };
-        if inner.kind != MessageKind::DocUpdate {
-            return Err(Error::Invalid("document epochs are handled by the domain layer".into()));
+        if inner.kind == MessageKind::DocEpochProposal {
+            return self.handle_proposal(g, env.sender, inner, bytes, persist);
         }
         // D5 rule 5: a removed device's ops beyond its cutoff are rejected.
         if let Some(cutoffs) = state.epochs.cutoffs_for(&env.sender) {
@@ -409,6 +462,18 @@ impl Replica {
             }
         }
         self.ensure_doc(&g, &inner.doc)?;
+        let cur_gen = self.groups[&g].docs[&inner.doc].generation;
+        if inner.generation < cur_gen {
+            // Written for an older document generation: its author will rebase.
+            return Ok(());
+        }
+        if inner.generation > cur_gen {
+            if persist && self.parked.len() < 10_000 {
+                self.parked.push(bytes.to_vec());
+                self.events.push(Event::Parked);
+            }
+            return Ok(());
+        }
         let payload_hash = crypto::hash("kt/payload/v1", &inner.payload);
         if self.quarantine.is_quarantined(&payload_hash) {
             return Err(Error::Rejected("quarantined update".into()));
@@ -452,6 +517,192 @@ impl Replica {
             self.commit(&g, &inner.doc)?;
         }
         self.events.push(Event::Imported { group: g, doc: inner.doc, author: env.sender });
+        if !self.parked.is_empty() {
+            // Newly imported ops may unblock parked messages (e.g. a waiting epoch proposal).
+            self.retry_parked();
+        }
+        Ok(())
+    }
+}
+
+impl Replica {
+    /// Propose a document epoch (D24): replace the document with a fresh rebuild of its live
+    /// state. If devices were removed, the rebuild is taken at their cutoffs (D5 rule 5), so
+    /// every member converges even if some imported late ops before learning of a removal.
+    pub fn propose_doc_epoch(&mut self, g: &GroupId, d: &DocId) -> Result<()> {
+        let sem = self.semantics.as_ref().ok_or_else(|| Error::Invalid("no document semantics installed".into()))?;
+        let me = self.identity.peer_id();
+        let state = self.groups.get(g).ok_or_else(|| Error::NotFound("group".into()))?;
+        let head = state.epochs.head().ok_or_else(|| Error::Rejected("epochs not converged".into()))?;
+        let key = state.keys.get(&head).cloned().ok_or_else(|| Error::Rejected("no key".into()))?;
+        let ds = state.docs.get(d).ok_or_else(|| Error::NotFound("doc".into()))?;
+        // Base version: current, with removed devices capped at their cutoffs.
+        let mut base = ds.doc.oplog_vv();
+        for removed in state.epochs.removed_devices() {
+            let peer = peer_id_for(&removed);
+            if let Some(cut) = state.epochs.cutoffs_for(&removed).and_then(|c| c.get(d).copied()) {
+                if base.get(&peer).copied().unwrap_or(0) > cut {
+                    base.insert(peer, cut);
+                }
+            }
+        }
+        let source = if base == ds.doc.oplog_vv() {
+            ds.doc.fork()
+        } else {
+            ds.doc.fork_at(&ds.doc.vv_to_frontiers(&base)).map_err(|e| Error::Loro(e.to_string()))?
+        };
+        let fresh = sem.rebuild(&source, me)?;
+        let generation = ds.generation + 1;
+        let proposal = EpochProposal {
+            generation,
+            base_vv: base.encode(),
+            snapshot: fresh.export(ExportMode::Snapshot).map_err(|e| Error::Loro(e.to_string()))?,
+        };
+        let inner = Inner {
+            group: *g,
+            doc: *d,
+            generation,
+            kind: MessageKind::DocEpochProposal,
+            peer: me,
+            created_ms: now_ms(),
+            payload: postcard::to_stdvec(&proposal).map_err(|e| Error::Encoding(e.to_string()))?,
+        };
+        let env_bytes = Envelope::seal(&self.identity, head, &key, &inner)?.encode()?;
+        self.switch_generation(g, d, fresh, generation, self.identity.id(), None, &env_bytes)?;
+        let ds = self.groups.get_mut(g).expect("exists").docs.get_mut(d).expect("exists");
+        ds.sent_counter = ds.doc.oplog_vv().get(&me).copied().unwrap_or(0);
+        self.pending_out.push(Message::Envelope(env_bytes).encode()?);
+        Ok(())
+    }
+
+    fn handle_proposal(&mut self, g: GroupId, sender: DeviceId, inner: Inner, bytes: &[u8], persist: bool) -> Result<()> {
+        if self.semantics.is_none() {
+            return Ok(());
+        }
+        let proposal: EpochProposal = postcard::from_bytes(&inner.payload).map_err(|e| Error::Encoding(e.to_string()))?;
+        if proposal.generation != inner.generation {
+            return Err(Error::Rejected("proposal generation mismatch".into()));
+        }
+        self.ensure_doc(&g, &inner.doc)?;
+        let (cur_gen, better_than_current) = {
+            let ds = &self.groups[&g].docs[&inner.doc];
+            let better = ds.prev.as_ref().map(|p| sender < p.proposer).unwrap_or(false);
+            (ds.generation, better)
+        };
+        // Accept the next generation, or a concurrent proposal for the current one from a
+        // lower device ID (deterministic tie-break).
+        let replacing = proposal.generation == cur_gen && better_than_current;
+        if proposal.generation != cur_gen + 1 && !replacing {
+            if proposal.generation > cur_gen + 1 && persist && self.parked.len() < 10_000 {
+                self.parked.push(bytes.to_vec());
+            }
+            return Ok(());
+        }
+        // The snapshot is untrusted: validate it in the sandbox (a fresh doc authored by the sender).
+        let verdict = sandbox::validate(&self.sandbox, &[], &proposal.snapshot)?;
+        match verdict {
+            Verdict::Ok { advanced_peers } if advanced_peers.iter().all(|p| *p == inner.peer) => {}
+            Verdict::Crashed(r) => {
+                let h = crypto::hash("kt/payload/v1", &proposal.snapshot);
+                self.quarantine.add(h, sender.0)?;
+                self.events.push(Event::Quarantined { author: sender });
+                return Err(Error::Rejected(format!("poison proposal: {r}")));
+            }
+            _ => return Err(Error::Rejected("invalid document epoch proposal".into())),
+        }
+        let base = VersionVector::decode(&proposal.base_vv).map_err(|e| Error::Loro(e.to_string()))?;
+        let me = self.identity.peer_id();
+        let (base_doc, rebase) = {
+            let ds = &self.groups[&g].docs[&inner.doc];
+            // When replacing a concurrent proposal, compare against the pre-switch document.
+            let reference = if replacing { &ds.prev.as_ref().expect("replacing implies prev").doc } else { &ds.doc };
+            let have = reference.oplog_vv();
+            if base.iter().any(|(p, c)| have.get(p).copied().unwrap_or(0) < *c) {
+                // We're missing ops the proposer had: wait until they arrive.
+                if persist && self.parked.len() < 10_000 {
+                    self.parked.push(bytes.to_vec());
+                }
+                return Ok(());
+            }
+            let base_doc = if base == have {
+                reference.fork()
+            } else {
+                reference.fork_at(&reference.vv_to_frontiers(&base)).map_err(|e| Error::Loro(e.to_string()))?
+            };
+            let rebase = if replacing {
+                // Changes we made after switching to the losing generation.
+                let p = ds.prev.as_ref().expect("replacing implies prev");
+                Some((p.start.fork(), ds.doc.fork()))
+            } else {
+                let mine = have.get(&me).copied().unwrap_or(0);
+                if mine > base.get(&me).copied().unwrap_or(0) {
+                    // Our view restricted to the base plus our own ops: only our changes get re-authored.
+                    let mut vv_mine = base.clone();
+                    vv_mine.insert(me, mine);
+                    let local = reference.fork_at(&reference.vv_to_frontiers(&vv_mine)).unwrap_or_else(|_| reference.fork());
+                    Some((base_doc.fork(), local))
+                } else {
+                    None
+                }
+            };
+            (base_doc, rebase)
+        };
+        let fresh = LoroDoc::from_snapshot(&proposal.snapshot).map_err(|e| Error::Loro(e.to_string()))?;
+        let sem = self.semantics.as_ref().expect("checked");
+        if sem.normalized(&fresh) != sem.normalized(&base_doc) {
+            self.events.push(Event::Rejected { reason: "document epoch proposal doesn't match our state".into() });
+            return Err(Error::Rejected("proposal state mismatch".into()));
+        }
+        self.switch_generation(&g, &inner.doc, fresh, proposal.generation, sender, rebase, bytes)
+    }
+
+    /// Replace a document with a new generation, rebasing local changes if given.
+    #[allow(clippy::too_many_arguments)]
+    fn switch_generation(
+        &mut self,
+        g: &GroupId,
+        d: &DocId,
+        fresh: LoroDoc,
+        generation: u32,
+        proposer: DeviceId,
+        rebase: Option<(LoroDoc, LoroDoc)>,
+        proposal_env: &[u8],
+    ) -> Result<()> {
+        let me = self.identity.peer_id();
+        fresh.set_peer_id(me).map_err(|e| Error::Loro(e.to_string()))?;
+        let start = fresh.fork();
+        let mut rebased = false;
+        if let (Some((base, local)), Some(sem)) = (&rebase, self.semantics.as_ref()) {
+            if sem.normalized(base) != sem.normalized(local) {
+                sem.rebase(base, local, &fresh)?;
+                rebased = true;
+            }
+        }
+        let ds = self
+            .groups
+            .get_mut(g)
+            .ok_or_else(|| Error::NotFound("group".into()))?
+            .docs
+            .get_mut(d)
+            .ok_or_else(|| Error::NotFound("doc".into()))?;
+        let old = std::mem::replace(&mut ds.doc, fresh);
+        let prev_doc = match ds.prev.take() {
+            // Replacing a concurrent proposal: the pre-switch document stays the reference.
+            Some(p) if ds.generation == generation => p.doc,
+            _ => old,
+        };
+        ds.prev = Some(PrevGen { doc: prev_doc, proposer, start });
+        ds.generation = generation;
+        ds.sent_counter = 0;
+        ds.imported_since_snapshot = 0;
+        let snap = ds.doc.export(ExportMode::Snapshot).map_err(|e| Error::Loro(e.to_string()))?;
+        storage::write_atomic(&self.layout.doc_snapshot(g, d), &snap)?;
+        storage::write_atomic(&self.layout.doc_dir(g, d).join("generation"), &generation.to_le_bytes())?;
+        // The update log restarts with the proposal (kept for relaying to new members).
+        storage::write_atomic(&self.layout.doc_updates(g, d), &[])?;
+        storage::append_record(&self.layout.doc_updates(g, d), proposal_env)?;
+        self.events.push(Event::DocEpochSwitched { group: *g, doc: *d, generation, rebased });
+        self.retry_parked();
         Ok(())
     }
 }

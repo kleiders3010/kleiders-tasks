@@ -1,6 +1,16 @@
 [package]
 name = "kt-tasks"
-version = "0.1.0"
-edition = "2024"
+description = "Task-list domain for Kleiders Tasks on top of kt-engine"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
 
 [dependencies]
+kt-engine = { path = "../kt-engine" }
+loro.workspace = true
+rand.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rand.workspace = true

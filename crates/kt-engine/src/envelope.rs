@@ -36,6 +36,9 @@ pub enum MessageKind {
 pub struct Inner {
     pub group: GroupId,
     pub doc: DocId,
+    /// Document generation (document epochs, D24). Updates for an older generation are
+    /// dropped by receivers (their author rebases); newer ones wait for the proposal.
+    pub generation: u32,
     pub kind: MessageKind,
     pub peer: u64,
     pub created_ms: u64,
@@ -131,7 +134,7 @@ mod tests {
     }
 
     fn inner(g: GroupId, me: &DeviceIdentity) -> Inner {
-        Inner { group: g, doc: DocId::random(), kind: MessageKind::DocUpdate, peer: me.peer_id(), created_ms: 0, payload: b"x".to_vec() }
+        Inner { group: g, doc: DocId::random(), generation: 0, kind: MessageKind::DocUpdate, peer: me.peer_id(), created_ms: 0, payload: b"x".to_vec() }
     }
 
     #[test]
