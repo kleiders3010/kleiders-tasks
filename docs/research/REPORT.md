@@ -39,7 +39,7 @@ See `DECISIONS.md` for all 44 items. Most significant beyond the five above:
 - **Phone helpers conflict with Play policy.** (D19)
 - **Loro depends on MPL-2.0 crates and unmaintained ones,** including a memory-safety advisory that triggers on panics. (D29)
 - **Windows unsigned installers get blocked,** but the Microsoft Store is free. **Flathub bans AI-generated manifests,** which likely excludes us. (D39, D40)
-- **Time-sensitive:** Android developer verification (regional enforcement from 2026-09-30) and the `kleiders.com` ownership question. (D37, D38)
+- **Time-sensitive:** Android developer verification (regional enforcement from 2026-09-30). The package name should be settled before the first upload: kleiders.com isn't yours, jurisgames.com is. (D37, D38)
 
 ## Still open (not verified)
 - Real low-end Android measurements: Argon2 timing, Loro performance, and the cost of a separate import process.

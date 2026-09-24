@@ -351,10 +351,18 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - Play auto-registers ~99% of apps, **including your existing games** (check for any it missed).
   - Package names with few installs are registered first-come-first-served, so **reserving `com.kleiders.tasks` early** protects it.
 
-### D38. Is kleiders.com yours?
-- **Evidence:** R8. It currently serves "Kleiders | AI Fashion Design & Sewing Pattern Generator", registered 2026-03-03.
-- If it's yours: it solves the permanent link domain, App Links, Google branding and Flathub ID verification.
-- If not: `com.kleiders.tasks` conflicts with Flathub's and F-Droid's app-ID rules and carries trademark risk. **Settle this before the first upload**, since the package name is permanent.
+### D38. Package name vs domain (answered: kleiders.com is not yours; you own jurisgames.com)
+- **Evidence:** R8. kleiders.com serves an unrelated AI fashion-design company. `com.kleiders` is your Play package prefix (your games), not a domain you control.
+- **Play doesn't require package names to match a domain.** The mismatch matters only for:
+  - Flathub (app ID must be a controlled domain; likely moot per D40);
+  - possibly F-Droid (R8's claim; **I haven't verified that F-Droid rule**);
+  - trademark risk (an active company brands as "Kleiders"; **not researched further**).
+- **Options (both evaluated):**
+  - (a) keep `com.kleiders.tasks`, consistent with your games;
+  - (b) `com.jurisgames.tasks`, matching a domain you own.
+
+  Either is free to choose **now**; it becomes permanent at first upload. Desktop IDs can use jurisgames regardless.
+- **Either way:** use **jurisgames.com** for invite links and App Links (they work with any package name). That also removes the `github.io` host-takeover concern in D7/D41.
 
 ### D39. Windows: unsigned installers get blocked; the Microsoft Store is free
 - **Evidence:** R8 (verifier upheld and strengthened).
