@@ -67,6 +67,7 @@ Split in two:
 | Item | Plan | Data needed | Status |
 |---|---|---|---|
 | **D49** Internet P2P and relaying without n0 | Network lab in WSL2 (Ubuntu is available): helper-hosted iroh relays with IP certificates; IPv6 / router-mapped direct; custom-transport variants | NAT lab matrix (LAYERS §6, P1–P2) | Next |
+| **Select relay hosting** (D56 bonus, prioritized by user) | Evaluate free hosting for a developer-run relay: Oracle Cloud Always Free VM, Google Cloud e2-micro (real iroh relay), Cloudflare Workers + Durable Objects (WebSocket-only relaying, no address discovery: feasibility) | Terms, limits and resource needs, informed by the D49 lab | **Queued right after D49** |
 | **D48** Second offline mailbox | Mock mailbox interface, then local Session storage server and isolated Veilid network | LAYERS §6 P3 | After D49 |
 | **D25** History checkpoints | Lean (b): full history in a window + small snapshots stored separately | Measure with Loro after document epochs exist | Engine phase |
 | **D47 add-on** "More often" setting | Battery cost of idle-alarm checks | Emulator + real phone | Engine phase |
