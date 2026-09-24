@@ -8,6 +8,8 @@
 //!   1. dialer → `Hello { topics, have }` (its read topics for one group + store summary)
 //!   2. responder → `Reply { slots newer than have, its own have }`
 //!   3. dialer → `Push { slots the responder lacks }`
+//!   4. responder → `Ack { applied }` once it has applied them: delivery confirmation
+//!      (the "On Alex's phone" state of D18), not just "sent".
 //!
 //!   Both sides then open what's new through the same path as mailbox slots (sealed,
 //!   individually verified, sandboxed imports). Because the store holds every member's
@@ -104,6 +106,11 @@ struct Push {
     slots: Vec<WireSlot>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Ack {
+    applied: u32,
+}
+
 async fn send_frame<T: Serialize>(s: &mut SendStream, v: &T) -> Result<(), String> {
     let b = postcard::to_stdvec(v).map_err(|e| e.to_string())?;
     if b.len() > MAX_FRAME {
@@ -130,6 +137,8 @@ pub struct P2pReport {
     pub peers_tried: usize,
     pub peers_reached: usize,
     pub sent: usize,
+    /// Slots the peers confirmed they applied.
+    pub confirmed: usize,
     pub received: ReadReport,
 }
 
@@ -245,9 +254,10 @@ impl P2p {
                 continue;
             }
             match self.exchange(addr, topics).await {
-                Ok((sent, rr)) => {
+                Ok((sent, confirmed, rr)) => {
                     report.peers_reached += 1;
                     report.sent += sent;
+                    report.confirmed += confirmed;
                     report.received.slots_opened += rr.slots_opened;
                     report.received.messages += rr.messages;
                     report.received.rejected += rr.rejected;
@@ -259,7 +269,7 @@ impl P2p {
         report
     }
 
-    async fn exchange(&self, addr: EndpointAddr, topics: Vec<[u8; 32]>) -> Result<(usize, ReadReport), String> {
+    async fn exchange(&self, addr: EndpointAddr, topics: Vec<[u8; 32]>) -> Result<(usize, usize, ReadReport), String> {
         let conn = self.connection(addr).await?;
         let (mut s, mut r) = conn.open_bi().await.map_err(|e| e.to_string())?;
         let store = self.syncer.store();
@@ -271,7 +281,8 @@ impl P2p {
         let _ = s.finish();
         let incoming: Vec<SlotRead> = reply.slots.into_iter().filter(|x| topics.contains(&x.topic)).map(SlotRead::from).collect();
         let rr = self.syncer.apply_incoming(incoming).await;
-        Ok((sent, rr))
+        let ack: Ack = recv_frame(&mut r).await?;
+        Ok((sent, ack.applied as usize, rr))
     }
 
     async fn accept_loop(self: Arc<Self>) {
@@ -305,9 +316,13 @@ impl P2p {
         let slots = store.newer_than(&topics, &hello.have).into_iter().map(WireSlot::from).collect();
         send_frame(&mut s, &Reply { slots, have: store.summary(&topics) }).await?;
         let push: Push = recv_frame(&mut r).await?;
-        let _ = s.finish();
         let incoming: Vec<SlotRead> = push.slots.into_iter().filter(|x| topics.contains(&x.topic)).map(SlotRead::from).collect();
-        self.syncer.apply_incoming(incoming).await;
+        let n = incoming.len() as u32;
+        let rr = self.syncer.apply_incoming(incoming).await;
+        // Applied (or already had): new plus duplicates, minus nothing rejected per slot.
+        let applied = n.min((rr.slots_opened + rr.already_seen) as u32);
+        send_frame(&mut s, &Ack { applied }).await?;
+        let _ = s.finish();
         Ok(())
     }
 

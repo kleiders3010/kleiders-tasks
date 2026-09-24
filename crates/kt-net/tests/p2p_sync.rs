@@ -88,6 +88,7 @@ async fn devices_sync_directly_after_learning_addresses_from_slots() {
     set(&a, &g, &d, "t1", "direct from A");
     let rep = a.p.sync_round().await;
     assert_eq!(rep.peers_reached, 1, "{rep:?}");
+    assert!(rep.confirmed >= 1, "B confirmed it applied A's slot: {rep:?}");
     assert!(value(&b, &g, &d).contains("direct from A"), "pushed to B");
     set(&b, &g, &d, "t2", "direct from B");
     b.p.sync_round().await;
