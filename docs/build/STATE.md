@@ -49,7 +49,8 @@
 - [x] Helper replication (fan-out lists, forwarded signed puts), handoff before going offline, declared evictions
 - [x] Self-sustaining Nostr relays (`kt-net/src/relays.rs`, engine `replica/mailboxset.rs`): shipped list is only a seed; discovery from NIP-66 monitors + NIP-65 lists (public data checked: ~240 relays, 21–25 monitors, 3 days); per-group relay set recorded in group data (signed, newest wins); automatic repair when half a set fails; transition writes/reads so no device misses a switch. Test: one seed → discovered set → half the set dies → repaired, still syncing
 - [x] Self-sustaining helpers (`kt-net/src/helper_dir.rs`): helpers announce on Nostr under a daily rendezvous; directory; per-group helper set (layer "helpers") created and repaired automatically; untried helpers picked by closeness to a secret daily group point. Test: 4 strangers' helpers discovered, members sync through them only, 2 die, set repaired
-- [ ] DHT bootstrap cache (remember nodes; members/helpers as entry points); helper announcements also on the DHT; sharing relay/helper health within groups
+- [x] DHT remembers good nodes between sessions (verified on the tablet: 127 → 165 nodes)
+- [ ] Member/helper devices as DHT entry points; helper announcements also on the DHT; sharing relay/helper health within groups
 - [x] D51 decided (2026-09-24): "Relay connections for others" on by default, desktop only, separate from "Help others sync" (`kt-net/src/settings.rs`; the setting doesn't exist on phones)
 - [ ] Reachability check before serving as a public relay (public IPv4 / UPnP mapping) + ACME IP certificate
 - [ ] Helper network, remaining: helper set recorded in the group document (app layer), sharing reliability records within groups, daily-rotated bootstrap point for first joins (M3), phone helping rules (Wi-Fi + charging jobs, M4)
@@ -97,3 +98,9 @@
 - ~~Own-op send position isn't persisted~~: fixed in M1 (persisted per document, with a durable outgoing queue).
 - Groups follow DESIGN §4/§5: a group (a circle of people, the sharing unit) holds one **group document** (`meta.kind=group`, name, `lists` map) plus **any number of list documents**. Solo lists live in the personal group (which also holds the profile and index docs and cannot be shared). Sharing a group shares all its lists, including ones added later. `move_list` copies the live state (task IDs kept) into a new doc in the target group and unlists the old one. Covered by `kt-tasks/tests/app_groups.rs`.
 - **Add epochs carry history keys:** earlier epoch keys, wrapped for the new device only, so a new member can read existing content. *Addition the design implied (sharing a list shares its contents); to be noted in DESIGN §5.*
+
+## Tooling notes
+- Android builds from Git Bash: `ANDROID_NDK_HOME="$(cygpath -w ~/AppData/Local/Android/Sdk/ndk/29.0.14206865)" cargo ndk -t arm64-v8a -P 26 build --release -p kt-cli`. With `MSYS_NO_PATHCONV=1` (needed for adb device paths) a Unix-style NDK path fails with "os error 3".
+- adb: `MSYS_NO_PATHCONV=1` for device paths; tunnel PC services with `adb reverse tcp:PORT tcp:PORT` (TCP only).
+- Background test relays: run from a *copy* of kt.exe (a running kt.exe blocks rebuilds); Git Bash `timeout` doesn't reliably kill Windows exes.
+- PC network tests bind to loopback only (binding all interfaces triggers a Windows firewall dialog).
