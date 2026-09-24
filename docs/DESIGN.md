@@ -201,6 +201,10 @@ All layers run in parallel (principle 4). **Preference order when several work**
   - health observations are shared within groups, like helper reliability records.
 
   None of this depends on the developer: it keeps working if every developer-run service disappears. The operator manifest (§7b) is **not** used to maintain public relays.
+- **The same pattern applies to every layer** (seed → discover from the network itself → keep only what proves itself in use → record the group's choice in its data → replace automatically, invisibly):
+  - member devices: addresses from slots, the DHT, LAN beacons and knocks;
+  - helpers and helper relays: helpers announce themselves on the DHT and Nostr under rotating points; devices test them and keep reliability records (§7a); each group records its helper set;
+  - the Mainline DHT: the library's community bootstrap nodes, plus nodes remembered from earlier sessions and known member and helper devices.
 - Every device keeps full data, so relays are a mailbox, never the only copy. Slots are refreshed by background sync.
 - **Reality (R2, E4):** works today on the big free relays (fresh keys, custom kinds, opaque content accepted). Risks, accepted for launch (D13): per-IP rate limits (Damus bans 1 h after repeated rejections), operator hostility to "relays as storage", strfry monoculture, relay churn. The fallback is our own network (member devices, helpers, select nodes).
 

@@ -26,6 +26,7 @@ serde.workspace = true
 postcard.workspace = true
 
 [dev-dependencies]
+rustls.workspace = true
 iroh.workspace = true
 blake3.workspace = true
 mainline.workspace = true

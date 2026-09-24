@@ -141,3 +141,24 @@ fn epoch_changes_propagate_through_forward_slots_and_removal_holds() {
     assert!(c.slot_targets().iter().all(|t| !new_topics[..1].contains(&t.topic)) || c.slot_targets().is_empty());
     assert!(c.slot_targets().is_empty(), "a removed device writes no slots");
 }
+
+#[test]
+fn group_endpoint_sets_spread_through_slots_and_newest_wins() {
+    let mut mb = Mailbox::default();
+    let (mut a, mut b) = (dev("ma"), dev("mb"));
+    let g = a.create_group().unwrap();
+    let _d = a.create_doc(&g).unwrap();
+    join(&mut a, &mut b, g);
+    let _ = a.outbox();
+    a.propose_mailbox_set(&g, "nostr", vec!["wss://one".into(), "wss://two".into()]).unwrap();
+    a.propose_mailbox_set(&g, "helpers", vec!["h1".into()]).unwrap();
+    mb.sync(&mut [&mut a, &mut b]);
+    assert_eq!(b.mailbox_set(&g, "nostr").0.unwrap().endpoints, vec!["wss://one", "wss://two"]);
+    assert_eq!(b.mailbox_set(&g, "helpers").0.unwrap().endpoints, vec!["h1"]);
+    std::thread::sleep(std::time::Duration::from_millis(5));
+    b.propose_mailbox_set(&g, "nostr", vec!["wss://two".into(), "wss://three".into()]).unwrap();
+    mb.sync(&mut [&mut a, &mut b]);
+    let (cur, prev) = a.mailbox_set(&g, "nostr");
+    assert_eq!(cur.unwrap().endpoints, vec!["wss://two", "wss://three"]);
+    assert_eq!(prev.unwrap().endpoints, vec!["wss://one", "wss://two"], "previous set still read for a while");
+}

@@ -235,6 +235,7 @@ impl Replica {
         let state = self.groups.get(&t.group).ok_or_else(|| Error::NotFound("group".into()))?;
         let mut out: Vec<Vec<u8>> = self.carried_records(&t.group)?.into_iter().collect();
         out.extend(self.invite_messages(&t.group)?);
+        out.extend(self.mailbox_set_messages(&t.group));
         if t.role == SlotRole::Main {
             for (d, ds) in &state.docs {
                 let cur = ds.doc.oplog_vv().get(&me_peer).copied().unwrap_or(0);
@@ -436,6 +437,9 @@ impl Replica {
         let key = state.keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("head key".into()))?;
         let docs: Vec<_> = state.docs.keys().copied().collect();
         messages.push(Message::Status(self.status_record(&t.group)?).encode()?);
+        for ms in self.mailbox_set_messages(&t.group) {
+            messages.push(Message::MailboxSet(ms).encode()?);
+        }
         for inv in self.invite_messages(&t.group)? {
             messages.push(Message::Invite(inv).encode()?);
         }

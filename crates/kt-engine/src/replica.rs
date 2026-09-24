@@ -29,6 +29,8 @@ use crate::{crypto, wire, Error, Result};
 
 mod discovery;
 mod invites;
+mod mailboxset;
+pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
 mod slots;
 pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX, LAN_WINDOW_SECS};
@@ -52,6 +54,8 @@ pub enum Message {
     Invite(Vec<u8>),
     /// A joining device's signed request (in its join slot).
     JoinRequest(Vec<u8>),
+    /// The group's signed mailbox set (which relays its devices use).
+    MailboxSet(Vec<u8>),
 }
 
 impl Message {
@@ -486,6 +490,7 @@ impl Replica {
             Message::Whereabouts(b) => self.receive_whereabouts(&b),
             Message::Invite(b) => self.receive_invite(&b),
             Message::JoinRequest(b) => self.receive_join_request(&b),
+            Message::MailboxSet(b) => self.receive_mailbox_set(&b),
         }
     }
 
