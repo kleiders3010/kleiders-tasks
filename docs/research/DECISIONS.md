@@ -288,7 +288,14 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Options evaluated:**
   - (a) amend principle 9 to allow MPL-2.0 (file-level copyleft: fine for closed source when those files are unmodified), and assess whether the advisory's code path is reachable.
   - (b) replacing Loro: **not evaluated** (Automerge would be the candidate; I haven't measured it).
-- **Not verified:** whether the HIGH advisory is exploitable through Loro's usage.
+- **`cargo audit` (loro 1.16.2 tree), run 2026-09-24:**
+  - `im` 15.1.0: unmaintained (RUSTSEC-2026-0248) + *aliasing violation in `OrdSet` insertion* (RUSTSEC-2023-0126).
+  - `sized-chunks` 0.6.5: unmaintained (RUSTSEC-2026-0251) + **"panic-safety unsoundness… use-after-free / double-free"** (RUSTSEC-2026-0255).
+  - `bitmaps` 2.1.0: unmaintained (RUSTSEC-2026-0247).
+  - `atomic-polyfill` 1.0.3: unmaintained.
+
+  RUSTSEC-2026-0255 triggers only **when a panic happens inside those collections**, and A6 showed crafted updates *do* cause panics inside Loro import. Memory corruption during a panic is exactly the case an in-process `catch_unwind` would then keep running on. **This strengthens D3 option 1:** untrusted imports belong in a disposable process.
+- **Not verified:** whether Loro's panic sites actually run inside `sized-chunks` code paths.
 
 ---
 
