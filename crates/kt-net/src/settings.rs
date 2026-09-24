@@ -16,6 +16,14 @@ pub enum Platform {
     Phone,
 }
 
+/// Network settings the UI shows, per platform. A setting not listed here doesn't exist
+/// on that platform: it's not shown at all (not greyed out).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingId {
+    HelpOthers,
+    RelayForOthers,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HelpOthers {
     /// Phones: on Wi-Fi while charging, plus on Wi-Fi while the app is open (default).
@@ -44,6 +52,15 @@ impl NetSettings {
 
     pub fn platform(&self) -> Platform {
         self.platform
+    }
+
+    /// The network settings to show on this platform, in order. Phones never see
+    /// "Relay connections for others" (D51: completely hidden, not disabled).
+    pub fn visible(&self) -> Vec<SettingId> {
+        match self.platform {
+            Platform::Desktop => vec![SettingId::HelpOthers, SettingId::RelayForOthers],
+            Platform::Phone => vec![SettingId::HelpOthers],
+        }
     }
 
     /// Whether the "Relay connections for others" setting exists on this platform.
@@ -99,7 +116,9 @@ mod tests {
         assert!(d.relay_config().is_none());
         assert!(d.helper_limits(false, false, false).is_some(), "storage helping is a separate setting");
 
+        assert_eq!(d.visible(), vec![SettingId::HelpOthers, SettingId::RelayForOthers]);
         let mut p = NetSettings::defaults(Platform::Phone);
+        assert_eq!(p.visible(), vec![SettingId::HelpOthers], "not shown at all on phones");
         assert!(!p.relay_setting_available() && !p.relay_for_others() && p.relay_config().is_none());
         assert!(p.set_relay_for_others(true).is_err());
         assert!(p.helper_limits(true, true, false).is_some());
