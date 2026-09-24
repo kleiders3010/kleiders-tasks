@@ -70,3 +70,73 @@ async fn a_strangers_helper_carries_changes_between_members_who_never_meet() {
     let rec = bmb.records();
     assert!(rec.values().all(|r| r.reachable > 0 && r.withheld == 0), "{rec:?}");
 }
+
+use kt_net::helper::{HelperRef, SignedPut};
+use kt_net::mailbox::SlotWrite;
+
+async fn helper_node(tag: &str, limits: HelperLimits) -> (Arc<P2p>, iroh::EndpointAddr) {
+    let s = Syncer::new(Arc::new(Mutex::new(replica(tag))), vec![]);
+    let p = P2p::start(s, P2pConfig { helper: Some(limits), ..cfg() }).await.unwrap();
+    let a = p.where_data().to_addr().unwrap();
+    (p, a)
+}
+
+fn cheap() -> HelperLimits {
+    HelperLimits { base_pow_bits: 4, ..Default::default() }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn helpers_replicate_to_the_rest_of_the_set() {
+    let mut nodes = Vec::new();
+    for i in 0..4 {
+        nodes.push(helper_node(&format!("r{i}"), cheap()).await);
+    }
+    let addrs: Vec<_> = nodes.iter().map(|n| n.1.clone()).collect();
+    let client = P2p::start(Syncer::new(Arc::new(Mutex::new(replica("rc"))), vec![]), cfg()).await.unwrap();
+    let mb = HelperMailbox::new(client, addrs).with_direct_writes(2);
+    let topic = [5u8; 32];
+    let out = mb.write(&SlotWrite { topic, writer_seed: [1; 32], blob: vec![7; 500] }).await;
+    assert!(matches!(out, kt_net::mailbox::WriteOutcome::Stored { stored: 2, .. }), "{out:?}");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let holding = nodes.iter().filter(|n| !n.0.helper().unwrap().get(&[topic], &[]).is_empty()).count();
+    assert_eq!(holding, 4, "2 direct uploads, the other 2 by replication");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_helper_hands_off_before_going_offline() {
+    let (h1, _) = helper_node("h1", cheap()).await;
+    let (h2, a2) = helper_node("h2", cheap()).await;
+    // A slot held only by h1 (its set includes h2), e.g. h2 was offline when it was written.
+    let key = iroh::SecretKey::from_bytes(&[3; 32]);
+    let topic = [8u8; 32];
+    let blob = vec![1u8; 300];
+    let mut m = b"kt/helper-put/v1".to_vec();
+    m.extend_from_slice(&topic);
+    m.extend_from_slice(&1u64.to_le_bytes());
+    m.extend_from_slice(blake3::hash(&blob).as_bytes());
+    let writer = *key.public().as_bytes();
+    let nonce = kt_net::helper::solve_pow(&topic, &writer, 1, 20);
+    let put = SignedPut { topic, writer, version: 1, blob, sig: key.sign(&m).to_bytes().to_vec(), nonce };
+    assert_eq!(h1.helper().unwrap().put_signed(put, vec![HelperRef::from_addr(&a2)]), kt_net::helper::PutReply::Stored);
+    assert!(h2.helper().unwrap().get(&[topic], &[]).is_empty());
+    assert_eq!(h1.handoff().await, 1);
+    h1.close().await;
+    assert_eq!(h2.helper().unwrap().get(&[topic], &[]).len(), 1, "h2 has it after the handoff");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn eviction_for_space_is_declared_not_scored_as_withholding() {
+    let tiny = HelperLimits { capacity: 1500, per_topic: 1500, base_pow_bits: 2, young_age: Duration::from_secs(0), ..Default::default() };
+    let (_h, a) = helper_node("ev", tiny).await;
+    let client = P2p::start(Syncer::new(Arc::new(Mutex::new(replica("evc"))), vec![]), cfg()).await.unwrap();
+    let mb = HelperMailbox::new(client.clone(), vec![a.clone()]);
+    let mine = [1u8; 32];
+    mb.write(&SlotWrite { topic: mine, writer_seed: [1; 32], blob: vec![1; 1000] }).await;
+    // Someone else's slot pushes ours out.
+    let other = HelperMailbox::new(client, vec![a]);
+    other.write(&SlotWrite { topic: [2u8; 32], writer_seed: [2; 32], blob: vec![2; 1000] }).await;
+    let got = mb.read(&[mine]).await;
+    assert!(got.is_empty());
+    assert_eq!(*mb.declared_evictions.lock().unwrap(), 1);
+    assert!(mb.records().values().all(|r| r.withheld == 0));
+}

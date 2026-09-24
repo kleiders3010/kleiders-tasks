@@ -326,8 +326,11 @@ impl P2p {
                     };
                     while let Ok((s, r)) = conn.accept_bi().await {
                         let h = h.clone();
+                        let me3 = me.clone();
                         tokio::spawn(async move {
-                            let _ = h.serve(s, r).await;
+                            if let Ok(Some((put, fanout))) = h.serve(s, r).await {
+                                crate::helper::forward(&me3, &put, &fanout).await;
+                            }
                         });
                     }
                     return;
@@ -377,6 +380,22 @@ impl P2p {
         send_frame(&mut s, &Ack { applied }).await?;
         let _ = s.finish();
         Ok(())
+    }
+
+    /// Before going offline as a helper: pass every held slot to one other online helper of
+    /// its set (§7a handoff). Returns how many slots found a new home.
+    pub async fn handoff(&self) -> usize {
+        let Some(h) = &self.helper else { return 0 };
+        let mut moved = 0;
+        for (put, set) in h.all() {
+            for target in set.iter().filter(|r| r.endpoint != *self.ep.id().as_bytes()) {
+                if crate::helper::forward(self, &put, std::slice::from_ref(target)).await > 0 {
+                    moved += 1;
+                    break;
+                }
+            }
+        }
+        moved
     }
 
     /// Close gracefully, but never hang on a peer that doesn't answer the close.
