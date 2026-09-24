@@ -57,7 +57,8 @@ impl Replica {
         let mut out = Vec::new();
         for (g, state) in &self.groups {
             let Some(head) = state.epochs.head() else { continue };
-            if !state.epochs.is_current_member(&me) {
+            // Nobody to find us in a group of one (a newly linked device makes it two).
+            if !state.epochs.is_current_member(&me) || state.epochs.recipients(&head).is_none_or(|r| r.len() < 2) {
                 continue;
             }
             let (Some(key), Ok(Some(rec))) = (state.keys.get(&head), self.whereabouts_record(g)) else { continue };

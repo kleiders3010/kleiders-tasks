@@ -40,7 +40,8 @@
 - [x] Helper relay (`kt-net/src/helper_relay.rs`, `kt helper-relay`): embedded iroh-relay server, token access, per-client cap. **Verified PC ↔ tablet** with Nostr dead: the tablet's sync reached the PC through the helper relay (tunneled over USB with `adb reverse`), 3 slots sent and confirmed, 3 received, 0.62 s on the tablet
 - [ ] Helper relay TLS: Let's Encrypt IP certificates via ACME (validated in E10 against a local CA; needs a publicly reachable machine to test for real)
 - [ ] iroh P2P (LAN with rotating IDs, direct, relays per D49 outcome, member relaying)
-- [ ] Discovery: Nostr slot + Mainline DHT (pkarr) + n0 DNS
+- [x] Discovery via slots (whereabouts) and the **Mainline DHT** (`kt-net/src/dht.rs`, engine `replica/discovery.rs`): sealed, device-signed records at member-only locations that rotate with key epochs. Local testnet test + **public DHT from the tablet**: published and found by the other member device, ~20 s per publish+lookup round
+- [ ] n0 DNS discovery as an optional best-effort layer (a config flag on the iroh endpoint)
 - [ ] Helper storage protocol (basic) + reliability records
 - [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
 - [ ] Operator manifest, real-world part (needs the user): generate the real offline operator key (same handling as the release keystore), choose the hosting URLs (jurisgames.com, the public repo)

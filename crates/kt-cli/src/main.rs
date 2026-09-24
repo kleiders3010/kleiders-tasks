@@ -47,10 +47,11 @@ fn usage() -> &'static str {
   epoch LIST                   propose a document epoch (compaction)
   info LIST                    generation, members, sizes
   sync [--relays U1,U2] [--rounds N] [--every SECS]
-       [--p2p] [--iroh-relay URL] [--relay-only] [--serve SECS]
+       [--p2p] [--iroh-relay URL] [--relay-only] [--serve SECS] [--dht]
                                sync over Nostr relays (default: the baseline relay list),
                                plus peer-to-peer with member devices (--p2p / --iroh-relay);
-                               --serve keeps answering peers for SECS afterwards
+                               --serve keeps answering peers for SECS afterwards;
+                               --dht publishes/looks up whereabouts on the Mainline DHT
   relay [--port P]             run a local test Nostr relay (no --home needed)
   helper-relay [--port P] [--token T]  run a helper iroh relay (no --home needed)"
 }
@@ -151,6 +152,7 @@ fn run_relay(port: u16) -> Result<()> {
 
 struct P2pOpts {
     enabled: bool,
+    dht: bool,
     iroh_relays: Vec<String>,
     relay_only: bool,
     serve: u64,
@@ -199,6 +201,21 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
                 let _ = tokio::time::timeout(Duration::from_secs(10), p.endpoint().online()).await;
             }
             p.publish_whereabouts();
+            if p2p.dht {
+                match kt_net::dht::DhtDiscovery::new(replica.clone(), None, None) {
+                    Ok(d) => {
+                        let t = std::time::Instant::now();
+                        let boot = tokio::time::timeout(Duration::from_secs(20), d.bootstrapped()).await.unwrap_or(false);
+                        let pubr = d.publish().await;
+                        let look = d.lookup().await;
+                        println!(
+                            "  dht: bootstrapped {boot}, published {}/{} , found {} member record(s), applied {} ({:.1} s)",
+                            pubr.published, pubr.published + pubr.publish_failed, look.found, look.applied, t.elapsed().as_secs_f64()
+                        );
+                    }
+                    Err(e) => println!("  dht: unavailable ({e})"),
+                }
+            }
             Some(p)
         } else {
             None
@@ -297,8 +314,10 @@ fn run() -> Result<()> {
     };
     let p2p_flag = take_switch(&mut args, "--p2p");
     let relay_only = take_switch(&mut args, "--relay-only");
+    let dht = take_switch(&mut args, "--dht");
     let p2p = P2pOpts {
-        enabled: p2p_flag || iroh_relay.is_some(),
+        enabled: p2p_flag || iroh_relay.is_some() || dht,
+        dht,
         iroh_relays: iroh_relay.map(|r| r.split(',').map(|x| x.to_string()).collect()).unwrap_or_default(),
         relay_only,
         serve,
