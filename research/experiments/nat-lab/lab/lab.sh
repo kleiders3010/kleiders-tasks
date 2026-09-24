@@ -72,6 +72,14 @@ table inet fw {
     iifname "wan" ct state established,related accept
 $1
   }
+  # like real home routers: drop unsolicited WAN input to the router itself. Accepting it
+  # would create conntrack entries that break port preservation during simultaneous open.
+  chain inp {
+    type filter hook input priority 0; policy accept;
+    iifname "wan" ct state established,related accept
+    iifname "wan" meta l4proto { icmp, ipv6-icmp } accept
+    iifname "wan" drop
+  }
 }
 EOF
 }
@@ -127,6 +135,12 @@ table inet filter {
     iifname "lan" accept
     ct state established,related accept
     jump miniupnpd
+  }
+  chain inp {
+    type filter hook input priority 0; policy accept;
+    iifname "wan" ct state established,related accept
+    iifname "wan" meta l4proto { icmp, ipv6-icmp } accept
+    iifname "wan" drop
   }
   chain miniupnpd {
   }

@@ -22,11 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D23 + D54. Privacy: what observers are acceptable?**
-- Relays and DHT nodes can tell which groups one device belongs to (via IP and timing). Content is never visible.
-- **Technical option for the network identity:** a separate identity per group. Its battery cost goes to Part B for measurement.
-- **Your part:** which observers are acceptable, and how honest the privacy text should be. The draft states them all plainly.
-
 **D29 + D53. Licensing: allow MPL-2.0 dependencies?**
 - Loro already pulls in MPL-2.0 crates. MPL is file-level copyleft: fine for a closed-source app as long as those files aren't modified. It's also tied to whether you open-source later (DESIGN §14).
 - (a) Allow MPL-2.0.
