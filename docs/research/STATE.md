@@ -39,7 +39,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [ ] E8 Key epochs: rotation prototype and tests
 
 ### P3: Decision list (the user decides; DO NOT edit DESIGN.md / UX-PRINCIPLES.md)
-- [ ] `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks.
+- [ ] `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
 - [x] A1 Invite-code brute force (measured rates, not estimates)
@@ -47,7 +47,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [ ] A3 Junk flooding of helpers (fake groups)
 - [ ] A4 Eclipse / fake-helper positioning
 - [ ] A5 Malicious group member (mass delete, huge documents, format bombs, replaying old epochs, writing after removal)
-- [ ] A6 Parser fuzzing of engine message formats
+- [x] A6 Parser fuzzing of engine message formats
 - [ ] A7 Metadata leakage analysis (relays, DHT, helpers)
 - [ ] A8 Invite / link / clipboard / QR exposure paths (keyboards, cloud clipboard, screenshots)
 
@@ -71,3 +71,4 @@ Collect the P1 reports when the workflow finishes, then continue with P2 experim
 - E7: EFF large list: 34% of words have a valid 1-typo neighbor -> typos silently become other valid codes (92% of 6-word codes). Proposal: 8 words from EFF short list 2.0 (3-letter autocomplete, 0 typo neighbors, 82.7 bits > 77.5).
 - E3: local iroh connect 2.4 ms; dial-by-ID via n0 669 ms. NEW: iroh defaults depend on n0 alone (relays + DNS/pkarr discovery); mDNS/DHT discovery not in core. Proposal: own discovery via Nostr + pkarr/Mainline DHT; explicit mDNS.
 - E6: full Rust core arm64 = 7.07 MB installed / 4.33 MB compressed (iroh 4.6, loro 1.7, nostr 1.5, crypto 0.3). Estimated app ~15-20 MB installed, ~10 MB download: targets hold.
+- A6 CRITICAL: fuzzing Loro 1.16.2 import (checksum recomputed like an attacker would) aborts the process within seconds; 4 distinct panic sites, 85-byte minimum input; double panic (poisoned lock) -> abort, catch_unwind can't help. Any member or disk corruption = app crash loop. Proposals: process-isolated import, crash-loop breaker, upstream report (needs the user's OK to publish).

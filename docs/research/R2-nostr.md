@@ -327,3 +327,122 @@ Blossom:
 - Specs: https://github.com/hzrd149/blossom; BUD-02: https://github.com/hzrd149/blossom/blob/master/buds/02.md; BUD-06: https://github.com/hzrd149/blossom/blob/master/buds/06.md; BUD-11: https://github.com/hzrd149/blossom/blob/master/buds/11.md
 - Reference server config: https://github.com/hzrd149/blossom-server/blob/master/config.example.yml
 - Public servers: https://blossom.nostr.build/, https://blossom.band/, https://24242.io/, https://blossom.primal.net/
+
+---
+
+## Independent verification
+
+Date: 2026-09-24. This was a separate skeptical pass that tried to refute R2's key conclusions. Method:
+- Re-read the primary code and specs at `master`: strfry (`strfry.conf`, `events.cpp`, `RelayWebsocket.cpp`), khatru (`adding.go`, `helpers.go`, `policies/*.go`), nostr-rs-relay (`sqlite.rs`, `config.rs`, `db.rs`), noteguard, NIPs 01/09/11/17/40/42/59/78, BUD-02 and BUD-11, the blossom-server config, and the Marmot transport.
+- Fetched 13 NIP-11 documents (HTTPS GET only).
+- Read the full text of Wei & Tyson v2.
+- **Independent sources:** GitHub issue reports from other Nostr projects (May–Sep 2026) and this project's own measured probe data (`research/experiments/e4/probe_results.jsonl`).
+
+No websockets were opened and nothing was published.
+
+### Verdicts
+
+| # | Claim | R2 verdict | Upheld? | Verifier's verdict |
+|---|---|---|---|---|
+| 1 | Acceptance of new keys, custom and addressable kinds, opaque content | Partial | **Yes** | Partial. More evidence on both sides (below). R2 leans on NIP-11 silence too much |
+| 2 | Addressable replacement and clock skew | Partial | **Yes** | Partial. R2's `replaced:` fix only works on strfry (below) |
+| 3 | Size limits and chunking | Partial | **Yes** | Partial. E4's raw data supports R2's ~47 KiB ceiling. "10–40 chunks" is an upper bound |
+| 4 | NIP-40 and NIP-09 | Partial | **Yes** | Partial |
+| 5 | The "ACM study" numbers and retention | Partial | **Yes, but R2's own correction needs correcting** | Partial. The availability window was 3 months, not 6 |
+| 6 | Operator stance on generic encrypted storage | Partial ("trending toward refuted") | **Yes (partial)** | Partial. "Trending toward refuted" goes beyond the evidence for a *dedicated* kind |
+| 7 | Blossom accepts encrypted non-media blobs | Partial | **Yes, with a correction** | Partial. blossom.primal.net is verified to *reject* ciphertext (415) |
+| 8 | Per-group keys are unlinkable and won't trip spam filters | Refuted | **Yes** | Refuted |
+
+### Claim-by-claim notes
+
+**1. Acceptance (upheld: partial)**
+- **For:**
+  - This project's E4 probe (same day, raw data read) had 8 of 8 relays accept a fresh key, kind 30078 and custom kind 31234: damus, nos.lol, primal, nostr.mom, offchain.pub, nostr.oxtr.dev, wellorder and snort.
+  - The payload was 45 KiB of random bytes as base64, about 61 KB of JSON. It was read back on the same connection.
+  - `protolayer-io/choke#130` (2026-07-22): nos.lol accepted 25 of 25 and primal 12 of 12 fresh-key addressable kind-31415 events with `expiration` set.
+- **Against:**
+  - The noteguard reference config is as R2 says: 8 per minute, ban after 10 rejections, 1 h, optional Cloudflare edge ban.
+  - Independently, `jared-logan/nostr-station#54` (2026-05-14) reports relay.damus.io as "rate-limited every publish" with `rate-limited: you are noting too much`. That wording differs from the reference config's `you note too much`. So damus runs a *customized* noteguard, and its production numbers are still unknown.
+  - relay.mostro.network answers `rate-limited: … max 5 events per minute per IP` (choke#130). `citadel-foss/openswap-ffi#114` reports rate limiting from nos.lol and damus in CI loops.
+  - **offchain.pub rejected ephemeral keys** with "Policy violated and pubkey is not in our web of trust" in two independent reports: nostr-station#54 (May 2026) and `hongyime/theprawnsplit#4` (Aug 2026). Its NIP-11 declares no restriction, and E4 got through today. **NIP-11 silence is not evidence of open writes.** R2's summary point 1 ("declare no … restricted_writes") should not be read as proof.
+- Minor: wot-relay's `.env.example` has `MINIMUM_FOLLOWERS=5` (R2 says 3) and `MAX_AGE_DAYS=365`, which deletes old notes.
+
+**2. Replacement (upheld: partial)**
+- Tie-break code verified: strfry `isEventABeforeEventB`, khatru `isOlder` and nostr-rs-relay's `created_at >= ?` skip.
+- **Correction:** only strfry answers an older write with `OK false "replaced: …"`.
+  - khatru's default replace path sets `shouldStore = false` and returns no error, so it sends **OK true and stores nothing**.
+  - nostr-rs-relay returns `Ok(0)`, which becomes **OK true `duplicate:`**.
+  - So the fast-clock lockout is **silent** on khatru and nostr-rs-relay. R2's "treat `replaced:` as a clock problem" catches strfry only. Detection elsewhere needs read-back.
+- **Correction:** nostr-rs-relay's code defaults are `reject_future_seconds = None` (the 1800 comes from the sample `config.toml`) and `max_event_bytes = 2 << 17` = **262,144** (the code comment says "128K"; the sample config has 131072 commented out).
+- Independent support for R2's fix: choke#130 already uses a monotonic `last + 1` `created_at` for addressable events to avoid the lowest-id tie problem.
+
+**3. Size (upheld: partial)**
+- Verified: strfry `maxEventSize = 65536` (normalized JSON), and its NIP-11 `max_message_length` is `relay__maxWebsocketPayloadSize` (`RelayWebsocket.cpp:98`).
+- E4 sent 45 KiB of binary (about 61 KB of JSON), and all 8 relays accepted it. That fits R2's ~47 KiB ceiling. **E4's written conclusion ("128 KB per message, ~95 KB payload") is not supported by E4's own test**, which never sent more than 64 KiB, and it contradicts the strfry source.
+- **Chunk count:** E1 also gives state-only sizes: 31, 92 and 155 KB. At 40 KiB chunks, a 5-year busy list is 4 chunks (state-only) to 9 (full history). "10–40" fits only multi-list groups with full history. The rate-limit concern still holds, since 9 chunks already exceed noteguard's 8 per minute.
+- **Subscriptions:**
+  - relay.damus.io now reports `max_subscriptions` 200; nos.lol and primal report 20 (confirmed).
+  - nos.lol answers bursts with `NOTICE "ERROR: too many concurrent REQs"` (`MostroP2P/app#560`).
+  - strfry 1.1 and later reject subscription ids longer than 64 characters (`divinevideo/divine-mobile#9018`).
+  - Both refusals arrive as NOTICE or CLOSED messages that the client cannot tie to a subscription, so the subscription is **lost silently**.
+
+**4. NIP-40 and NIP-09 (upheld: partial)**
+- Verbatim text verified: "MAY persist them indefinitely", "Clients SHOULD NOT send expiration events to relays that do not support this NIP", and deletion requests are kept "indefinitely".
+- nostr-rs-relay hides only `e`-referenced events (verified). khatru also runs an expiration manager.
+- NIP-40 is listed by damus, nos.lol, primal, offchain, oxtr and nos.social. memlay (snort) does not list it.
+- E4's NIP-09 deletions got `OK true`, but deletion was never read back, so it is **not empirically verified**.
+
+**5. Measurement paper (upheld: partial; R2's correction corrected)**
+- **Availability window:** availability was measured **only 2023-10-01 to 2023-12-31 (3 months)**, from nostr.watch snapshots taken every 15 minutes. "Dead" means offline for more than a week and still offline at the end. The correct wording is "132 of 712 (18.5%) dead within a 3-month window", not "within 6 months".
+- **Outage resolution:** "56% of outages < 15 min" means "seen down in one 15-minute snapshot". The data doesn't resolve durations under 15 minutes.
+- **Survivorship bias:**
+  - 911 relays were listed and 199 were excluded for having no data.
+  - Of those 199, 41% "remain online for only a short period before going constantly offline". That is about 80 more short-lived relays that are not in the 712.
+  - Real churn is therefore higher than 18.5%.
+- **Citation:** arXiv lists v2 (2025-09-29) as "Accepted to CoNEXT '25". The DOI 10.1145/3768994 resolves to the ACM DL, but the page returned 403, so the title wasn't confirmed there.
+- **NIP-11 retention:** PR #1946 was merged 2026-02-15 (confirmed), and the current NIP-11 text has no retention section.
+
+**6. Operator stance (upheld: partial)**
+- **Verified timeline:**
+  - #2452 was opened by alexgleason on 2026-08-30. fiatjaf replied "Good point, let's add this to the NIP." on 08-31.
+  - #2458 was merged 2026-09-03.
+  - Ditto enforced 30078 first, then kind 78 (09-02). A second engine (iqbqioza) followed on 09-06.
+  - NIP-95 was closed by staab on 2025-05-22: "This is better offloaded to blossom".
+  - The strfry `restrictedReadKinds` commits are dated 2026-08-03 and 2026-08-12.
+- **Nuance:** the owner-only AUTH rule is scoped to kinds 78 and 30078. No spec text or software default extends it to other custom kinds, and E4's kind 31234 was accepted everywhere today. For a **dedicated** kind the evidence reads "tolerated today; the direction is against generic app data", not "trending toward refuted".
+- **Conflict inside this project:** `E4-nostr.md` ("Use NIP-78 kind 30078") and the STATE.md findings log recommend the opposite of R2. The current NIP-78 text makes that recommendation wrong for a mailbox read by *other* members' keys. E4's 30078 read-back only worked because the author's own key read it, on relays that haven't adopted the rule. **R2 is right; E4's recommendation should be withdrawn.**
+
+**7. Blossom (upheld: partial, with a correction)**
+- **blossom.primal.net rejects ciphertext:** R2 lists it as unverified, but `marmot-protocol/mdk#851` (2026-07-13) shows the rejection:
+  - `PUT /upload` of `application/octet-stream` ciphertext returned **HTTP 415** "unsupported media type application/octet-stream".
+  - Relabeling the upload as `image/jpeg` also failed, because the server inspects the bytes.
+- **Servers that accept it:** mdk#852 moved Marmot's defaults to `blossom.divine.video`, `blossom.ditto.pub` and `cdn.hzrd149.com`. Each was verified in July 2026 to accept random 1 KiB `application/octet-stream` payloads.
+- **BUD-11:** tokens are *optional* in the spec ("servers MAY require them"). "Every upload needs a token" is true of the servers named and of the reference config (`requireAuth: true`), not of the spec.
+- Re-verified: the blossom.band free tier is media-only at 20 MiB with no expiry. 24242.io allows 100 MiB, deletes blobs after 60 days without access, and is free "for now".
+
+**8. Linkability and spam (upheld: refuted)**
+- NIP-01 (single websocket), NIP-42 (multi-pubkey AUTH), NIP-59/17 (spam guidance) and nspam (kind 1 only) were all verified verbatim.
+- **Spam, independent evidence:** WoT rejections of ephemeral keys at offchain.pub (two reports), against acceptance at nos.lol and primal (choke#130, E4).
+- **Caveat on the Marmot precedent:** kind 445 uses a fresh key *per event*, so per-pubkey limits never build up. This design's per-device-per-group keys are stable, so any per-pubkey limit does build up. Kind 445 is also a small regular event, not a repeatedly rewritten large addressable one, so it is a weaker precedent for slots and snapshots than R2 implies. E4 covers addressable acceptance directly.
+
+### Missed by R2
+
+1. **relay.damus.io's operator announced a shutdown for the end of July 2026**, reportedly because it was "operating at a loss" (`dmnyc/sidecar#43`, 2026-07-02; `zapcooking/frontend#500`).
+   - Several apps removed it from their defaults.
+   - It is still running: `zapcooking/zapcooking_ios#66` probed it on 2026-09-07, and this verification fetched its NIP-11 on 2026-09-24.
+   - Marmot retired it, then restored its eligibility on 2026-09-20 (`marmot-protocol/mdk#1955`).
+   - One of the "big three" defaults is at risk, which is a concrete case of the donation-funding fragility the paper describes.
+2. **Operator overlap is wider than R2 says.** offchain.pub and nostr.bitcoiner.social publish the same operator pubkey (`ece3317b…`), just as nos.lol and nostr.mom do (`c5fadeb5…`).
+3. **NIP-11 doesn't reveal WoT gating** (offchain.pub). Acceptance must be probed live and re-probed over time. The health tracker must also classify free-text reasons like "not in our web of trust" as a permanent block for fresh keys.
+4. **OK semantics differ by software.** strfry answers `replaced:`, khatru silently returns OK true, and nostr-rs-relay returns OK true `duplicate:`. noteguard's `banned:` is not a NIP-01 prefix (`damus-io/noteguard#20`), so clients that key off NIP-01 prefixes misclassify it.
+5. **Silent subscription loss:**
+   - NOTICE-based refusals that name no subscription.
+   - The 64-character limit on subscription ids.
+   - "Connected but not delivering" sockets (`MostroP2P/app#572`).
+
+   Relay health must come from read-back and liveness checks, not from connection state or OK counts.
+6. **Blossom:** Primal rejects ciphertext with 415, and a verified list of servers that accept it exists (claim 7 above).
+7. **Weaknesses in the paper's method:** a 3-month window, 15-minute resolution and survivorship bias (claim 5 above).
+8. **Conflicts with E4-nostr.md and STATE.md**, which say to use kind 30078 and claim ~95 KB per event. Both conflict with R2 and with the primary sources. Also, E4 did not test rate limits, reads by a *different* member's key, reads from a separate connection, or deletion read-back.
+
+Independent sources used (beyond R2's): `protolayer-io/choke#130`, `jared-logan/nostr-station#54`, `hongyime/theprawnsplit#4`, `citadel-foss/openswap-ffi#114`, `damus-io/noteguard#20`, `MostroP2P/app#560` and `#572`, `divinevideo/divine-mobile#9018`, `marmot-protocol/mdk#851`, `#852` and `#1955`, `dmnyc/sidecar#43`, `zapcooking/frontend#500`, `zapcooking/zapcooking_ios#66`, khatru `adding.go` and `helpers.go`, nostr-rs-relay `config.rs` and `db.rs`, strfry `RelayWebsocket.cpp` and the `strfry.conf` commit history, the full text of arXiv 2402.05709v2, NIP-11 documents fetched 2026-09-24, and `research/experiments/e4/probe_results.jsonl` with `e4_nostr_probe.py`.

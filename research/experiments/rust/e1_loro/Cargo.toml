@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 loro = "1.16.2"
 rand = "0.8"
+xxhash-rust = { version = "0.8.18", features = ["xxh32"] }

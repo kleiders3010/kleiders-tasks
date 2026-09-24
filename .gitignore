@@ -19,3 +19,5 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+research/experiments/rust/**/fuzz_out/*.txt
+research/experiments/rust/**/fuzz_out/last_input.bin
