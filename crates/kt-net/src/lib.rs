@@ -13,6 +13,7 @@ pub mod mailbox;
 pub mod manifest;
 pub mod nostr;
 pub mod p2p;
+pub mod relays;
 pub mod settings;
 pub mod slotstore;
 pub mod sync;

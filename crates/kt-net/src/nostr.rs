@@ -47,6 +47,8 @@ pub struct NostrPolicy {
     pub read_relays_per_topic: usize,
     pub backoff_start: Duration,
     pub backoff_max: Duration,
+    /// After a failed connect, skip the relay this long (doubling, max 30 min).
+    pub down_initial: Duration,
 }
 
 impl Default for NostrPolicy {
@@ -57,6 +59,7 @@ impl Default for NostrPolicy {
             read_relays_per_topic: 4,
             backoff_start: Duration::from_secs(60),
             backoff_max: Duration::from_secs(3600),
+            down_initial: Duration::from_secs(30),
         }
     }
 }
@@ -160,6 +163,8 @@ pub struct RelayHealth {
     pub published_refused: u64,
     pub rate_limited: u64,
     pub connect_failures: u64,
+    /// Failed connection attempts since the last successful one.
+    pub failures_in_a_row: u64,
     /// Our own latest slot came back when reading.
     pub readback_hits: u64,
     /// We read and our own latest slot was missing or older ("OK" but not kept).
@@ -199,7 +204,7 @@ impl RelayConn {
             tx,
             bucket: Mutex::new(Bucket { tokens: policy.budget.burst as f64, last: Instant::now(), blocked_until: None, backoff: policy.backoff_start }),
             health: Mutex::new(RelayHealth::default()),
-            down: Mutex::new((None, Duration::from_secs(30))),
+            down: Mutex::new((None, policy.down_initial)),
             policy,
         });
         tokio::spawn(relay_task(url.to_string(), rx, Arc::downgrade(&conn)));
@@ -251,7 +256,7 @@ impl RelayConn {
         self.bucket.lock().expect("lock").backoff = self.policy.backoff_start;
     }
 
-    fn is_down(&self) -> bool {
+    pub fn is_down(&self) -> bool {
         matches!(self.down.lock().expect("lock").0, Some(t) if Instant::now() < t)
     }
 
@@ -262,7 +267,7 @@ impl RelayConn {
     }
 
     fn mark_up(&self) {
-        *self.down.lock().expect("lock") = (None, Duration::from_secs(30));
+        *self.down.lock().expect("lock") = (None, self.policy.down_initial);
     }
 
     pub async fn publish(&self, ev: Event) -> Option<(bool, String)> {
@@ -329,7 +334,11 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
             Ok(Ok((ws, _))) => ws,
             _ => {
                 if let Some(o) = owner.upgrade() {
-                    o.health.lock().expect("lock").connect_failures += 1;
+                    {
+                        let mut h = o.health.lock().expect("lock");
+                        h.connect_failures += 1;
+                        h.failures_in_a_row += 1;
+                    }
                     o.mark_down();
                 }
                 drop(first); // fails the waiting caller
@@ -346,6 +355,7 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
         };
         reconnect_delay = Duration::from_secs(2);
         if let Some(o) = owner.upgrade() {
+            o.health.lock().expect("lock").failures_in_a_row = 0;
             o.mark_up();
         }
         let mut ok_waiters: HashMap<EventId, oneshot::Sender<(bool, String)>> = HashMap::new();
@@ -444,13 +454,36 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
 
 // ---------------------------------------------------------------- the mailbox
 
+/// Which relays a topic uses (DESIGN §7, self-sustaining list).
+#[derive(Clone, Debug, Default)]
+pub struct TopicRelays {
+    /// The group's recorded set.
+    pub current: Vec<String>,
+    /// The set before it (with `previous_is_pool`: before the first set, devices used their
+    /// own pools).
+    pub previous: Vec<String>,
+    pub previous_is_pool: bool,
+    /// Keep reading the previous relays (members that switched late still write there).
+    pub read_previous: bool,
+    /// Also write to the previous relays (members that haven't learned the new set yet
+    /// still read there).
+    pub write_previous: bool,
+}
+
+/// `None` = no set yet: this device's own pool.
+pub type RelayResolver = Arc<dyn Fn(&[u8; 32]) -> Option<TopicRelays> + Send + Sync>;
+
 pub struct NostrMailbox {
-    relays: Vec<Arc<RelayConn>>,
+    /// Connections by URL, opened on demand.
+    conns: Mutex<HashMap<String, Arc<RelayConn>>>,
+    /// This device's own candidates, best first (seed list, then the relay directory).
+    pool: Mutex<Vec<String>>,
+    resolver: Mutex<Option<RelayResolver>>,
     policy: NostrPolicy,
     /// Last generation written per writer pubkey (strictly increasing created_at / generation).
     last_gen: Mutex<HashMap<[u8; 32], u64>>,
-    /// What we last stored per (relay, writer), for read-back health.
-    stored: Mutex<HashMap<(usize, [u8; 32]), u64>>,
+    /// What we last stored per (relay, writer): (topic, generation), for read-back health.
+    stored: Mutex<HashMap<(String, [u8; 32]), ([u8; 32], u64)>>,
 }
 
 impl NostrMailbox {
@@ -458,34 +491,107 @@ impl NostrMailbox {
         // TLS for wss:// relays: the same crypto provider iroh uses (no second one in the app).
         let _ = rustls::crypto::ring::default_provider().install_default();
         NostrMailbox {
-            relays: relay_urls.iter().map(|u| RelayConn::new(u, policy.clone())).collect(),
+            conns: Mutex::new(HashMap::new()),
+            pool: Mutex::new(relay_urls.iter().map(|u| u.to_string()).collect()),
+            resolver: Mutex::new(None),
             policy,
             last_gen: Mutex::new(HashMap::new()),
             stored: Mutex::new(HashMap::new()),
         }
     }
 
-    pub fn health(&self) -> Vec<(String, RelayHealth)> {
-        self.relays.iter().map(|r| (r.url.clone(), r.health())).collect()
+    /// The connection for a relay URL (created on first use).
+    pub fn conn(&self, url: &str) -> Arc<RelayConn> {
+        let mut c = self.conns.lock().expect("lock");
+        c.entry(url.to_string()).or_insert_with(|| RelayConn::new(url, self.policy.clone())).clone()
     }
 
-    /// Relays for a topic, best first: a stable per-topic ranking (so writers and readers
-    /// agree without talking), with relays that failed read-back moved to the end.
-    fn ranked(&self, topic: &[u8; 32]) -> Vec<usize> {
-        let mut idx: Vec<(bool, [u8; 32], usize)> = self
-            .relays
+    /// Replace this device's own pool (best first).
+    pub fn set_pool(&self, urls: Vec<String>) {
+        *self.pool.lock().expect("lock") = urls;
+    }
+
+    pub fn pool(&self) -> Vec<String> {
+        self.pool.lock().expect("lock").clone()
+    }
+
+    pub fn set_resolver(&self, r: RelayResolver) {
+        *self.resolver.lock().expect("lock") = Some(r);
+    }
+
+    /// Health of every relay this device has talked to.
+    pub fn health(&self) -> Vec<(String, RelayHealth)> {
+        self.conns.lock().expect("lock").iter().map(|(u, r)| (u.clone(), r.health())).collect()
+    }
+
+    fn is_bad(&self, url: &str) -> bool {
+        let Some(c) = self.conns.lock().expect("lock").get(url).cloned() else { return false };
+        let h = c.health();
+        h.readback_misses > h.readback_hits + 2 || c.is_down()
+    }
+
+    /// Order relays for a topic: healthy first, then a stable per-topic hash (so writers and
+    /// readers agree without talking).
+    fn ranked(&self, topic: &[u8; 32], urls: &[String]) -> Vec<String> {
+        let mut v: Vec<(bool, [u8; 32], String)> = urls
             .iter()
-            .enumerate()
-            .map(|(i, r)| {
-                let h = r.health();
-                let bad = h.readback_misses > h.readback_hits + 2;
+            .map(|u| {
                 let mut m = topic.to_vec();
-                m.extend_from_slice(r.url.as_bytes());
-                (bad, *blake3::hash(&m).as_bytes(), i)
+                m.extend_from_slice(u.as_bytes());
+                (self.is_bad(u), *blake3::hash(&m).as_bytes(), u.clone())
             })
             .collect();
-        idx.sort();
-        idx.into_iter().map(|x| x.2).collect()
+        v.sort();
+        v.dedup_by(|a, b| a.2 == b.2);
+        v.into_iter().map(|x| x.2).collect()
+    }
+
+    fn group_sets(&self, topic: &[u8; 32]) -> Option<TopicRelays> {
+        let r = self.resolver.lock().expect("lock").clone()?;
+        r(topic).filter(|t| !t.current.is_empty())
+    }
+
+    fn previous_of(&self, topic: &[u8; 32], t: &TopicRelays, n: usize) -> Vec<String> {
+        let base = if t.previous_is_pool { self.pool() } else { t.previous.clone() };
+        self.ranked(topic, &base).into_iter().take(n).collect()
+    }
+
+    /// Relays to write a topic's slot to: the best of the group's set (plus, right after a
+    /// switch, the previous relays, so late members still find it).
+    fn write_targets(&self, topic: &[u8; 32]) -> Vec<String> {
+        match self.group_sets(topic) {
+            Some(t) => {
+                let mut v: Vec<String> = self.ranked(topic, &t.current).into_iter().take(self.policy.relays_per_topic).collect();
+                if t.write_previous {
+                    for p in self.previous_of(topic, &t, 2) {
+                        if !v.contains(&p) {
+                            v.push(p);
+                        }
+                    }
+                }
+                v
+            }
+            None => self.ranked(topic, &self.pool()).into_iter().take(self.policy.relays_per_topic).collect(),
+        }
+    }
+
+    /// Relays to read a topic from: the whole group set plus, for a while, the previous
+    /// relays; or the top of our own pool.
+    fn read_targets(&self, topic: &[u8; 32]) -> Vec<String> {
+        match self.group_sets(topic) {
+            Some(t) => {
+                let mut v = t.current.clone();
+                if t.read_previous {
+                    for p in self.previous_of(topic, &t, self.policy.read_relays_per_topic) {
+                        if !v.contains(&p) {
+                            v.push(p);
+                        }
+                    }
+                }
+                v
+            }
+            None => self.ranked(topic, &self.pool()).into_iter().take(self.policy.read_relays_per_topic).collect(),
+        }
     }
 
     fn next_generation(&self, writer: [u8; 32]) -> u64 {
@@ -516,14 +622,14 @@ impl NostrMailbox {
                 Err(e) => return WriteOutcome::Refused(format!("signing failed: {e}")),
             }
         }
-        let targets: Vec<usize> = self.ranked(&w.topic).into_iter().take(self.policy.relays_per_topic).collect();
+        let targets = self.write_targets(&w.topic);
         let mut futs = Vec::new();
-        for ri in targets.iter().copied() {
-            let relay = self.relays[ri].clone();
+        for url in targets {
+            let relay = self.conn(&url);
             let evs = events.clone();
             futs.push(async move {
                 if let Err(wait) = relay.take(evs.len() as u32) {
-                    return (ri, RelayResult::Deferred(wait));
+                    return (url, RelayResult::Deferred(wait));
                 }
                 let total = evs.len() as u32;
                 for (i, ev) in evs.into_iter().enumerate() {
@@ -531,32 +637,32 @@ impl NostrMailbox {
                         Some((true, _)) => {}
                         Some((false, msg)) if msg.starts_with("rate-limited") => {
                             relay.rate_limited();
-                            return (ri, RelayResult::Deferred(Duration::from_secs(60)));
+                            return (url, RelayResult::Deferred(Duration::from_secs(60)));
                         }
                         Some((false, msg)) => {
                             relay.health.lock().expect("lock").published_refused += 1;
-                            return (ri, RelayResult::Refused(msg));
+                            return (url, RelayResult::Refused(msg));
                         }
                         None => {
                             relay.refund(total - i as u32);
-                            return (ri, RelayResult::Unavailable);
+                            return (url, RelayResult::Unavailable);
                         }
                     }
                 }
                 relay.write_succeeded();
                 relay.health.lock().expect("lock").published_ok += 1;
-                (ri, RelayResult::Stored)
+                (url, RelayResult::Stored)
             });
         }
         let results = futures_util::future::join_all(futs).await;
         let mut stored = 0;
         let mut wait: Option<Duration> = None;
         let mut refused = None;
-        for (ri, r) in &results {
+        for (url, r) in &results {
             match r {
                 RelayResult::Stored => {
                     stored += 1;
-                    self.stored.lock().expect("lock").insert((*ri, writer), generation);
+                    self.stored.lock().expect("lock").insert((url.clone(), writer), (w.topic, generation));
                 }
                 RelayResult::Deferred(d) => wait = Some(wait.map_or(*d, |w: Duration| w.min(*d))),
                 RelayResult::Refused(m) => refused = Some(m.clone()),
@@ -575,20 +681,19 @@ impl NostrMailbox {
     }
 
     async fn read_impl(&self, topics: &[[u8; 32]]) -> Vec<SlotRead> {
-        // Which relays to ask, and for which topics.
         let per_relay = self.read_relays_for(topics);
-        let futs = per_relay.into_iter().map(|(ri, ts)| {
-            let relay = self.relays[ri].clone();
+        let futs = per_relay.into_iter().map(|(url, ts)| {
+            let relay = self.conn(&url);
             async move {
                 let tags: Vec<String> = ts.iter().map(topic_tag).collect();
                 let filter = Filter::new().kind(Kind::Custom(SLOT_KIND)).custom_tags(SingleLetterTag::from_char('t').expect("t"), tags);
-                (ri, ts, relay.query(vec![filter]).await)
+                (url, ts, relay.query(vec![filter]).await)
             }
         });
         let results = futures_util::future::join_all(futs).await;
         // (topic, writer) -> chunks from all relays
         let mut chunks: HashMap<([u8; 32], [u8; 32]), Vec<Chunk>> = HashMap::new();
-        for (ri, ts, evs) in results {
+        for (url, ts, evs) in results {
             let Some(evs) = evs else { continue };
             let tag_to_topic: HashMap<String, [u8; 32]> = ts.iter().map(|t| (topic_tag(t), *t)).collect();
             let mut newest_here: HashMap<[u8; 32], u64> = HashMap::new();
@@ -605,14 +710,19 @@ impl NostrMailbox {
                 *e = (*e).max(c.generation);
                 chunks.entry((*topic, writer)).or_default().push(c);
             }
-            // Read-back health: did this relay return what we stored on it?
-            let stored = self.stored.lock().expect("lock").clone();
-            let relay = &self.relays[ri];
-            for ((sri, writer), gen_) in stored {
-                if sri != ri {
-                    continue;
-                }
-                let mut h = relay.health.lock().expect("lock");
+            // Read-back health: did this relay return what we stored on it (for topics we
+            // just asked about)?
+            let stored: Vec<([u8; 32], u64)> = self
+                .stored
+                .lock()
+                .expect("lock")
+                .iter()
+                .filter(|((u, _), (t, _))| *u == url && ts.contains(t))
+                .map(|((_, w), (_, g))| (*w, *g))
+                .collect();
+            let relay = self.conn(&url);
+            let mut h = relay.health.lock().expect("lock");
+            for (writer, gen_) in stored {
                 match newest_here.get(&writer) {
                     Some(g) if *g >= gen_ => h.readback_hits += 1,
                     _ => h.readback_misses += 1,
@@ -627,14 +737,12 @@ impl NostrMailbox {
         }
         out
     }
-}
 
-impl NostrMailbox {
-    fn read_relays_for(&self, topics: &[[u8; 32]]) -> HashMap<usize, Vec<[u8; 32]>> {
-        let mut per_relay: HashMap<usize, Vec<[u8; 32]>> = HashMap::new();
+    fn read_relays_for(&self, topics: &[[u8; 32]]) -> HashMap<String, Vec<[u8; 32]>> {
+        let mut per_relay: HashMap<String, Vec<[u8; 32]>> = HashMap::new();
         for t in topics {
-            for ri in self.ranked(t).into_iter().take(self.policy.read_relays_per_topic) {
-                per_relay.entry(ri).or_default().push(*t);
+            for url in self.read_targets(t) {
+                per_relay.entry(url).or_default().push(*t);
             }
         }
         per_relay
@@ -645,10 +753,10 @@ impl NostrMailbox {
     pub async fn subscribe_slots(&self, topics: &[[u8; 32]]) -> mpsc::Receiver<SlotRead> {
         let (out_tx, out_rx) = mpsc::channel(256);
         let since = Timestamp::from_secs(Timestamp::now().as_secs().saturating_sub(120));
-        for (ri, ts) in self.read_relays_for(topics) {
+        for (url, ts) in self.read_relays_for(topics) {
             let tags: Vec<String> = ts.iter().map(topic_tag).collect();
             let filter = Filter::new().kind(Kind::Custom(SLOT_KIND)).custom_tags(SingleLetterTag::from_char('t').expect("t"), tags).since(since);
-            let relay = self.relays[ri].clone();
+            let relay = self.conn(&url);
             let Some((sid, mut rx)) = relay.subscribe(vec![filter]).await else { continue };
             let out = out_tx.clone();
             let tag_to_topic: HashMap<String, [u8; 32]> = ts.iter().map(|t| (topic_tag(t), *t)).collect();
@@ -687,8 +795,8 @@ impl NostrMailbox {
         let content = base64::engine::general_purpose::STANDARD.encode(payload);
         let Ok(ev) = EventBuilder::new(Kind::Custom(KNOCK_KIND), content).tags([Tag::hashtag(topic_tag(topic))]).finalize(&keys) else { return 0 };
         let mut sent = 0;
-        for ri in self.ranked(topic).into_iter().take(self.policy.relays_per_topic) {
-            let relay = &self.relays[ri];
+        for url in self.write_targets(topic) {
+            let relay = self.conn(&url);
             if relay.take(1).is_err() {
                 continue;
             }
@@ -702,10 +810,10 @@ impl NostrMailbox {
     /// Live knocks for `topics`: (topic, payload).
     pub async fn subscribe_knocks(&self, topics: &[[u8; 32]]) -> mpsc::Receiver<([u8; 32], Vec<u8>)> {
         let (out_tx, out_rx) = mpsc::channel(64);
-        for (ri, ts) in self.read_relays_for(topics) {
+        for (url, ts) in self.read_relays_for(topics) {
             let tags: Vec<String> = ts.iter().map(topic_tag).collect();
             let filter = Filter::new().kind(Kind::Custom(KNOCK_KIND)).custom_tags(SingleLetterTag::from_char('t').expect("t"), tags).since(Timestamp::now());
-            let relay = self.relays[ri].clone();
+            let relay = self.conn(&url);
             let Some((sid, mut rx)) = relay.subscribe(vec![filter]).await else { continue };
             let out = out_tx.clone();
             let tag_to_topic: HashMap<String, [u8; 32]> = ts.iter().map(|t| (topic_tag(t), *t)).collect();
@@ -736,7 +844,7 @@ enum RelayResult {
 
 impl Mailbox for NostrMailbox {
     fn name(&self) -> String {
-        format!("nostr({} relays)", self.relays.len())
+        format!("nostr({} relays)", self.pool().len())
     }
 
     fn capabilities(&self) -> Capabilities {
