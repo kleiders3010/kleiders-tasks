@@ -24,6 +24,9 @@ use tokio_websockets::{ClientBuilder, Message as WsMessage};
 use crate::mailbox::{BoxFut, Capabilities, Mailbox, RateBudget, SlotRead, SlotWrite, WriteOutcome};
 
 pub const SLOT_KIND: u16 = 35711;
+/// Ephemeral "knock" (relays forward, never store): a member announcing it's online now,
+/// with its sealed whereabouts, so online members can dial each other at once (D49 (b)).
+pub const KNOCK_KIND: u16 = 25711;
 /// Raw bytes per chunk: base64 + JSON stays under strfry's 64 KiB default event limit (D12).
 pub const CHUNK_MAX: usize = 40 * 1024;
 pub const MAX_CHUNKS: usize = 16;
@@ -166,6 +169,8 @@ pub struct RelayHealth {
 enum Cmd {
     Publish(Event, oneshot::Sender<(bool, String)>),
     Query(Vec<Filter>, oneshot::Sender<Vec<Event>>),
+    Subscribe(String, Vec<Filter>, mpsc::Sender<Event>),
+    Unsubscribe(String),
 }
 
 struct Bucket {
@@ -269,6 +274,19 @@ impl RelayConn {
         tokio::time::timeout(OP_TIMEOUT, rx).await.ok()?.ok()
     }
 
+    /// Open a live subscription: stored matches, then new events as they arrive, until the
+    /// receiver is dropped. Survives reconnects.
+    pub async fn subscribe(&self, filters: Vec<Filter>) -> Option<(String, mpsc::Receiver<Event>)> {
+        let (tx, rx) = mpsc::channel(256);
+        let id = format!("live{:016x}", rand::random::<u64>());
+        self.tx.send(Cmd::Subscribe(id.clone(), filters, tx)).await.ok()?;
+        Some((id, rx))
+    }
+
+    pub async fn unsubscribe(&self, id: &str) {
+        let _ = self.tx.send(Cmd::Unsubscribe(id.to_string())).await;
+    }
+
     pub async fn query(&self, filters: Vec<Filter>) -> Option<Vec<Event>> {
         if self.is_down() {
             return None;
@@ -279,16 +297,27 @@ impl RelayConn {
     }
 }
 
-/// Owns the websocket: connects on demand, closes when idle, fails pending operations on
-/// disconnect (callers see a timeout / closed channel and treat the relay as unavailable).
+/// Owns the websocket: connects on demand, closes when idle (unless live subscriptions
+/// are open), re-sends live subscriptions after a reconnect, fails pending one-shot
+/// operations on disconnect (callers see a closed channel and treat the relay as
+/// unavailable).
 async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::Weak<RelayConn>) {
     let mut pending_cmd: Option<Cmd> = None;
+    // Live subscriptions survive reconnects.
+    let mut subs: HashMap<String, (Vec<Filter>, mpsc::Sender<Event>)> = HashMap::new();
+    let mut reconnect_delay = Duration::from_secs(2);
     loop {
+        subs.retain(|_, (_, tx)| !tx.is_closed());
         let first = match pending_cmd.take() {
-            Some(c) => c,
-            None => match rx.recv().await {
-                Some(c) => c,
+            Some(c) => Some(c),
+            None if subs.is_empty() => match rx.recv().await {
+                Some(c) => Some(c),
                 None => return,
+            },
+            // Live subscriptions: reconnect on our own (with backoff), or earlier on a command.
+            None => tokio::select! {
+                c = rx.recv() => match c { Some(c) => Some(c), None => return },
+                _ = tokio::time::sleep(reconnect_delay) => None,
             },
         };
         let uri = match http::Uri::try_from(url.as_str()) {
@@ -304,39 +333,59 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
                     o.mark_down();
                 }
                 drop(first); // fails the waiting caller
-                // Fail everything already queued, too (the relay is down).
+                // Fail everything already queued, too (the relay is down), except live
+                // subscriptions, which wait for the reconnect.
                 while let Ok(c) = rx.try_recv() {
-                    drop(c);
+                    if let Cmd::Subscribe(id, f, tx) = c {
+                        subs.insert(id, (f, tx));
+                    }
                 }
+                reconnect_delay = (reconnect_delay * 2).min(Duration::from_secs(300));
                 continue;
             }
         };
+        reconnect_delay = Duration::from_secs(2);
         if let Some(o) = owner.upgrade() {
             o.mark_up();
         }
         let mut ok_waiters: HashMap<EventId, oneshot::Sender<(bool, String)>> = HashMap::new();
         let mut queries: HashMap<String, (Vec<Event>, oneshot::Sender<Vec<Event>>)> = HashMap::new();
-        let mut next = Some(first);
+        let mut broken = false;
+        for (id, (filters, _)) in &subs {
+            if ws.send(WsMessage::text(ClientMessage::req(SubscriptionId::new(id), filters.clone()).as_json())).await.is_err() {
+                broken = true;
+                break;
+            }
+        }
+        let mut next = if broken { None } else { first };
         let mut sub_counter = 0u64;
-        loop {
+        while !broken {
             if let Some(cmd) = next.take() {
                 let text = match cmd {
                     Cmd::Publish(ev, tx) => {
                         ok_waiters.insert(ev.id, tx);
-                        ClientMessage::event(ev).as_json()
+                        Some(ClientMessage::event(ev).as_json())
                     }
                     Cmd::Query(filters, tx) => {
                         sub_counter += 1;
                         let sid = format!("q{sub_counter}{:08x}", rand::random::<u32>());
                         queries.insert(sid.clone(), (Vec::new(), tx));
-                        ClientMessage::req(SubscriptionId::new(&sid), filters).as_json()
+                        Some(ClientMessage::req(SubscriptionId::new(&sid), filters).as_json())
                     }
+                    Cmd::Subscribe(id, filters, tx) => {
+                        let text = ClientMessage::req(SubscriptionId::new(&id), filters.clone()).as_json();
+                        subs.insert(id, (filters, tx));
+                        Some(text)
+                    }
+                    Cmd::Unsubscribe(id) => subs.remove(&id).map(|_| ClientMessage::close(SubscriptionId::new(&id)).as_json()),
                 };
-                if ws.send(WsMessage::text(text)).await.is_err() {
-                    break;
+                if let Some(text) = text {
+                    if ws.send(WsMessage::text(text)).await.is_err() {
+                        break;
+                    }
                 }
             }
-            let idle = ok_waiters.is_empty() && queries.is_empty();
+            let idle = ok_waiters.is_empty() && queries.is_empty() && subs.is_empty();
             tokio::select! {
                 cmd = rx.recv() => match cmd {
                     Some(c) => next = Some(c),
@@ -353,10 +402,15 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
                             }
                         }
                         RelayMessage::Event { subscription_id, event } => {
-                            if let Some((evs, _)) = queries.get_mut(subscription_id.as_str()) {
+                            let sid = subscription_id.as_str();
+                            if let Some((evs, _)) = queries.get_mut(sid) {
                                 if evs.len() < 5000 {
                                     evs.push(event.into_owned());
                                 }
+                            } else if let Some((_, tx)) = subs.get(sid) {
+                                // A slow consumer loses events rather than stalling the socket;
+                                // the next poll catches up.
+                                let _ = tx.try_send(event.into_owned());
                             }
                         }
                         RelayMessage::EndOfStoredEvents(sid) => {
@@ -369,6 +423,8 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
                             if let Some((evs, tx)) = queries.remove(subscription_id.as_str()) {
                                 let _ = tx.send(evs);
                             }
+                            // A relay closing a live subscription (e.g. a limit): drop it.
+                            subs.remove(subscription_id.as_str());
                         }
                         _ => {}
                     }
@@ -520,12 +576,7 @@ impl NostrMailbox {
 
     async fn read_impl(&self, topics: &[[u8; 32]]) -> Vec<SlotRead> {
         // Which relays to ask, and for which topics.
-        let mut per_relay: HashMap<usize, Vec<[u8; 32]>> = HashMap::new();
-        for t in topics {
-            for ri in self.ranked(t).into_iter().take(self.policy.read_relays_per_topic) {
-                per_relay.entry(ri).or_default().push(*t);
-            }
-        }
+        let per_relay = self.read_relays_for(topics);
         let futs = per_relay.into_iter().map(|(ri, ts)| {
             let relay = self.relays[ri].clone();
             async move {
@@ -575,6 +626,104 @@ impl NostrMailbox {
             }
         }
         out
+    }
+}
+
+impl NostrMailbox {
+    fn read_relays_for(&self, topics: &[[u8; 32]]) -> HashMap<usize, Vec<[u8; 32]>> {
+        let mut per_relay: HashMap<usize, Vec<[u8; 32]>> = HashMap::new();
+        for t in topics {
+            for ri in self.ranked(t).into_iter().take(self.policy.read_relays_per_topic) {
+                per_relay.entry(ri).or_default().push(*t);
+            }
+        }
+        per_relay
+    }
+
+    /// Live slot updates for `topics` from all their read relays, merged and reassembled
+    /// (multi-chunk slots are emitted once complete). Ends when the receiver is dropped.
+    pub async fn subscribe_slots(&self, topics: &[[u8; 32]]) -> mpsc::Receiver<SlotRead> {
+        let (out_tx, out_rx) = mpsc::channel(256);
+        let since = Timestamp::from_secs(Timestamp::now().as_secs().saturating_sub(120));
+        for (ri, ts) in self.read_relays_for(topics) {
+            let tags: Vec<String> = ts.iter().map(topic_tag).collect();
+            let filter = Filter::new().kind(Kind::Custom(SLOT_KIND)).custom_tags(SingleLetterTag::from_char('t').expect("t"), tags).since(since);
+            let relay = self.relays[ri].clone();
+            let Some((sid, mut rx)) = relay.subscribe(vec![filter]).await else { continue };
+            let out = out_tx.clone();
+            let tag_to_topic: HashMap<String, [u8; 32]> = ts.iter().map(|t| (topic_tag(t), *t)).collect();
+            tokio::spawn(async move {
+                let mut chunks: HashMap<([u8; 32], [u8; 32]), Vec<Chunk>> = HashMap::new();
+                let mut emitted: HashMap<([u8; 32], [u8; 32]), u64> = HashMap::new();
+                while let Some(ev) = rx.recv().await {
+                    if ev.kind != Kind::Custom(SLOT_KIND) || ev.verify().is_err() {
+                        continue;
+                    }
+                    let Some(topic) = ev.tags.iter().find(|t| t.kind() == "t").and_then(|t| t.content()).and_then(|c| tag_to_topic.get(c)) else { continue };
+                    let Some(c) = decode_chunk(&ev.content) else { continue };
+                    let key = (*topic, ev.pubkey.to_bytes());
+                    let list = chunks.entry(key).or_default();
+                    list.retain(|x| x.generation + 1 >= c.generation); // keep only recent generations
+                    list.push(c);
+                    let snapshot: Vec<Chunk> = list.iter().map(|x| Chunk { generation: x.generation, index: x.index, count: x.count, hash: x.hash, data: x.data.clone() }).collect();
+                    if let Some((g, blob)) = assemble(snapshot) {
+                        if emitted.get(&key).is_none_or(|e| *e < g) {
+                            emitted.insert(key, g);
+                            if out.send(SlotRead { topic: key.0, writer: key.1, version: g, blob }).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                relay.unsubscribe(&sid).await;
+            });
+        }
+        out_rx
+    }
+
+    /// Send a knock under `topic` (throwaway key: knocks aren't linkable to each other).
+    pub async fn knock(&self, topic: &[u8; 32], payload: &[u8]) -> usize {
+        let keys = Keys::generate();
+        let content = base64::engine::general_purpose::STANDARD.encode(payload);
+        let Ok(ev) = EventBuilder::new(Kind::Custom(KNOCK_KIND), content).tags([Tag::hashtag(topic_tag(topic))]).finalize(&keys) else { return 0 };
+        let mut sent = 0;
+        for ri in self.ranked(topic).into_iter().take(self.policy.relays_per_topic) {
+            let relay = &self.relays[ri];
+            if relay.take(1).is_err() {
+                continue;
+            }
+            if let Some((true, _)) = relay.publish(ev.clone()).await {
+                sent += 1;
+            }
+        }
+        sent
+    }
+
+    /// Live knocks for `topics`: (topic, payload).
+    pub async fn subscribe_knocks(&self, topics: &[[u8; 32]]) -> mpsc::Receiver<([u8; 32], Vec<u8>)> {
+        let (out_tx, out_rx) = mpsc::channel(64);
+        for (ri, ts) in self.read_relays_for(topics) {
+            let tags: Vec<String> = ts.iter().map(topic_tag).collect();
+            let filter = Filter::new().kind(Kind::Custom(KNOCK_KIND)).custom_tags(SingleLetterTag::from_char('t').expect("t"), tags).since(Timestamp::now());
+            let relay = self.relays[ri].clone();
+            let Some((sid, mut rx)) = relay.subscribe(vec![filter]).await else { continue };
+            let out = out_tx.clone();
+            let tag_to_topic: HashMap<String, [u8; 32]> = ts.iter().map(|t| (topic_tag(t), *t)).collect();
+            tokio::spawn(async move {
+                while let Some(ev) = rx.recv().await {
+                    if ev.kind != Kind::Custom(KNOCK_KIND) || ev.verify().is_err() || ev.content.len() > 4096 {
+                        continue;
+                    }
+                    let Some(topic) = ev.tags.iter().find(|t| t.kind() == "t").and_then(|t| t.content()).and_then(|c| tag_to_topic.get(c)) else { continue };
+                    let Ok(b) = base64::engine::general_purpose::STANDARD.decode(&ev.content) else { continue };
+                    if out.send((*topic, b)).await.is_err() {
+                        break;
+                    }
+                }
+                relay.unsubscribe(&sid).await;
+            });
+        }
+        out_rx
     }
 }
 

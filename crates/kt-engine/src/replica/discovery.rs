@@ -126,6 +126,12 @@ impl Replica {
     /// Entries for a LAN beacon in time window `window` (unix seconds / LAN_WINDOW_SECS):
     /// (rotating tag, sealed device-signed whereabouts), one per group with other members.
     pub fn lan_beacon_entries(&self, window: u64) -> Vec<([u8; 16], Vec<u8>)> {
+        self.whereabouts_entries(window).into_iter().map(|(_, _, t, v)| (t, v)).collect()
+    }
+
+    /// Like [`Replica::lan_beacon_entries`], with each entry's group and current head topic
+    /// (for sending an entry as a Nostr knock under that topic).
+    pub fn whereabouts_entries(&self, window: u64) -> Vec<(GroupId, [u8; 32], [u8; 16], Vec<u8>)> {
         let me = self.identity.id();
         let mut out = Vec::new();
         for (g, state) in &self.groups {
@@ -135,7 +141,7 @@ impl Replica {
             }
             let (Some(key), Ok(Some(rec))) = (state.keys.get(&head), self.whereabouts_record(g)) else { continue };
             let tag = lan_tag(key, &head, window);
-            out.push((tag, crypto::seal(&lan_key(key, &head), &lan_aad(&tag), &rec)));
+            out.push((*g, super::topic_for(key, &head), tag, crypto::seal(&lan_key(key, &head), &lan_aad(&tag), &rec)));
         }
         out
     }

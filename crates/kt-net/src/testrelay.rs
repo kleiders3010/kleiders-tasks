@@ -42,6 +42,8 @@ pub struct TestRelay {
     pub addr: SocketAddr,
     state: Arc<Mutex<State>>,
     knobs: Arc<Mutex<RelayKnobs>>,
+    /// Accepted events (stored or ephemeral), pushed to live subscriptions.
+    bus: tokio::sync::broadcast::Sender<Event>,
 }
 
 impl TestRelay {
@@ -52,6 +54,7 @@ impl TestRelay {
             addr: listener.local_addr()?,
             state: Arc::new(Mutex::new(State::default())),
             knobs: Arc::new(Mutex::new(RelayKnobs::default())),
+            bus: tokio::sync::broadcast::channel(1024).0,
         };
         let r = relay.clone();
         tokio::spawn(async move {
@@ -94,54 +97,79 @@ impl TestRelay {
     async fn serve<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>(&self, mut ws: tokio_websockets::WebSocketStream<S>) {
         let mut window_start = Instant::now();
         let mut in_window = 0u32;
-        while let Some(Ok(msg)) = ws.next().await {
-            if self.knobs.lock().expect("lock").offline {
-                break;
-            }
-            let Some(text) = msg.as_text() else { continue };
-            let replies: Vec<String> = match ClientMessage::from_json(text) {
-                Ok(ClientMessage::Event(ev)) => {
-                    let ev = ev.into_owned();
-                    let knobs = self.knobs.lock().expect("lock").clone();
-                    let mut st = self.state.lock().expect("lock");
-                    st.received += 1;
-                    if window_start.elapsed().as_secs() >= 60 {
-                        window_start = Instant::now();
-                        in_window = 0;
+        let mut live: HashMap<String, Vec<Filter>> = HashMap::new();
+        let mut bus = self.bus.subscribe();
+        loop {
+            let replies: Vec<String> = tokio::select! {
+                msg = ws.next() => {
+                    let Some(Ok(msg)) = msg else { return };
+                    if self.knobs.lock().expect("lock").offline {
+                        return;
                     }
-                    in_window += 1;
-                    let reply = if knobs.events_per_minute.is_some_and(|l| in_window > l) {
-                        st.rate_limited += 1;
-                        (false, "rate-limited: slow down".to_string())
-                    } else if text.len() > knobs.max_event_bytes {
-                        (false, "invalid: event too large".to_string())
-                    } else if ev.verify().is_err() {
-                        (false, "invalid: bad signature".to_string())
-                    } else {
-                        if !knobs.drop_silently {
-                            let d = ev.tags.identifier().unwrap_or_default();
-                            let key = (ev.kind.as_u16(), ev.pubkey, d);
-                            let newer = st.events.get(&key).is_none_or(|old| ev.created_at > old.created_at || (ev.created_at == old.created_at && ev.id < old.id));
-                            if newer {
-                                st.events.insert(key, ev.clone());
+                    let Some(text) = msg.as_text() else { continue };
+                    match ClientMessage::from_json(text) {
+                        Ok(ClientMessage::Event(ev)) => {
+                            let ev = ev.into_owned();
+                            let knobs = self.knobs.lock().expect("lock").clone();
+                            let mut st = self.state.lock().expect("lock");
+                            st.received += 1;
+                            if window_start.elapsed().as_secs() >= 60 {
+                                window_start = Instant::now();
+                                in_window = 0;
                             }
+                            in_window += 1;
+                            let reply = if knobs.events_per_minute.is_some_and(|l| in_window > l) {
+                                st.rate_limited += 1;
+                                (false, "rate-limited: slow down".to_string())
+                            } else if text.len() > knobs.max_event_bytes {
+                                (false, "invalid: event too large".to_string())
+                            } else if ev.verify().is_err() {
+                                (false, "invalid: bad signature".to_string())
+                            } else {
+                                if !knobs.drop_silently {
+                                    let k = ev.kind.as_u16();
+                                    let ephemeral = (20000..30000).contains(&k);
+                                    if !ephemeral {
+                                        let d = ev.tags.identifier().unwrap_or_default();
+                                        let key = (k, ev.pubkey, d);
+                                        let newer = st.events.get(&key).is_none_or(|old| ev.created_at > old.created_at || (ev.created_at == old.created_at && ev.id < old.id));
+                                        if newer {
+                                            st.events.insert(key, ev.clone());
+                                        }
+                                    }
+                                    let _ = self.bus.send(ev.clone());
+                                }
+                                (true, String::new())
+                            };
+                            vec![RelayMessage::ok(ev.id, reply.0, reply.1).as_json()]
                         }
-                        (true, String::new())
-                    };
-                    vec![RelayMessage::ok(ev.id, reply.0, reply.1).as_json()]
+                        Ok(ClientMessage::Req { subscription_id, filters }) => {
+                            let filters: Vec<Filter> = filters.into_iter().map(|f| f.into_owned()).collect();
+                            let st = self.state.lock().expect("lock");
+                            let mut out: Vec<String> = st
+                                .events
+                                .values()
+                                .filter(|e| filters.iter().any(|f| f.match_event(e, MatchEventOptions::new())))
+                                .map(|e| RelayMessage::event(subscription_id.clone().into_owned(), e.clone()).as_json())
+                                .collect();
+                            out.push(RelayMessage::eose(subscription_id.clone().into_owned()).as_json());
+                            live.insert(subscription_id.as_str().to_string(), filters);
+                            out
+                        }
+                        Ok(ClientMessage::Close(sid)) => {
+                            live.remove(sid.as_str());
+                            vec![]
+                        }
+                        _ => vec![],
+                    }
+                },
+                ev = bus.recv() => {
+                    let Ok(ev) = ev else { continue };
+                    live.iter()
+                        .filter(|(_, fs)| fs.iter().any(|f| f.match_event(&ev, MatchEventOptions::new())))
+                        .map(|(sid, _)| RelayMessage::event(SubscriptionId::new(sid), ev.clone()).as_json())
+                        .collect()
                 }
-                Ok(ClientMessage::Req { subscription_id, filters }) => {
-                    let st = self.state.lock().expect("lock");
-                    let mut out: Vec<String> = st
-                        .events
-                        .values()
-                        .filter(|e| filters.iter().any(|f| f.match_event(e, MatchEventOptions::new())))
-                        .map(|e| RelayMessage::event(subscription_id.clone().into_owned(), e.clone()).as_json())
-                        .collect();
-                    out.push(RelayMessage::eose(subscription_id.into_owned()).as_json());
-                    out
-                }
-                _ => vec![],
             };
             for r in replies {
                 if ws.send(WsMessage::text(r)).await.is_err() {
