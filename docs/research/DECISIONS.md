@@ -49,9 +49,6 @@
 
 ## 2. Invites and linking
 
-**D8 / D7 remainder.**
-- **Confirm the word list:** 8 words from the EFF short list, 3-letter autocomplete (option a). The alternative evaluated was 6 words from a curated large list (b).
-
 **D6. Device linking against phishing.**
 - Agreed parts: link QR codes only accepted from "Your devices", a full-screen warning, "new device linked" alerts.
 - Open: **require the devices to be near each other by default** (the synthesis recommends it) vs. keep that in reserve (my lean).
