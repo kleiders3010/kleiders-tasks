@@ -171,3 +171,17 @@ impl Replica {
         self.receive_whereabouts(&rec).is_ok()
     }
 }
+
+impl Replica {
+    /// A secret-keyed, daily-rotating point for `g` (HMAC-like hash of the current epoch
+    /// key and the day): new helper candidates are preferred by closeness to it, so
+    /// outsiders can't pre-position fake helpers for a group (§7a).
+    pub fn group_point(&self, g: &GroupId, day: u32) -> Option<[u8; 32]> {
+        let state = self.groups.get(g)?;
+        let head = state.epochs.head()?;
+        let key = state.keys.get(&head)?;
+        let mut m = key.0.to_vec();
+        m.extend_from_slice(&day.to_le_bytes());
+        Some(crypto::hash("kt/helper-point/v1", &m))
+    }
+}

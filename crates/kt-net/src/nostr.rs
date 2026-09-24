@@ -789,6 +789,34 @@ impl NostrMailbox {
         out_rx
     }
 
+    /// Publish any event on the relays a topic maps to (budgeted). Returns relays that took it.
+    pub async fn publish_on(&self, topic: &[u8; 32], ev: Event) -> usize {
+        let mut ok = 0;
+        for url in self.write_targets(topic) {
+            let relay = self.conn(&url);
+            if relay.take(1).is_err() {
+                continue;
+            }
+            if let Some((true, _)) = relay.publish(ev.clone()).await {
+                ok += 1;
+            }
+        }
+        ok
+    }
+
+    /// Query the relays a topic maps to; events from all of them, verified.
+    pub async fn query_on(&self, topic: &[u8; 32], filter: Filter) -> Vec<Event> {
+        let futs = self.read_targets(topic).into_iter().map(|url| {
+            let relay = self.conn(&url);
+            let f = filter.clone();
+            async move { relay.query(vec![f]).await.unwrap_or_default() }
+        });
+        let mut out: Vec<Event> = futures_util::future::join_all(futs).await.into_iter().flatten().filter(|e| e.verify().is_ok()).collect();
+        out.sort_by_key(|e| e.id);
+        out.dedup_by_key(|e| e.id);
+        out
+    }
+
     /// Send a knock under `topic` (throwaway key: knocks aren't linkable to each other).
     pub async fn knock(&self, topic: &[u8; 32], payload: &[u8]) -> usize {
         let keys = Keys::generate();

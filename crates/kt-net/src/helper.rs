@@ -378,6 +378,8 @@ pub async fn forward(p2p: &P2p, put: &SignedPut, to: &[HelperRef]) -> usize {
 pub struct Reliability {
     pub reachable: u32,
     pub unreachable: u32,
+    /// Failed calls since the last successful one.
+    pub unreachable_in_a_row: u32,
     /// Returned an older version (or nothing) of a slot we stored on it this session.
     pub withheld: u32,
     /// Restarts noticed (session start changed): counted like downtime, lightly.
@@ -399,9 +401,15 @@ impl Reliability {
     }
 }
 
+/// A topic's helpers: the group's recorded helper set (`None`: no set yet, use the pool).
+pub type HelperResolver = Arc<dyn Fn(&[u8; 32]) -> Option<Vec<EndpointAddr>> + Send + Sync>;
+
 pub struct HelperMailbox {
     p2p: Arc<P2p>,
-    helpers: Vec<EndpointAddr>,
+    /// This device's own helper candidates, best first.
+    pool: Mutex<Vec<EndpointAddr>>,
+    resolver: Mutex<Option<HelperResolver>>,
+    down: Mutex<HashMap<EndpointId, (Instant, Duration)>>,
     records: Mutex<HashMap<EndpointId, Reliability>>,
     /// What we stored where this session: (helper, topic, writer) -> version.
     stored: Mutex<HashMap<(EndpointId, [u8; 32], [u8; 32]), u64>>,
@@ -420,7 +428,9 @@ impl HelperMailbox {
     pub fn new(p2p: Arc<P2p>, helpers: Vec<EndpointAddr>) -> HelperMailbox {
         HelperMailbox {
             p2p,
-            helpers,
+            pool: Mutex::new(helpers),
+            resolver: Mutex::new(None),
+            down: Mutex::new(HashMap::new()),
             records: Mutex::new(HashMap::new()),
             stored: Mutex::new(HashMap::new()),
             declared_evictions: Mutex::new(0),
@@ -439,12 +449,39 @@ impl HelperMailbox {
         self.records.lock().expect("lock").clone()
     }
 
+    pub fn set_pool(&self, helpers: Vec<EndpointAddr>) {
+        *self.pool.lock().expect("lock") = helpers;
+    }
+
+    pub fn pool(&self) -> Vec<EndpointAddr> {
+        self.pool.lock().expect("lock").clone()
+    }
+
+    pub fn set_resolver(&self, r: HelperResolver) {
+        *self.resolver.lock().expect("lock") = Some(r);
+    }
+
+    pub fn p2p(&self) -> &Arc<P2p> {
+        &self.p2p
+    }
+
+    /// Whether this device's records say a helper isn't working.
+    pub fn is_failing(&self, id: &EndpointId) -> bool {
+        self.records.lock().expect("lock").get(id).is_some_and(|r| r.excluded || r.score() < 0.0 || r.unreachable_in_a_row >= 3)
+    }
+
+    /// Skip a helper that just failed, for a growing interval (fail fast, like relays).
+    fn is_down(&self, id: &EndpointId) -> bool {
+        self.down.lock().expect("lock").get(id).is_some_and(|(until, _)| Instant::now() < *until)
+    }
+
     /// Helpers for a topic: best reliability first, ties broken by a per-topic hash (so
     /// writers and readers tend to agree without talking).
     fn ranked(&self, topic: &[u8; 32]) -> Vec<EndpointAddr> {
+        let resolver = self.resolver.lock().expect("lock").clone();
+        let base = resolver.and_then(|r| r(topic)).filter(|v| !v.is_empty()).unwrap_or_else(|| self.pool());
         let rec = self.records.lock().expect("lock");
-        let mut v: Vec<(i64, [u8; 32], EndpointAddr)> = self
-            .helpers
+        let mut v: Vec<(i64, [u8; 32], EndpointAddr)> = base
             .iter()
             .filter(|h| !rec.get(&h.id).is_some_and(|r| r.excluded))
             .map(|h| {
@@ -459,6 +496,12 @@ impl HelperMailbox {
     }
 
     async fn call(&self, h: &EndpointAddr, req: &Request) -> Option<Response> {
+        if self.is_down(&h.id) {
+            let mut rec = self.records.lock().expect("lock");
+            let e = rec.entry(h.id).or_default();
+            e.unreachable_in_a_row += 1;
+            return None;
+        }
         let t = Instant::now();
         let res = async {
             let conn = self.p2p.connection_alpn(h.clone(), HELPER_ALPN).await?;
@@ -473,12 +516,18 @@ impl HelperMailbox {
         match res {
             Ok(r) => {
                 e.reachable += 1;
+                e.unreachable_in_a_row = 0;
+                self.down.lock().expect("lock").remove(&h.id);
                 let ms = t.elapsed().as_secs_f64() * 1000.0;
                 e.latency_ms = if e.latency_ms == 0.0 { ms } else { e.latency_ms * 0.8 + ms * 0.2 };
                 Some(r)
             }
             Err(_) => {
                 e.unreachable += 1;
+                e.unreachable_in_a_row += 1;
+                let mut d = self.down.lock().expect("lock");
+                let next = d.get(&h.id).map(|(_, iv)| (*iv * 2).min(Duration::from_secs(1800))).unwrap_or(Duration::from_secs(30));
+                d.insert(h.id, (Instant::now() + next, next));
                 None
             }
         }
@@ -528,7 +577,7 @@ impl HelperMailbox {
 
 impl Mailbox for HelperMailbox {
     fn name(&self) -> String {
-        format!("helpers({})", self.helpers.len())
+        format!("helpers({})", self.pool().len())
     }
 
     fn capabilities(&self) -> Capabilities {

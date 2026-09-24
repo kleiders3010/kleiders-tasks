@@ -6,6 +6,7 @@
 
 pub mod dht;
 pub mod helper;
+pub mod helper_dir;
 pub mod helper_relay;
 pub mod lan;
 pub mod live;
