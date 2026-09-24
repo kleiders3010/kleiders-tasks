@@ -47,6 +47,8 @@
 - [x] Live mode (`kt-net/src/live.rs`): Nostr live subscriptions push members' slots (29 ms locally); knocks (ephemeral kind 25711, throwaway keys, sealed whereabouts) make online members dial each other at once (D49 (b) signaling)
 - [x] Helper storage (`kt-net/src/helper.rs`): RAM store for strangers' slots on the device's iroh endpoint (ALPN `kt/helper/1`); signed puts; load-scaled proof of work for new slots (refreshes free); per-topic and young-topic caps; eviction by least recent refresh; session start for restart detection. `HelperMailbox` client (plugs into the mailbox interface) with local reliability records (reachability, latency, withholding, restarts, exclusion). Tested: a stranger's helper carries changes between members who are never online together
 - [x] Helper replication (fan-out lists, forwarded signed puts), handoff before going offline, declared evictions
+- [x] Self-sustaining Nostr relays (`kt-net/src/relays.rs`, engine `replica/mailboxset.rs`): shipped list is only a seed; discovery from NIP-66 monitors + NIP-65 lists (public data checked: ~240 relays, 21–25 monitors, 3 days); per-group relay set recorded in group data (signed, newest wins); automatic repair when half a set fails; transition writes/reads so no device misses a switch. Test: one seed → discovered set → half the set dies → repaired, still syncing
+- [ ] Same pattern for helpers (announce on DHT + Nostr under rotating points, per-group helper set) and DHT bootstrap cache; sharing relay/helper health within groups
 - [x] D51 decided (2026-09-24): "Relay connections for others" on by default, desktop only, separate from "Help others sync" (`kt-net/src/settings.rs`; the setting doesn't exist on phones)
 - [ ] Reachability check before serving as a public relay (public IPv4 / UPnP mapping) + ACME IP certificate
 - [ ] Helper network, remaining: helper set recorded in the group document (app layer), sharing reliability records within groups, daily-rotated bootstrap point for first joins (M3), phone helping rules (Wi-Fi + charging jobs, M4)
@@ -71,7 +73,7 @@
 - [ ] Notifications from merged state
 
 ## Current state
-- **M2 in progress (2026-09-24).** 76 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- **M2 in progress (2026-09-24).** 80 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
 - Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
