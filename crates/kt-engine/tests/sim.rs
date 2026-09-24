@@ -171,7 +171,7 @@ fn impersonation_is_rejected_by_the_sandbox() {
     let epochs = devs[1].r.epochs(&g).unwrap();
     let head = epochs.head().unwrap();
     let key = epochs.key_for(&head, devs[1].r.identity()).unwrap();
-    let inner = Inner { group: g, doc, kind: MessageKind::DocUpdate, peer: devs[1].r.identity().peer_id(), created_ms: 0, payload };
+    let inner = Inner { group: g, doc, generation: 0, kind: MessageKind::DocUpdate, peer: devs[1].r.identity().peer_id(), created_ms: 0, payload };
     let env = Envelope::seal(devs[1].r.identity(), head, &key, &inner).unwrap();
     let msg = Message::Envelope(env.encode().unwrap()).encode().unwrap();
     assert!(devs[0].r.receive(&msg).is_err());
@@ -192,7 +192,7 @@ fn poison_update_is_contained_and_quarantined() {
     let head = epochs.head().unwrap();
     let key = epochs.key_for(&head, m.r.identity()).unwrap();
     let doc = kt_engine::DocId::random();
-    let inner = Inner { group: g, doc, kind: MessageKind::DocUpdate, peer: m.r.identity().peer_id(), created_ms: 0, payload: poison };
+    let inner = Inner { group: g, doc, generation: 0, kind: MessageKind::DocUpdate, peer: m.r.identity().peer_id(), created_ms: 0, payload: poison };
     let env = Envelope::seal(m.r.identity(), head, &key, &inner).unwrap();
     let msg = Message::Envelope(env.encode().unwrap()).encode().unwrap();
     // The host process survives and quarantines the update.

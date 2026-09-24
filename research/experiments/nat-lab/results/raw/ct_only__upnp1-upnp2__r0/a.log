@@ -1,0 +1,11 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:50926","[::]:39007"],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.9.0.2:50926"],"relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:50008","10.9.0.2:50926"],"relays":[],"t":53.4}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:50008","10.9.0.2:50926"],"relays":[],"t":3000.9}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:49080)","rtt_ms":41.804501,"sel":true}],"remote_addr":"Ip(7.7.7.30:49080)","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3147.5}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:49080)","rtt_ms":41.804501,"sel":true}],"since_ms":42.904948999999995,"t":3147.6}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:49080)","rtt_ms":42.191482,"sel":true},{"id":"PathId(1)","relay":false,"remote":"Ip(7.7.7.30:35694)","rtt_ms":41.602631,"sel":false}],"since_ms":175.454407,"t":3280.2}
+{"ev":"in_paths","paths":[{"id":"PathId(1)","relay":false,"remote":"Ip(7.7.7.30:35694)","rtt_ms":41.602631,"sel":true}],"since_ms":179.954132,"t":3284.7}
+{"ev":"in_paths","paths":[{"id":"PathId(1)","relay":false,"remote":"Ip(7.7.7.30:35694)","rtt_ms":41.691984,"sel":true},{"id":"PathId(2)","relay":false,"remote":"Ip(7.7.7.30:49080)","rtt_ms":41.249589,"sel":false}],"since_ms":5174.759966,"t":8279.7}
+{"ev":"in_paths","paths":[{"id":"PathId(2)","relay":false,"remote":"Ip(7.7.7.30:49080)","rtt_ms":41.249589,"sel":true}],"since_ms":5180.497196,"t":8285.3}
