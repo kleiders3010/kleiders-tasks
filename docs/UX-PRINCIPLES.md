@@ -1,6 +1,6 @@
 # UX Principles
 
-*Status: draft, 2026-09-24. Decisions about how the app should feel. Screens and features come later; every rule here should be validated by testing with real people.*
+*Status: draft v2, 2026-09-24 (updated with research decisions). Decisions about how the app should feel. Screens and features come later; every rule here should be validated by testing with real people.*
 
 ## Decided
 
@@ -10,16 +10,19 @@
 4. **Default look: like most other task apps. Simple and professional.** Familiar beats novel: people should already know how to use it from other apps.
 5. **Alternative looks are equally well designed**, made for other kinds of people, not as afterthoughts. Examples to explore: compact / dense for power users, larger and calmer for simplicity, playful, high contrast.
 6. **Appearance is personal, per device.** A look can be shared with a group, where members find it if they go looking. Nobody's choice changes anyone else's app.
+7. **Nothing may require setup from the user, and nothing may break with scale.** Features that need the user to install, configure or sign up for something are out, unless they're optional extras.
+8. **Security never costs everyone.** Protections come from informative screens that already exist, distinct formats, and easy undo, never from extra steps, shorter lifetimes or restrictions for all users.
 
 ## Derived rules (to validate through testing)
 
 These follow from the decisions above and from established usability research (NN/g heuristics). They are not yet tested:
 
-- **No technical words, ever.** Users never see "sync", "relay", "peer", "group key", "P2P", "CRDT", "encryption", etc. in normal use. They see "shared with Alex" and "up to date".
+- **No technical words, ever.** Users never see "sync", "relay", "peer", "group key", "P2P", "CRDT", "encryption", etc. in normal use. They see "shared with Alex", "Saved", "Sent", "On Alex's phone".
 - **Undo instead of confirmation dialogs.** Deleting a task happens immediately, with an Undo option. People don't read "Are you sure?" dialogs anyway.
 - **Error messages say what to do**, not what went wrong.
 - **Nothing requires instructions.** If a feature needs a tutorial, the design is wrong.
-- **State is always visible without being noisy:** whether a list is shared, and whether you're up to date.
+- **State is always visible without being noisy, and only claims what's known:** whether a list is shared, and **Saved → Sent → On Alex's phone** for changes. Never "up to date", which a P2P app can't know. Per-member freshness ("Alex's phone: 2 h ago") where useful.
+- **Be honest about delays:** no "within 15 minutes" promises; say that updates can take a few hours when a phone is idle.
 
 ## Decided flows
 
@@ -29,8 +32,10 @@ These follow from the decisions above and from established usability research (N
     - Freshly installed from an invite link → the app picks up the invite on first launch (§5 of DESIGN.md) and shows the same join screen.
     - The empty state offers a quiet "Using it on another device? Link this one".
   - Sharing lives on the list ("Share this list"), and devices live under the user's name ("Your devices → Add a device").
-  - Scanning or opening any link states what will happen: "Join *Groceries*, shared by Uri" vs "Link this phone to your lists".
-  - Linking a device asks for approval on a device the user already has ("Only approve if it's yours").
+  - Scanning or opening any code states what will happen: "Join *Groceries*, shared by Uri" vs "Link this phone to your lists".
+  - **Linking works everywhere, and its single confirmation names what you're joining:** "This will join Mark's account: Pixel 7 · Mark's PC · 12 lists (Work, Groceries…) · your 3 lists will be combined". A link code opened from the invite path is refused with a plain explanation.
+  - **"New device linked · Undo"** appears on every device for a while afterwards.
+- **Invites:** one 8-word code, shared as words, link or QR. Typing needs only the first 3 letters of each word (autocomplete). The sent message shows its expiry ("valid until 24 Oct"). It's usable by any number of people, and can be cancelled any time.
 - **Permissions are always explained first**, on our own screen and in plain words, and asked for only at the moment they become relevant. Examples: exact alarms when a timed reminder is first set or received; local network when a group member is on the same Wi-Fi.
 
 ## How we validate
