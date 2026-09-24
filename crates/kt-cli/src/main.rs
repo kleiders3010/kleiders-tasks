@@ -47,8 +47,12 @@ fn usage() -> &'static str {
   epoch LIST                   propose a document epoch (compaction)
   info LIST                    generation, members, sizes
   sync [--relays U1,U2] [--rounds N] [--every SECS]
-                               sync over Nostr relays (default: the baseline relay list)
-  relay [--port P]             run a local test relay (no --home needed)"
+       [--p2p] [--iroh-relay URL] [--relay-only] [--serve SECS]
+                               sync over Nostr relays (default: the baseline relay list),
+                               plus peer-to-peer with member devices (--p2p / --iroh-relay);
+                               --serve keeps answering peers for SECS afterwards
+  relay [--port P]             run a local test Nostr relay (no --home needed)
+  helper-relay [--port P] [--token T]  run a helper iroh relay (no --home needed)"
 }
 
 fn main() {
@@ -145,7 +149,30 @@ fn run_relay(port: u16) -> Result<()> {
     })
 }
 
-fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every: u64) -> Result<()> {
+struct P2pOpts {
+    enabled: bool,
+    iroh_relays: Vec<String>,
+    relay_only: bool,
+    serve: u64,
+}
+
+fn run_helper_relay(port: u16, token: Option<String>) -> Result<()> {
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let cfg = kt_net::helper_relay::HelperRelayConfig {
+            http_bind: format!("127.0.0.1:{port}").parse()?,
+            tokens: token.map(|t| [t].into_iter().collect()),
+            ..Default::default()
+        };
+        let r = kt_net::helper_relay::HelperRelay::start(cfg).await.map_err(|e| anyhow!(e))?;
+        println!("helper relay listening on {}", r.url().unwrap_or_default());
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await;
+        }
+    })
+}
+
+fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every: u64, p2p: P2pOpts) -> Result<()> {
     use std::sync::{Arc, Mutex};
     let urls: Vec<String> = match relays {
         Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
@@ -159,7 +186,23 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
         // One state file per relay set: mailbox indices must be stable for a given file.
         let set_id = hex::encode(&kt_engine::crypto::hash("kt/relayset/v1", urls.join(",").as_bytes())[..6]);
         let state = home.join("data").join(format!("sync-{set_id}.state"));
-        let syncer = kt_net::sync::Syncer::with_state(replica.clone(), vec![mb.clone() as Arc<dyn kt_net::mailbox::Mailbox>], Some(state));
+        let syncer = kt_net::sync::Syncer::build(
+            replica.clone(),
+            vec![mb.clone() as Arc<dyn kt_net::mailbox::Mailbox>],
+            Some(state),
+            Some(home.join("data").join("slots.store")),
+        );
+        let peer = if p2p.enabled {
+            let cfg = kt_net::p2p::P2pConfig { relays: p2p.iroh_relays.clone(), relay_only: p2p.relay_only, portmap: true, ..Default::default() };
+            let p = kt_net::p2p::P2p::start(syncer.clone(), cfg).await.map_err(|e| anyhow!(e))?;
+            if !p2p.iroh_relays.is_empty() {
+                let _ = tokio::time::timeout(Duration::from_secs(10), p.endpoint().online()).await;
+            }
+            p.publish_whereabouts();
+            Some(p)
+        } else {
+            None
+        };
         for i in 0..rounds {
             if i > 0 {
                 tokio::time::sleep(Duration::from_secs(every)).await;
@@ -169,6 +212,18 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
                 "round {}: wrote {} slot(s) ({} unchanged, {} waiting for budget, {} failed); read {} new slot(s), {} message(s), {} rejected",
                 i + 1, w.written, w.unchanged, w.deferred, w.failed, r.slots_opened, r.messages, r.rejected
             );
+            if let Some(p) = &peer {
+                let pr = p.sync_round().await;
+                println!(
+                    "  p2p: reached {}/{} member device(s), sent {} slot(s) ({} confirmed), received {} new",
+                    pr.peers_reached, pr.peers_tried, pr.sent, pr.confirmed, pr.received.slots_opened
+                );
+            }
+        }
+        if let (Some(p), true) = (&peer, p2p.serve > 0) {
+            println!("  answering peers for {} s", p2p.serve);
+            tokio::time::sleep(Duration::from_secs(p2p.serve)).await;
+            p.close().await;
         }
         for (url, h) in mb.health() {
             if h != Default::default() {
@@ -196,6 +251,11 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
 
 fn run() -> Result<()> {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(|a| a.as_str()) == Some("helper-relay") {
+        let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(17450);
+        let token = args.iter().position(|a| a == "--token").and_then(|i| args.get(i + 1)).cloned();
+        return run_helper_relay(port, token);
+    }
     if args.first().map(|a| a.as_str()) == Some("relay") {
         let port = args.iter().position(|a| a == "--port").and_then(|i| args.get(i + 1)).and_then(|p| p.parse().ok()).unwrap_or(7447);
         return run_relay(port);
@@ -224,11 +284,30 @@ fn run() -> Result<()> {
     let relays_flag = take_flag(&mut args, "--relays");
     let rounds: usize = take_flag(&mut args, "--rounds").and_then(|x| x.parse().ok()).unwrap_or(1);
     let every: u64 = take_flag(&mut args, "--every").and_then(|x| x.parse().ok()).unwrap_or(45);
+    let iroh_relay = take_flag(&mut args, "--iroh-relay");
+    let serve: u64 = take_flag(&mut args, "--serve").and_then(|x| x.parse().ok()).unwrap_or(0);
+    let take_switch = |args: &mut Vec<String>, flag: &str| -> bool {
+        match args.iter().position(|a| a == flag) {
+            Some(i) => {
+                args.remove(i);
+                true
+            }
+            None => false,
+        }
+    };
+    let p2p_flag = take_switch(&mut args, "--p2p");
+    let relay_only = take_switch(&mut args, "--relay-only");
+    let p2p = P2pOpts {
+        enabled: p2p_flag || iroh_relay.is_some(),
+        iroh_relays: iroh_relay.map(|r| r.split(',').map(|x| x.to_string()).collect()).unwrap_or_default(),
+        relay_only,
+        serve,
+    };
     let cmd = args.first().cloned().unwrap_or_default();
     let arg = |i: usize| args.get(i).cloned().ok_or_else(|| anyhow!("{}", usage()));
     let mut app = open(&home)?;
     if cmd == "sync" {
-        return run_sync(app, &home, relays_flag, rounds, every);
+        return run_sync(app, &home, relays_flag, rounds, every, p2p);
     }
     match cmd.as_str() {
         "init" => println!("device ready: {}", &device_key(&app.replica.device_public())[..16]),

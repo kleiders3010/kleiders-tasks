@@ -34,7 +34,7 @@ use crate::sync::{ReadReport, Syncer};
 
 pub const ALPN: &[u8] = b"kt/slots/1";
 const MAX_FRAME: usize = 32 * 1024 * 1024;
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Default)]
 pub struct P2pConfig {
@@ -252,29 +252,23 @@ impl P2p {
         Ok(c)
     }
 
-    /// Exchange slots with every reachable member device, group by group.
+    /// Exchange slots with every reachable member device, all at once (an offline member
+    /// costs one connect timeout in parallel, not one each).
     pub async fn sync_round(&self) -> P2pReport {
         // Make sure our own current slots are in the store.
         self.syncer.write_round().await;
-        let mut report = P2pReport::default();
-        for (g, addr) in self.members() {
-            report.peers_tried += 1;
-            let topics = self.topics_of(&g);
-            if topics.is_empty() {
-                continue;
-            }
-            match self.exchange(addr, topics).await {
-                Ok((sent, confirmed, rr)) => {
-                    report.peers_reached += 1;
-                    report.sent += sent;
-                    report.confirmed += confirmed;
-                    report.received.slots_opened += rr.slots_opened;
-                    report.received.messages += rr.messages;
-                    report.received.rejected += rr.rejected;
-                    report.received.already_seen += rr.already_seen;
-                }
-                Err(_) => {}
-            }
+        let jobs: Vec<(EndpointAddr, Vec<[u8; 32]>)> =
+            self.members().into_iter().map(|(g, a)| (a, self.topics_of(&g))).filter(|(_, t)| !t.is_empty()).collect();
+        let mut report = P2pReport { peers_tried: jobs.len(), ..Default::default() };
+        let results = futures_util::future::join_all(jobs.into_iter().map(|(a, t)| self.exchange(a, t))).await;
+        for (sent, confirmed, rr) in results.into_iter().flatten() {
+            report.peers_reached += 1;
+            report.sent += sent;
+            report.confirmed += confirmed;
+            report.received.slots_opened += rr.slots_opened;
+            report.received.messages += rr.messages;
+            report.received.rejected += rr.rejected;
+            report.received.already_seen += rr.already_seen;
         }
         report
     }
@@ -336,7 +330,11 @@ impl P2p {
         Ok(())
     }
 
+    /// Close gracefully, but never hang on a peer that doesn't answer the close.
     pub async fn close(&self) {
-        self.ep.close().await;
+        for c in self.conns.lock().expect("lock").drain().map(|(_, c)| c) {
+            c.close(0u32.into(), b"bye");
+        }
+        let _ = tokio::time::timeout(Duration::from_secs(3), self.ep.close()).await;
     }
 }

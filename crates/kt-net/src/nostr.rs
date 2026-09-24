@@ -178,6 +178,9 @@ struct Bucket {
 pub struct RelayConn {
     pub url: String,
     tx: mpsc::Sender<Cmd>,
+    /// After a failed connect: skip this relay until then (fail fast instead of paying
+    /// a connect timeout per operation). Grows with repeated failures.
+    down: Mutex<(Option<Instant>, Duration)>,
     bucket: Mutex<Bucket>,
     health: Mutex<RelayHealth>,
     policy: NostrPolicy,
@@ -191,6 +194,7 @@ impl RelayConn {
             tx,
             bucket: Mutex::new(Bucket { tokens: policy.budget.burst as f64, last: Instant::now(), blocked_until: None, backoff: policy.backoff_start }),
             health: Mutex::new(RelayHealth::default()),
+            down: Mutex::new((None, Duration::from_secs(30))),
             policy,
         });
         tokio::spawn(relay_task(url.to_string(), rx, Arc::downgrade(&conn)));
@@ -222,6 +226,12 @@ impl RelayConn {
         }
     }
 
+    /// Give back tokens for events that were never delivered.
+    fn refund(&self, n: u32) {
+        let mut b = self.bucket.lock().expect("lock");
+        b.tokens = (b.tokens + n as f64).min(self.policy.budget.burst as f64);
+    }
+
     fn rate_limited(&self) {
         let mut b = self.bucket.lock().expect("lock");
         let jitter = rand::random::<f64>() * 0.5 + 0.75;
@@ -236,13 +246,33 @@ impl RelayConn {
         self.bucket.lock().expect("lock").backoff = self.policy.backoff_start;
     }
 
+    fn is_down(&self) -> bool {
+        matches!(self.down.lock().expect("lock").0, Some(t) if Instant::now() < t)
+    }
+
+    fn mark_down(&self) {
+        let mut d = self.down.lock().expect("lock");
+        d.0 = Some(Instant::now() + d.1);
+        d.1 = (d.1 * 2).min(Duration::from_secs(1800));
+    }
+
+    fn mark_up(&self) {
+        *self.down.lock().expect("lock") = (None, Duration::from_secs(30));
+    }
+
     pub async fn publish(&self, ev: Event) -> Option<(bool, String)> {
+        if self.is_down() {
+            return None;
+        }
         let (tx, rx) = oneshot::channel();
         self.tx.send(Cmd::Publish(ev, tx)).await.ok()?;
         tokio::time::timeout(OP_TIMEOUT, rx).await.ok()?.ok()
     }
 
     pub async fn query(&self, filters: Vec<Filter>) -> Option<Vec<Event>> {
+        if self.is_down() {
+            return None;
+        }
         let (tx, rx) = oneshot::channel();
         self.tx.send(Cmd::Query(filters, tx)).await.ok()?;
         tokio::time::timeout(OP_TIMEOUT, rx).await.ok()?.ok()
@@ -271,11 +301,19 @@ async fn relay_task(url: String, mut rx: mpsc::Receiver<Cmd>, owner: std::sync::
             _ => {
                 if let Some(o) = owner.upgrade() {
                     o.health.lock().expect("lock").connect_failures += 1;
+                    o.mark_down();
                 }
                 drop(first); // fails the waiting caller
+                // Fail everything already queued, too (the relay is down).
+                while let Ok(c) = rx.try_recv() {
+                    drop(c);
+                }
                 continue;
             }
         };
+        if let Some(o) = owner.upgrade() {
+            o.mark_up();
+        }
         let mut ok_waiters: HashMap<EventId, oneshot::Sender<(bool, String)>> = HashMap::new();
         let mut queries: HashMap<String, (Vec<Event>, oneshot::Sender<Vec<Event>>)> = HashMap::new();
         let mut next = Some(first);
@@ -431,7 +469,8 @@ impl NostrMailbox {
                 if let Err(wait) = relay.take(evs.len() as u32) {
                     return (ri, RelayResult::Deferred(wait));
                 }
-                for ev in evs {
+                let total = evs.len() as u32;
+                for (i, ev) in evs.into_iter().enumerate() {
                     match relay.publish(ev).await {
                         Some((true, _)) => {}
                         Some((false, msg)) if msg.starts_with("rate-limited") => {
@@ -442,7 +481,10 @@ impl NostrMailbox {
                             relay.health.lock().expect("lock").published_refused += 1;
                             return (ri, RelayResult::Refused(msg));
                         }
-                        None => return (ri, RelayResult::Unavailable),
+                        None => {
+                            relay.refund(total - i as u32);
+                            return (ri, RelayResult::Unavailable);
+                        }
                     }
                 }
                 relay.write_succeeded();
