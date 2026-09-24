@@ -22,12 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D14 + D50. How to treat free "best-effort" public services** (n0 relays, public STUN, IPFS relays, Send instances…)
-- (a) Only services with written permission for any app.
-- (b) Use them as non-critical parallel layers, never counted as a guarantee.
-- (c) Ask operators in writing first.
-- **Asking n0 or others is outward contact: your call.**
-
 **D6. Device linking against phishing** *(agreed: link QR only accepted from "Your devices", a full-screen warning, "new device linked" alerts)*
 - **Convenience vs safety:**
   - require the devices to be near each other (same Wi-Fi / Bluetooth) by default, which the synthesis recommends,
@@ -100,4 +94,4 @@ Split in two:
 ## Outward actions awaiting approval (none run)
 - A Drive test on your Google account (D48d / D52).
 - Small probes: Nostr ephemeral events on 3–4 relays, one STUN request per operator, a read-only attach to the Veilid network.
-- Contacting n0, Session's foundation, chatmail or Send operators.
+- Contacting Session's foundation, chatmail or Send operators (n0: not needed, D50).
