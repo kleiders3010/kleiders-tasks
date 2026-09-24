@@ -22,10 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D30. Android backup when a phone has no screen lock** (it isn't end-to-end encrypted then)
-- (a) No automatic backup for those users.
-- (b) A sealed backup, the same protection level you accepted for cloud backups.
-
 **D45. People invited from an iPhone**
 - (a) A web page they can join from (it syncs through Nostr only).
 - (b) An iOS app later ($99/yr Apple fee).
