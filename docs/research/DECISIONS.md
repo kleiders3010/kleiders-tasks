@@ -115,6 +115,9 @@ No real alternative was found for these (platform facts or single fixes). Detail
 
 ---
 
+## Later (not needed for launch)
+- **Free hosting for operator-manifest select entries** (D56): Cloudflare Workers/Durable Objects (e.g. a small Nostr relay or mailbox; no UDP, so no iroh relay), Oracle Cloud Always Free VM (iroh relay + helper + Nostr relay), Google Cloud e2-micro. **Not evaluated yet.** Evaluate when extra guaranteed capacity is wanted.
+
 ## 7. Outward actions awaiting approval (none run)
 - The doorbell test on your phone (D47).
 - A Drive test on your Google account (D48d / D52b).
