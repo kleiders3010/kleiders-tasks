@@ -62,6 +62,8 @@
 - [x] Invites, transport side (`kt-net/src/invite_net.rs`): records (with endpoint hints) on the DHT, helpers, Nostr, LAN beacons and member devices (P2P by lookup key); fetch from all layers at once; direct join through a member or join slot at helpers
 - [x] **Nostr completely down** (`kt-net/tests/no_nostr.rs`): helpers found on the DHT, invite fetched and joined, live over P2P, join through helpers while the inviter is away
 - [x] Helpers found without Nostr: group data, helper peer exchange, DHT fallback slots; live push over P2P on local changes
+- [x] Invites survive an offline inviter: copies for every remaining day published ahead to helpers/Nostr; test: B joins 3 days later while A is offline (Nostr dead), accepted when A returns, B's waiting edit arrives
+- [x] Helper disk copy (decided 2026-09-24): encrypted per-slot files, reload checks, 14-day TTL sweep, caps, corrupt files deleted, wiped when helping is off (`HelperLimits::disk`, `NetSettings::helper_limits_with_disk`)
 - [ ] CLI `invite` / `join` commands; link and QR wrappers (app)
 - [x] Device linking, engine side: link codes (separate derivation domain + record kind), refused on the join path with a plain explanation, reusable until expiry, `DeviceJoined { via_link }` event for the "New device linked · Undo" alert
 - [ ] Device linking, app side: confirmation screen contents (account's devices and lists), merging the new device's own lists, Undo = remove + rotate
@@ -78,7 +80,7 @@
 - [ ] Notifications from merged state
 
 ## Current state
-- **M2 in progress (2026-09-24).** 85 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- **M2 in progress (2026-09-24).** 87 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
 - Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
