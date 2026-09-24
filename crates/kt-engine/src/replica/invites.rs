@@ -179,7 +179,7 @@ impl Replica {
         for g in gids {
             let (head, key) = {
                 let state = &self.groups[&g];
-                let Some(head) = state.epochs.head() else { continue };
+                let Some(head) = state.epochs.working_head() else { continue };
                 if !state.epochs.is_current_member(&me) {
                     continue;
                 }
@@ -246,7 +246,7 @@ impl Replica {
         for g in gids {
             let (head, key) = {
                 let state = &self.groups[&g];
-                let Some(head) = state.epochs.head() else { continue };
+                let Some(head) = state.epochs.working_head() else { continue };
                 if !state.epochs.is_current_member(&me) {
                     continue;
                 }

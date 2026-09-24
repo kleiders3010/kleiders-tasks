@@ -32,7 +32,10 @@ mod invites;
 mod mailboxset;
 pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
+mod compaction;
 mod slots;
+pub use compaction::CompactionPolicy;
+pub use slots::MemberStatus;
 pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX, LAN_WINDOW_SECS};
 pub use slots::{topic_for, MemberWhereabouts, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
 
@@ -150,6 +153,10 @@ pub struct Replica {
     invite_cache: invites::InviteCache,
     /// Bumped on every local commit (lets live transports push right away).
     local_changes: u64,
+    /// Last slot fingerprint without acknowledgments, per (group, epoch).
+    last_base_fp: HashMap<(GroupId, EpochId), [u8; 32]>,
+    ack_interval_ms: u64,
+    compaction: compaction::CompactionPolicy,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
 }
@@ -174,6 +181,9 @@ impl Replica {
             whereabouts: None,
             invite_cache: Default::default(),
             local_changes: 0,
+            last_base_fp: HashMap::new(),
+            ack_interval_ms: slots::ACK_INTERVAL_MS,
+            compaction: Default::default(),
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
         };
@@ -426,7 +436,7 @@ impl Replica {
             let state = self.groups.get_mut(&g).expect("exists");
             let records: Vec<EpochRecord> = state.new_records.drain(..).collect();
             let mut envs = Vec::new();
-            let head_and_key = match state.epochs.head() {
+            let head_and_key = match state.epochs.working_head() {
                 Some(h) if state.epochs.is_current_member(&self.identity.id()) => state.keys.get(&h).cloned().map(|k| (h, k)),
                 _ => None,
             };
@@ -793,7 +803,7 @@ impl Replica {
             let ds = state.docs.get(d).ok_or_else(|| Error::NotFound("doc".into()))?;
             if ds.generation < generation {
                 let cur = ds.doc.oplog_vv().get(&me).copied().unwrap_or(0);
-                let head_key = state.epochs.head().and_then(|h| state.keys.get(&h).cloned().map(|k| (h, k)));
+                let head_key = state.epochs.working_head().and_then(|h| state.keys.get(&h).cloned().map(|k| (h, k)));
                 match head_key {
                     Some((h, k)) if cur > ds.gen_base => {
                         let span = IdSpan::new(me, ds.gen_base, cur);

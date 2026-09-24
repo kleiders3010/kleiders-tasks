@@ -137,3 +137,104 @@ fn edits_made_right_before_a_compaction_still_arrive() {
     assert_eq!(t, titles(&a, &g, &d));
     assert!(t.contains(&"from B".to_string()));
 }
+
+fn churn(r: &mut Replica, g: &kt_engine::GroupId, d: &kt_engine::DocId, n: usize, tag: &str) {
+    for i in 0..n {
+        let id = tk::add_task(r.doc(g, d).unwrap(), None, &format!("{tag} {i}")).unwrap();
+        r.commit(g, d).unwrap();
+        if i % 10 != 0 {
+            tk::delete_task(r.doc(g, d).unwrap(), &id).unwrap();
+            r.commit(g, d).unwrap();
+        }
+    }
+}
+
+fn small_policy(r: &mut Replica, active_ms: u64) {
+    r.set_compaction_policy(kt_engine::replica::CompactionPolicy { min_bytes: 4 * 1024, ratio: 3, active_ms, cooldown_ms: 0 });
+    r.set_ack_interval_ms(0);
+}
+
+fn round(mb: &mut Mailbox, devs: &mut [&mut Replica]) {
+    mb.sync(devs);
+    for r in devs.iter_mut() {
+        r.auto_compact().unwrap();
+    }
+    mb.sync(devs);
+}
+
+#[test]
+fn lists_compact_automatically_when_everyone_active_has_acknowledged() {
+    let mut mb = Mailbox::default();
+    let (mut a, mut b, mut c) = (dev("aa"), dev("ab"), dev("ac"));
+    for r in [&mut a, &mut b, &mut c] {
+        small_policy(r, 3_600_000);
+    }
+    let g = a.create_group().unwrap();
+    let d = a.create_doc(&g).unwrap();
+    tk::init_list(a.doc(&g, &d).unwrap(), "L").unwrap();
+    a.commit(&g, &d).unwrap();
+    for other in [&mut b, &mut c] {
+        a.add_member(&g, other.device_public()).unwrap();
+        other.accept_group(g);
+        for m in a.export_group(&g).unwrap() {
+            let _ = other.receive(&m);
+        }
+    }
+    let _ = a.outbox();
+    round(&mut mb, &mut [&mut a, &mut b, &mut c]);
+
+    // Lots of churn, but C (active) is away: nothing is compacted without C's ack.
+    churn(&mut a, &g, &d, 120, "a");
+    for _ in 0..2 {
+        round(&mut mb, &mut [&mut a, &mut b]);
+    }
+    assert_eq!(a.doc_generation(&g, &d), Some(0), "C hasn't acknowledged: no compaction");
+
+    // C catches up: the lowest-ID device compacts, everyone follows.
+    for _ in 0..3 {
+        round(&mut mb, &mut [&mut a, &mut b, &mut c]);
+    }
+    for r in [&a, &b, &c] {
+        assert_eq!(r.doc_generation(&g, &d), Some(1), "compacted automatically");
+    }
+    assert_eq!(titles(&a, &g, &d), titles(&c, &g, &d));
+}
+
+#[test]
+fn a_long_absent_member_doesnt_block_compaction_and_rebases_on_return() {
+    let mut mb = Mailbox::default();
+    let (mut a, mut b, mut c) = (dev("la"), dev("lb"), dev("lc"));
+    for r in [&mut a, &mut b, &mut c] {
+        small_policy(r, 400); // "active" = seen in the last 0.4 s
+    }
+    let g = a.create_group().unwrap();
+    let d = a.create_doc(&g).unwrap();
+    tk::init_list(a.doc(&g, &d).unwrap(), "L").unwrap();
+    a.commit(&g, &d).unwrap();
+    for other in [&mut b, &mut c] {
+        a.add_member(&g, other.device_public()).unwrap();
+        other.accept_group(g);
+        for m in a.export_group(&g).unwrap() {
+            let _ = other.receive(&m);
+        }
+    }
+    let _ = a.outbox();
+    round(&mut mb, &mut [&mut a, &mut b, &mut c]);
+    // C goes away (and edits offline); later A and B churn.
+    tk::add_task(c.doc(&g, &d).unwrap(), None, "offline edit by C").unwrap();
+    c.commit(&g, &d).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    churn(&mut a, &g, &d, 120, "a");
+    for _ in 0..3 {
+        round(&mut mb, &mut [&mut a, &mut b]);
+    }
+    assert_eq!(a.doc_generation(&g, &d), Some(1), "compacted without the absent member");
+    // C returns: switches to the new generation, keeps its offline edit.
+    for _ in 0..3 {
+        round(&mut mb, &mut [&mut a, &mut b, &mut c]);
+    }
+    assert_eq!(c.doc_generation(&g, &d), Some(1));
+    let t = titles(&a, &g, &d);
+    assert_eq!(t, titles(&c, &g, &d));
+    assert!(t.contains(&"offline edit by C".to_string()), "{t:?}");
+}

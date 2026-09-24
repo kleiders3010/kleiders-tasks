@@ -162,3 +162,76 @@ fn group_endpoint_sets_spread_through_slots_and_newest_wins() {
     assert_eq!(cur.unwrap().endpoints, vec!["wss://two", "wss://three"]);
     assert_eq!(prev.unwrap().endpoints, vec!["wss://one", "wss://two"], "previous set still read for a while");
 }
+
+/// Sync through a mailbox among only some devices (the others are "offline").
+fn sync_some(mb: &mut Mailbox, devs: &mut [&mut Replica]) {
+    mb.sync(devs);
+}
+
+#[test]
+fn a_fork_doesnt_stop_sync_while_the_merging_device_is_away() {
+    let mut mb = Mailbox::default();
+    let mut devs: Vec<Replica> = (0..3).map(|i| dev(&format!("fk{i}"))).collect();
+    let g = devs[0].create_group().unwrap();
+    let d = devs[0].create_doc(&g).unwrap();
+    set(&mut devs[0], &g, &d, "t0", "start");
+    let (first, rest) = devs.split_at_mut(1);
+    join(&mut first[0], &mut rest[0], g);
+    join(&mut first[0], &mut rest[1], g);
+    let _ = first[0].outbox();
+    {
+        let mut all: Vec<&mut Replica> = devs.iter_mut().collect();
+        sync_some(&mut mb, &mut all);
+    }
+    // The merging device is the lowest ID among the three: take it offline.
+    let ids: Vec<_> = devs.iter().map(|r| r.device_id()).collect();
+    let merger = (0..3).min_by_key(|i| ids[*i]).unwrap();
+    let online: Vec<usize> = (0..3).filter(|i| *i != merger).collect();
+    let (x, y) = (online[0], online[1]);
+    // X and Y each add a new device at the same time (they can't see each other's add).
+    let (nx, ny) = (dev("nx"), dev("ny"));
+    devs[x].add_member(&g, nx.device_public()).unwrap();
+    devs[y].add_member(&g, ny.device_public()).unwrap();
+    // Existing members keep editing and syncing while the fork waits for the merge.
+    set(&mut devs[x], &g, &d, "during", "fork edit from X");
+    set(&mut devs[y], &g, &d, "during2", "fork edit from Y");
+    {
+        let (a, b) = if x < y { let (l, r) = devs.split_at_mut(y); (&mut l[x], &mut r[0]) } else { let (l, r) = devs.split_at_mut(x); (&mut r[0], &mut l[y]) };
+        sync_some(&mut mb, &mut [a, b]);
+        assert!(a.epochs(&g).unwrap().heads().len() == 2, "still forked (the merger is away)");
+        let v = value(a, &g, &d);
+        assert!(v.contains("fork edit from X") && v.contains("fork edit from Y"), "sync continued during the fork: {v}");
+        assert_eq!(v, value(b, &g, &d));
+    }
+    // The merger comes back and merges; everyone converges.
+    let mut all: Vec<&mut Replica> = devs.iter_mut().collect();
+    sync_some(&mut mb, &mut all);
+    for r in &devs {
+        assert_eq!(r.epochs(&g).unwrap().heads().len(), 1, "merged");
+        assert!(value(r, &g, &d).contains("fork edit from Y"));
+    }
+}
+
+#[test]
+fn during_a_fork_a_removed_device_reads_nothing_new() {
+    let mut mb = Mailbox::default();
+    let (mut a, mut b, mut c) = (dev("ra"), dev("rb"), dev("rc"));
+    let g = a.create_group().unwrap();
+    let d = a.create_doc(&g).unwrap();
+    set(&mut a, &g, &d, "t0", "start");
+    join(&mut a, &mut b, g);
+    join(&mut a, &mut c, g);
+    let _ = a.outbox();
+    mb.sync(&mut [&mut a, &mut b, &mut c]);
+    // A removes C while B (unaware) adds D: two branches, one still includes C.
+    let c_id = c.device_id();
+    a.remove_member(&g, c_id).unwrap();
+    let dd = dev("rd");
+    b.add_member(&g, dd.device_public()).unwrap();
+    mb.sync(&mut [&mut a, &mut b]); // C is away; the merge may or may not have happened
+    set(&mut b, &g, &d, "secret", "written during the fork");
+    mb.sync(&mut [&mut a, &mut b]);
+    assert!(value(&a, &g, &d).contains("written during the fork"));
+    mb.sync(&mut [&mut a, &mut b, &mut c]);
+    assert!(!value(&c, &g, &d).contains("written during the fork"), "never sealed under a branch that includes C");
+}

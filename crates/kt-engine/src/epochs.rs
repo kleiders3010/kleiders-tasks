@@ -124,6 +124,9 @@ pub enum InsertOutcome {
 }
 
 /// The epoch graph of one group, as known by one device.
+/// See [`GroupEpochs::merge_if_mine`].
+pub const MERGE_FALLBACK_MS: u64 = 6 * 3600 * 1000;
+
 #[derive(Default, Clone)]
 pub struct GroupEpochs {
     group: Option<GroupId>,
@@ -364,6 +367,27 @@ impl GroupEpochs {
         if h.len() == 1 { Some(h[0]) } else { None }
     }
 
+    /// The head to encrypt new data with. Converged: the head. During a fork (concurrent
+    /// membership changes, waiting for the merge): the branch with the most recipients,
+    /// ties broken by lowest ID, so every member picks the same one without talking and
+    /// sync never waits for the merging device. Never a branch that still includes a
+    /// device removed on any branch (strong remove); if no branch qualifies, `None` until
+    /// the merge.
+    pub fn working_head(&self) -> Option<EpochId> {
+        let heads = self.heads();
+        if heads.len() == 1 {
+            return Some(heads[0]);
+        }
+        let removed = self.removed_devices();
+        heads
+            .into_iter()
+            .filter(|h| self.records[h].body.recipients.keys().all(|d| !removed.contains(d)))
+            .max_by(|a, b| {
+                let (ra, rb) = (self.records[a].body.recipients.len(), self.records[b].body.recipients.len());
+                ra.cmp(&rb).then(b.cmp(a))
+            })
+    }
+
     pub fn recipients(&self, id: &EpochId) -> Option<&BTreeMap<DeviceId, [u8; 32]>> {
         self.records.get(id).map(|r| &r.body.recipients)
     }
@@ -417,7 +441,12 @@ impl GroupEpochs {
             inter.retain(|d, _| p.body.recipients.contains_key(d));
         }
         inter.retain(|d, _| !removed.contains(d));
-        if inter.keys().next() != Some(&me.id()) {
+        // Merge duty: the lowest-ID member at once; if the fork persists (that device is
+        // away), the k-th lowest after k × MERGE_FALLBACK_MS. A concurrent double merge is
+        // just another fork, merged the same way.
+        let rank = inter.keys().position(|d| *d == me.id())?;
+        let fork_age = now_ms().saturating_sub(parents.iter().map(|p| p.body.created_ms).max().unwrap_or(0));
+        if fork_age < rank as u64 * MERGE_FALLBACK_MS {
             return None;
         }
         Some(build(me, self.group?, heads, EpochKind::Merge, inter, removed))

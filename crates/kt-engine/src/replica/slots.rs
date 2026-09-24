@@ -75,8 +75,28 @@ pub struct ReadTopic {
 struct StatusBody {
     group: GroupId,
     device: DeviceId,
-    generations: Vec<(DocId, u32)>,
+    created_ms: u64,
+    /// Per document: the generation and what this device has of it (encoded version
+    /// vector). Lets members compact only at versions everyone active acknowledged (D26).
+    acks: Vec<(DocId, u32, Vec<u8>)>,
 }
+
+/// What a member last told us (its newest status).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct MemberStatus {
+    pub created_ms: u64,
+    pub acks: std::collections::BTreeMap<DocId, (u32, Vec<u8>)>,
+}
+
+/// Our acknowledgments as last published (they change with every import; republished
+/// with the slot's own changes, or at most every [`ACK_INTERVAL_MS`] on their own).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub(super) struct PublishedAcks {
+    pub at_ms: u64,
+    pub acks: Vec<(DocId, u32, Vec<u8>)>,
+}
+
+pub const ACK_INTERVAL_MS: u64 = 24 * 3600 * 1000;
 
 #[derive(Serialize, Deserialize)]
 struct StatusRecord {
@@ -211,6 +231,10 @@ impl Replica {
     /// Build the sealed contents of a slot. Deterministic in content (not in bytes: the
     /// nonce is random), so callers compare [`Replica::slot_fingerprint`] to skip rewrites.
     pub fn slot_blob(&mut self, t: &SlotTarget) -> Result<Vec<u8>> {
+        if t.role == SlotRole::Main {
+            // The slot is being written anyway: acknowledgments ride along.
+            self.refresh_acks(&t.group, true)?;
+        }
         let messages = self.slot_messages(t)?;
         let key = self.groups[&t.group].keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("slot key".into()))?;
         let payload = wire::encode(SLOT_TAG, SLOT_VERSION, &SlotPayload { group: t.group, epoch: t.epoch, messages })?;
@@ -223,7 +247,45 @@ impl Replica {
         for m in self.slot_messages_fingerprint_input(t)? {
             h.extend_from_slice(&crypto::hash("kt/slot-item/v1", &m));
         }
-        Ok(crypto::hash("kt/slot-fp/v1", &h))
+        let base = crypto::hash("kt/slot-fp/v1", &h);
+        if t.role != SlotRole::Main {
+            return Ok(base);
+        }
+        // Acknowledgments ride along for free when the slot changes anyway; on their own
+        // they're republished at most every ACK_INTERVAL_MS (no extra writes per import).
+        let changed = self.last_base_fp.get(&(t.group, t.epoch)) != Some(&base);
+        self.last_base_fp.insert((t.group, t.epoch), base);
+        self.refresh_acks(&t.group, changed)?;
+        let acks = postcard::to_stdvec(&self.published_acks(&t.group).acks).unwrap_or_default();
+        let mut m = base.to_vec();
+        m.extend_from_slice(&crypto::hash("kt/slot-acks/v1", &acks));
+        Ok(crypto::hash("kt/slot-fp/v2", &m))
+    }
+
+    fn acks_path(&self, g: &GroupId) -> std::path::PathBuf {
+        self.layout.group_dir(g).join("acks_published")
+    }
+
+    pub(super) fn published_acks(&self, g: &GroupId) -> PublishedAcks {
+        std::fs::read(self.acks_path(g)).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default()
+    }
+
+    fn current_acks(&self, g: &GroupId) -> Vec<(DocId, u32, Vec<u8>)> {
+        self.groups.get(g).map(|s| s.docs.iter().map(|(d, ds)| (*d, ds.generation, ds.doc.oplog_vv().encode())).collect()).unwrap_or_default()
+    }
+
+    fn refresh_acks(&mut self, g: &GroupId, slot_changing: bool) -> Result<()> {
+        let now = super::now_ms();
+        let published = self.published_acks(g);
+        let current = self.current_acks(g);
+        if current == published.acks {
+            return Ok(());
+        }
+        if slot_changing || published.at_ms == 0 || now.saturating_sub(published.at_ms) >= self.ack_interval_ms {
+            let p = PublishedAcks { at_ms: now, acks: current };
+            crate::storage::write_atomic(&self.acks_path(g), &postcard::to_stdvec(&p).map_err(|e| Error::Encoding(e.to_string()))?)?;
+        }
+        Ok(())
     }
 
     fn slot_messages_fingerprint_input(&mut self, t: &SlotTarget) -> Result<Vec<Vec<u8>>> {
@@ -269,7 +331,7 @@ impl Replica {
         let mine = state.docs.get(d)?.generation;
         let me = self.identity.id();
         let known = self.member_generations(g);
-        let head = state.epochs.head()?;
+        let head = state.epochs.working_head()?;
         let lagging = state
             .epochs
             .recipients(&head)?
@@ -358,24 +420,35 @@ impl Replica {
     }
 
     fn status_record(&self, g: &GroupId) -> Result<Vec<u8>> {
-        let state = &self.groups[g];
-        let body = StatusBody {
-            group: *g,
-            device: self.identity.id(),
-            generations: state.docs.iter().map(|(d, ds)| (*d, ds.generation)).collect(),
-        };
+        // Current generations always (they change rarely and drive prevgen carry); version
+        // vectors as last published (see refresh_acks).
+        let published = self.published_acks(g).acks;
+        let acks = self.groups[g]
+            .docs
+            .iter()
+            .map(|(d, ds)| {
+                let vv = published
+                    .iter()
+                    .find(|(pd, pg, _)| pd == d && *pg == ds.generation)
+                    .map(|(_, _, v)| v.clone())
+                    .unwrap_or_else(|| ds.doc.oplog_vv().encode());
+                (*d, ds.generation, vv)
+            })
+            .collect();
+        let body = StatusBody { group: *g, device: self.identity.id(), created_ms: super::now_ms(), acks };
         let body = wire::encode(STATUS_TAG, 1, &body)?;
         let sig = self.identity.sign(&body).to_vec();
         postcard::to_stdvec(&StatusRecord { body, sig }).map_err(|e| Error::Encoding(e.to_string()))
     }
 
+    /// Newest status of every other member that told us one.
+    pub fn member_status(&self, g: &GroupId) -> std::collections::BTreeMap<DeviceId, MemberStatus> {
+        std::fs::read(self.layout.group_dir(g).join("member_status")).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default()
+    }
+
     /// Known document generations of other members: (device, doc) -> generation.
     fn member_generations(&self, g: &GroupId) -> std::collections::BTreeMap<(DeviceId, DocId), u32> {
-        std::fs::read(self.layout.group_dir(g).join("member_gens"))
-            .ok()
-            .and_then(|b| postcard::from_bytes::<Vec<((DeviceId, DocId), u32)>>(&b).ok())
-            .map(|v| v.into_iter().collect())
-            .unwrap_or_default()
+        self.member_status(g).into_iter().flat_map(|(dev, st)| st.acks.into_iter().map(move |(d, (gen_, _))| ((dev, d), gen_))).collect()
     }
 
     pub(super) fn receive_status(&mut self, bytes: &[u8]) -> Result<()> {
@@ -387,21 +460,16 @@ impl Replica {
         if !state.epochs.is_current_member(&body.device) {
             return Err(Error::Rejected("status from a non-member".into()));
         }
-        let mut known = self.member_generations(&body.group);
-        let mut changed = false;
-        for (d, gen_) in body.generations {
-            let e = known.entry((body.device, d)).or_insert(0);
-            if gen_ > *e {
-                *e = gen_;
-                changed = true;
-            }
+        if body.acks.len() > 10_000 {
+            return Err(Error::Rejected("status too large".into()));
         }
-        if changed {
-            let v: Vec<_> = known.into_iter().collect();
-            let b = postcard::to_stdvec(&v).map_err(|e| Error::Encoding(e.to_string()))?;
-            crate::storage::write_atomic(&self.layout.group_dir(&body.group).join("member_gens"), &b)?;
+        let mut all = self.member_status(&body.group);
+        if all.get(&body.device).is_some_and(|s| s.created_ms >= body.created_ms) {
+            return Ok(());
         }
-        Ok(())
+        all.insert(body.device, MemberStatus { created_ms: body.created_ms, acks: body.acks.into_iter().map(|(d, g, v)| (d, (g, v))).collect() });
+        let b = postcard::to_stdvec(&all).map_err(|e| Error::Encoding(e.to_string()))?;
+        crate::storage::write_atomic(&self.layout.group_dir(&body.group).join("member_status"), &b)
     }
 
     /// Epoch records this device carries: its own, plus those whose creator is no longer a
@@ -430,8 +498,8 @@ impl Replica {
         let me = self.identity.id();
         let me_peer = self.identity.peer_id();
         let state = &self.groups[&t.group];
-        // Envelopes need one agreed head (a forked key graph merges quickly, rule 2).
-        if state.epochs.head() != Some(t.epoch) || !state.epochs.is_current_member(&me) {
+        // Envelopes go under the working head (during a fork, the deterministic safe branch).
+        if state.epochs.working_head() != Some(t.epoch) || !state.epochs.is_current_member(&me) {
             return Ok(messages);
         }
         let key = state.keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("head key".into()))?;

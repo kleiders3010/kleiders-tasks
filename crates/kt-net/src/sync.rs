@@ -337,6 +337,9 @@ impl Syncer {
     pub async fn sync_once(&self) -> (WriteReport, ReadReport) {
         let mut w = self.write_round().await;
         let r = self.read_round().await;
+        // Compact lists whose history outgrew them, where everyone active acknowledged (D26).
+        let replica = self.replica.clone();
+        let _ = tokio::task::spawn_blocking(move || replica.lock().expect("replica lock").auto_compact()).await;
         let w2 = self.write_round().await;
         w.written += w2.written;
         w.deferred += w2.deferred;

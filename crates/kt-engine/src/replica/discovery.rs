@@ -59,7 +59,7 @@ impl Replica {
         let me = self.identity.id();
         let mut out = Vec::new();
         for (g, state) in &self.groups {
-            let Some(head) = state.epochs.head() else { continue };
+            let Some(head) = state.epochs.working_head() else { continue };
             // Nobody to find us in a group of one (a newly linked device makes it two).
             if !state.epochs.is_current_member(&me) || state.epochs.recipients(&head).is_none_or(|r| r.len() < 2) {
                 continue;
@@ -78,7 +78,7 @@ impl Replica {
         let me = self.identity.id();
         let mut out = Vec::new();
         for (g, state) in &self.groups {
-            let Some(head) = state.epochs.head() else { continue };
+            let Some(head) = state.epochs.working_head() else { continue };
             let (Some(key), Some(recipients)) = (state.keys.get(&head), state.epochs.recipients(&head)) else { continue };
             for d in recipients.keys().filter(|d| **d != me) {
                 out.push(DhtLookup { group: *g, device: *d, epoch: head, key_seed: record_seed(key, &head, d) });
@@ -135,7 +135,7 @@ impl Replica {
         let me = self.identity.id();
         let mut out = Vec::new();
         for (g, state) in &self.groups {
-            let Some(head) = state.epochs.head() else { continue };
+            let Some(head) = state.epochs.working_head() else { continue };
             if !state.epochs.is_current_member(&me) || state.epochs.recipients(&head).is_none_or(|r| r.len() < 2) {
                 continue;
             }
@@ -152,7 +152,7 @@ impl Replica {
         let me = self.identity.id();
         let mut hit: Option<(GroupId, SymKey, EpochId)> = None;
         'outer: for (g, state) in &self.groups {
-            let Some(head) = state.epochs.head() else { continue };
+            let Some(head) = state.epochs.working_head() else { continue };
             let Some(key) = state.keys.get(&head) else { continue };
             for w in [window, window.saturating_sub(1), window + 1] {
                 if lan_tag(key, &head, w) == *tag {
@@ -178,7 +178,7 @@ impl Replica {
     /// outsiders can't pre-position fake helpers for a group (§7a).
     pub fn group_point(&self, g: &GroupId, day: u32) -> Option<[u8; 32]> {
         let state = self.groups.get(g)?;
-        let head = state.epochs.head()?;
+        let head = state.epochs.working_head()?;
         let key = state.keys.get(&head)?;
         let mut m = key.0.to_vec();
         m.extend_from_slice(&day.to_le_bytes());
