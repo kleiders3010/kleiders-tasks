@@ -22,11 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D45. People invited from an iPhone**
-- (a) A web page they can join from (it syncs through Nostr only).
-- (b) An iOS app later ($99/yr Apple fee).
-- (c) Android + desktop only, stated on the invite page.
-
 **D33. The same person on two unlinked devices showing up as two members**
 - Proposal: an automatic "Is this your other device?" suggestion.
 - Private nicknames stay dropped.

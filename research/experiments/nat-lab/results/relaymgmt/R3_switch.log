@@ -1,0 +1,16 @@
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"addr","id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["10.3.0.2:36453"],"relays":[],"t":0.0}
+{"customs":[],"ev":"addr","id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["7.7.7.23:36453","10.3.0.2:36453"],"relays":[],"t":409.2}
+{"customs":[],"ev":"addr","id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["7.7.7.23:36453","10.3.0.2:36453"],"relays":["https://7.7.7.10/"],"t":409.5}
+{"ev":"relay_status","relays":[{"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":409.3}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.23:36453","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":409.2,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"ev":"step","ms":532.08161,"ok":true,"op":"online","t":532.1}
+{"ev":"relay_status","relays":[{"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":532.1}
+{"captive":null,"ev":"netreport","global_v4":"7.7.7.23:36453","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":643.0,"udp_v4":true,"udp_v6":false,"varies_v4":false}
+{"addr":{"customs":[],"id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["7.7.7.23:36453","10.3.0.2:36453"],"relays":["https://7.7.7.10/"]},"ev":"step","op":"insert","prev_existed":false,"reflected_in_addr_ms":null,"t":10538.4,"url":"https://7.7.7.11"}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.23:36453","global_v6":null,"preferred_relay":"https://7.7.7.11/","t":12449.3,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["7.7.7.23:36453","10.3.0.2:36453"],"relays":["https://7.7.7.11/"],"t":12449.4}
+{"ev":"relay_status","relays":[{"connected":false,"err":null,"url":"https://7.7.7.11/"}],"t":12449.4}
+{"addr":{"customs":[],"id":"91a28a0b74381593a4d9469579208926afc8ad82c8839b7644359b9eba9a4b3a","ips":["7.7.7.23:36453","10.3.0.2:36453"],"relays":["https://7.7.7.11/"]},"ev":"step","op":"remove","prev_existed":true,"reflected_in_addr_ms":421.4133,"t":12461.6,"url":"https://7.7.7.10"}
+{"ev":"relay_status","relays":[{"connected":true,"err":null,"url":"https://7.7.7.11/"}],"t":12572.3}
+{"ev":"step","ms":0.00994,"ok":true,"op":"online","t":15462.7}
