@@ -117,6 +117,12 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
   - Linking a new device = joining the personal group. Every group, including ones created later, then appears on all the user's devices automatically.
   - **Linking a device that already has its own data merges it:** the device's personal group contents move into the existing personal group. So "start fresh, link later" is lossless, and first launch never has to ask.
   - History and "who changed what" show **people**, not devices.
+  - **Display names, not unique usernames:** global uniqueness needs a central registry (a server), and names only need to make sense within a group.
+    - The name lives in the personal group and is published to each group's member list. Changing it updates everywhere.
+    - It's asked for the first time the user shares or joins a list, never at first launch. Solo users never need one.
+    - Every person gets a generated avatar (initials on an HCT hue derived from their identity key). An optional small profile photo can come later, stored as a tiny thumbnail in the group document, not as a blob.
+    - Duplicate names in a group are told apart by avatar and, if needed, a short identity tag ("Alex · 4F2A").
+    - Users can set private nicknames for others, visible only to themselves (a sub-option).
   - Recovery simplifies: Block Store only needs the personal group secret; everything else follows from it.
   - **Linking requires confirmation on an existing device** ("Link 'Pixel 8'? Only approve if it's yours"), and the link QR expires after 5 minutes, because linking grants access to everything. This is the only join flow with approval.
 - **Key epochs (in the engine from day one).** Group secrets can be rotated: a new epoch key is encrypted to each remaining device's public key and distributed through the group. Removed devices keep what they already had but can't read anything new.
