@@ -22,11 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D29 + D53. Licensing: allow MPL-2.0 dependencies?**
-- Loro already pulls in MPL-2.0 crates. MPL is file-level copyleft: fine for a closed-source app as long as those files aren't modified. It's also tied to whether you open-source later (DESIGN §14).
-- (a) Allow MPL-2.0.
-- (b) Stay MIT/Apache/BSD only, which means replacing Loro (not evaluated).
-
 **D30. Android backup when a phone has no screen lock** (it isn't end-to-end encrypted then)
 - (a) No automatic backup for those users.
 - (b) A sealed backup, the same protection level you accepted for cloud backups.
