@@ -5,6 +5,7 @@
 //! [`sync::Syncer`] that drives a replica against mailboxes.
 
 pub mod dht;
+pub mod helper;
 pub mod helper_relay;
 pub mod lan;
 pub mod live;

@@ -52,6 +52,8 @@ pub struct P2pConfig {
     pub relay_token: Option<String>,
     /// No direct IP paths at all, only relays (tests, USB tunnels).
     pub relay_only: bool,
+    /// Help other groups by storing their slots in RAM (§7a); `None` = not helping.
+    pub helper: Option<crate::helper::HelperLimits>,
 }
 
 /// What a device publishes to its groups as whereabouts.
@@ -154,7 +156,8 @@ pub struct P2pReport {
 pub struct P2p {
     ep: Endpoint,
     syncer: Arc<Syncer>,
-    conns: Mutex<HashMap<EndpointId, Connection>>,
+    conns: Mutex<HashMap<(EndpointId, Vec<u8>), Connection>>,
+    helper: Option<Arc<crate::helper::HelperStore>>,
 }
 
 impl P2p {
@@ -181,7 +184,10 @@ impl P2p {
             // An empty custom map (not Disabled) so relays can be added at runtime (E10).
             RelayMode::Custom(RelayMap::from_iter(cfgs))
         };
-        let mut b = Endpoint::builder(presets::Minimal).secret_key(SecretKey::from_bytes(&seed)).alpns(vec![ALPN.to_vec()]).relay_mode(relay_mode);
+        let mut b = Endpoint::builder(presets::Minimal)
+            .secret_key(SecretKey::from_bytes(&seed))
+            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec()])
+            .relay_mode(relay_mode);
         if !cfg.portmap {
             b = b.portmapper_config(PortmapperConfig::Disabled);
         }
@@ -191,7 +197,8 @@ impl P2p {
             b = b.clear_ip_transports().bind_addr(a).map_err(|e| e.to_string())?;
         }
         let ep = b.bind().await.map_err(|e| e.to_string())?;
-        let p = Arc::new(P2p { ep, syncer, conns: Mutex::new(HashMap::new()) });
+        let helper = cfg.helper.clone().map(crate::helper::HelperStore::new);
+        let p = Arc::new(P2p { ep, syncer, conns: Mutex::new(HashMap::new()), helper });
         let acc = p.clone();
         tokio::spawn(async move { acc.accept_loop().await });
         Ok(p)
@@ -243,18 +250,28 @@ impl P2p {
     }
 
     async fn connection(&self, addr: EndpointAddr) -> Result<Connection, String> {
-        let id = addr.id;
-        if let Some(c) = self.conns.lock().expect("lock").get(&id) {
+        self.connection_alpn(addr, ALPN).await
+    }
+
+    /// A (cached) connection to `addr` for protocol `alpn`.
+    pub(crate) async fn connection_alpn(&self, addr: EndpointAddr, alpn: &[u8]) -> Result<Connection, String> {
+        let key = (addr.id, alpn.to_vec());
+        if let Some(c) = self.conns.lock().expect("lock").get(&key) {
             if c.close_reason().is_none() {
                 return Ok(c.clone());
             }
         }
-        let c = tokio::time::timeout(CONNECT_TIMEOUT, self.ep.connect(addr, ALPN))
+        let c = tokio::time::timeout(CONNECT_TIMEOUT, self.ep.connect(addr, alpn))
             .await
             .map_err(|_| "connect timeout".to_string())?
             .map_err(|e| e.to_string())?;
-        self.conns.lock().expect("lock").insert(id, c.clone());
+        self.conns.lock().expect("lock").insert(key, c.clone());
         Ok(c)
+    }
+
+    /// Our helper store, if helping.
+    pub fn helper(&self) -> Option<Arc<crate::helper::HelperStore>> {
+        self.helper.clone()
     }
 
     /// Exchange slots with every reachable member device, all at once (an offline member
@@ -301,6 +318,20 @@ impl P2p {
             tokio::spawn(async move {
                 let Ok(conn) = inc.await else { return };
                 let remote = conn.remote_id();
+                if conn.alpn() == crate::helper::HELPER_ALPN {
+                    // Helping strangers: no membership needed, the store enforces its rules.
+                    let Some(h) = me.helper.clone() else {
+                        conn.close(2u32.into(), b"not helping");
+                        return;
+                    };
+                    while let Ok((s, r)) = conn.accept_bi().await {
+                        let h = h.clone();
+                        tokio::spawn(async move {
+                            let _ = h.serve(s, r).await;
+                        });
+                    }
+                    return;
+                }
                 while let Ok((s, r)) = conn.accept_bi().await {
                     let me2 = me.clone();
                     tokio::spawn(async move {

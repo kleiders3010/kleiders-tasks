@@ -1,0 +1,502 @@
+//! Helper network, storage side (DESIGN §7a): devices keep other groups' slots in RAM,
+//! like torrent seeding, so a group's changes wait somewhere even when all its members
+//! are offline.
+//!
+//! **Helper (server):** [`HelperStore`], served on the device's iroh endpoint under
+//! [`HELPER_ALPN`].
+//! - RAM only for strangers' data; only the latest version per (topic, writer).
+//! - **Signed puts:** the writer key is derived per device, group and epoch; a put is
+//!   signed, so nobody can overwrite someone else's slot.
+//! - **Junk-filling defenses:** proof of work for *new* slots, scaled with load (refreshes
+//!   of existing slots are free); per-topic quota; young topics capped; when full, the
+//!   least recently refreshed slots go first.
+//! - Reports its session start, so clients can tell a restart (light) from data loss (heavy).
+//!
+//! **Client:** [`HelperMailbox`] implements [`Mailbox`]: it writes each slot to a few
+//! helpers and reads from a few, preferring helpers with good [`Reliability`] records.
+//! Records are local for now (sharing them within one's groups comes later), as does
+//! helper-to-helper replication and handoff before going offline.
+
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use iroh::endpoint::{RecvStream, SendStream};
+use iroh::{EndpointAddr, EndpointId, PublicKey, SecretKey, Signature};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+use crate::mailbox::{BoxFut, Capabilities, Mailbox, SlotRead, SlotWrite, WriteOutcome};
+use crate::p2p::P2p;
+
+pub const HELPER_ALPN: &[u8] = b"kt/helper/1";
+const MAX_FRAME: usize = 2 * 1024 * 1024;
+
+// ---------------------------------------------------------------- wire
+
+#[derive(Serialize, Deserialize)]
+enum Request {
+    Put { topic: [u8; 32], writer: [u8; 32], version: u64, blob: Vec<u8>, sig: Vec<u8>, nonce: u64 },
+    Get { topics: Vec<[u8; 32]>, have: Vec<([u8; 32], [u8; 32], u64)> },
+    Info,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PutReply {
+    Stored,
+    /// We already have this or a newer version.
+    Stale,
+    /// A new slot needs proof of work with this many leading zero bits.
+    NeedPow(u8),
+    TooLarge,
+    /// Quota exhausted for this topic or the helper is full of established data.
+    Full,
+    BadSignature,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HelperInfo {
+    /// Changes when the helper restarts (RAM is lost then).
+    pub session_start_ms: u64,
+    pub used: u64,
+    pub capacity: u64,
+    pub pow_bits_new: u8,
+}
+
+#[derive(Serialize, Deserialize)]
+enum Response {
+    Put(PutReply),
+    Slots(Vec<(([u8; 32], [u8; 32]), u64, Vec<u8>)>),
+    Info(HelperInfo),
+}
+
+async fn send_frame<T: Serialize>(s: &mut SendStream, v: &T) -> Result<(), String> {
+    let b = postcard::to_stdvec(v).map_err(|e| e.to_string())?;
+    s.write_all(&(b.len() as u32).to_le_bytes()).await.map_err(|e| e.to_string())?;
+    s.write_all(&b).await.map_err(|e| e.to_string())
+}
+
+async fn recv_frame<T: DeserializeOwned>(r: &mut RecvStream) -> Result<T, String> {
+    let mut len = [0u8; 4];
+    r.read_exact(&mut len).await.map_err(|e| e.to_string())?;
+    let n = u32::from_le_bytes(len) as usize;
+    if n > MAX_FRAME {
+        return Err("frame too large".into());
+    }
+    let mut b = vec![0u8; n];
+    r.read_exact(&mut b).await.map_err(|e| e.to_string())?;
+    postcard::from_bytes(&b).map_err(|e| e.to_string())
+}
+
+fn put_message(topic: &[u8; 32], version: u64, blob: &[u8]) -> Vec<u8> {
+    let mut m = b"kt/helper-put/v1".to_vec();
+    m.extend_from_slice(topic);
+    m.extend_from_slice(&version.to_le_bytes());
+    m.extend_from_slice(blake3::hash(blob).as_bytes());
+    m
+}
+
+fn pow_bits(topic: &[u8; 32], writer: &[u8; 32], version: u64, nonce: u64) -> u32 {
+    let mut h = blake3::Hasher::new_derive_key("kt/helper-pow/v1");
+    h.update(topic);
+    h.update(writer);
+    h.update(&version.to_le_bytes());
+    h.update(&nonce.to_le_bytes());
+    let out = h.finalize();
+    let b = out.as_bytes();
+    let mut z = 0;
+    for byte in b {
+        if *byte == 0 {
+            z += 8;
+        } else {
+            z += byte.leading_zeros();
+            break;
+        }
+    }
+    z
+}
+
+/// Find a nonce with at least `bits` leading zero bits (2^bits hashes on average).
+pub fn solve_pow(topic: &[u8; 32], writer: &[u8; 32], version: u64, bits: u8) -> u64 {
+    let mut nonce = rand::random::<u64>();
+    while pow_bits(topic, writer, version, nonce) < bits as u32 {
+        nonce = nonce.wrapping_add(1);
+    }
+    nonce
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+// ---------------------------------------------------------------- helper (server)
+
+#[derive(Clone, Debug)]
+pub struct HelperLimits {
+    /// RAM for strangers' slots (e.g. 16–32 MB on phones, 64–256 MB on desktops).
+    pub capacity: u64,
+    pub per_topic: u64,
+    pub max_slot: u64,
+    /// PoW bits for a new slot on an empty helper; grows with load.
+    pub base_pow_bits: u8,
+    /// A topic younger than this may use at most `young_topic_cap` bytes.
+    pub young_age: Duration,
+    pub young_topic_cap: u64,
+}
+
+impl Default for HelperLimits {
+    fn default() -> Self {
+        HelperLimits {
+            capacity: 64 * 1024 * 1024,
+            per_topic: 2 * 1024 * 1024,
+            max_slot: 640 * 1024,
+            base_pow_bits: 12,
+            young_age: Duration::from_secs(24 * 3600),
+            young_topic_cap: 256 * 1024,
+        }
+    }
+}
+
+struct Entry {
+    version: u64,
+    blob: Vec<u8>,
+    refreshed: Instant,
+}
+
+struct TopicInfo {
+    first_seen: Instant,
+    bytes: u64,
+}
+
+pub struct HelperStore {
+    limits: HelperLimits,
+    session_start_ms: u64,
+    inner: Mutex<(HashMap<([u8; 32], [u8; 32]), Entry>, HashMap<[u8; 32], TopicInfo>, u64)>,
+}
+
+impl HelperStore {
+    pub fn new(limits: HelperLimits) -> Arc<HelperStore> {
+        Arc::new(HelperStore { limits, session_start_ms: now_ms(), inner: Mutex::new((HashMap::new(), HashMap::new(), 0)) })
+    }
+
+    pub fn info(&self) -> HelperInfo {
+        let used = self.inner.lock().expect("lock").2;
+        HelperInfo { session_start_ms: self.session_start_ms, used, capacity: self.limits.capacity, pow_bits_new: self.pow_bits_now(used) }
+    }
+
+    fn pow_bits_now(&self, used: u64) -> u8 {
+        // +1 bit per eighth of capacity in use: cheap when empty, costly for fillers.
+        let load = (used * 8 / self.limits.capacity.max(1)).min(8) as u8;
+        self.limits.base_pow_bits + load
+    }
+
+    pub fn put(&self, topic: [u8; 32], writer: [u8; 32], version: u64, blob: Vec<u8>, sig: &[u8], nonce: u64) -> PutReply {
+        if blob.len() as u64 > self.limits.max_slot {
+            return PutReply::TooLarge;
+        }
+        let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(&writer), <[u8; 64]>::try_from(sig)) else { return PutReply::BadSignature };
+        if pk.verify(&put_message(&topic, version, &blob), &Signature::from_bytes(&sig)).is_err() {
+            return PutReply::BadSignature;
+        }
+        let mut g = self.inner.lock().expect("lock");
+        let (entries, topics, used) = &mut *g;
+        let key = (topic, writer);
+        let old_len = match entries.get(&key) {
+            Some(e) if e.version >= version => return PutReply::Stale,
+            Some(e) => e.blob.len() as u64,
+            None => {
+                let need = self.pow_bits_now(*used);
+                if pow_bits(&topic, &writer, version, nonce) < need as u32 {
+                    return PutReply::NeedPow(need);
+                }
+                0
+            }
+        };
+        let ti = topics.entry(topic).or_insert(TopicInfo { first_seen: Instant::now(), bytes: 0 });
+        let new_topic_bytes = ti.bytes - old_len + blob.len() as u64;
+        let cap = if ti.first_seen.elapsed() < self.limits.young_age { self.limits.young_topic_cap } else { self.limits.per_topic };
+        if new_topic_bytes > cap {
+            return PutReply::Full;
+        }
+        // Make room: evict the least recently refreshed slots of *other* topics.
+        let mut need = (*used - old_len + blob.len() as u64).saturating_sub(self.limits.capacity);
+        while need > 0 {
+            let victim = entries.iter().filter(|(k, _)| k.0 != topic).min_by_key(|(_, e)| e.refreshed).map(|(k, _)| *k);
+            let Some(v) = victim else { return PutReply::Full };
+            let e = entries.remove(&v).expect("exists");
+            let n = e.blob.len() as u64;
+            *used -= n;
+            if let Some(t) = topics.get_mut(&v.0) {
+                t.bytes -= n;
+            }
+            need = need.saturating_sub(n);
+        }
+        *used = *used - old_len + blob.len() as u64;
+        topics.get_mut(&topic).expect("inserted").bytes = new_topic_bytes;
+        entries.insert(key, Entry { version, blob, refreshed: Instant::now() });
+        PutReply::Stored
+    }
+
+    pub fn get(&self, topics: &[[u8; 32]], have: &[([u8; 32], [u8; 32], u64)]) -> Vec<(([u8; 32], [u8; 32]), u64, Vec<u8>)> {
+        let have: HashMap<([u8; 32], [u8; 32]), u64> = have.iter().map(|(t, w, v)| ((*t, *w), *v)).collect();
+        let g = self.inner.lock().expect("lock");
+        g.0.iter()
+            .filter(|(k, _)| topics.contains(&k.0))
+            .filter(|(k, e)| have.get(*k).is_none_or(|v| *v < e.version))
+            .map(|(k, e)| (*k, e.version, e.blob.clone()))
+            .collect()
+    }
+
+    /// Serve one helper stream.
+    pub async fn serve(&self, mut s: SendStream, mut r: RecvStream) -> Result<(), String> {
+        let req: Request = recv_frame(&mut r).await?;
+        let resp = match req {
+            Request::Put { topic, writer, version, blob, sig, nonce } => Response::Put(self.put(topic, writer, version, blob, &sig, nonce)),
+            Request::Get { topics, have } => Response::Slots(self.get(&topics, &have)),
+            Request::Info => Response::Info(self.info()),
+        };
+        send_frame(&mut s, &resp).await?;
+        let _ = s.finish();
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------- client
+
+/// What we know about one helper from our own dealings with it (§7a table).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Reliability {
+    pub reachable: u32,
+    pub unreachable: u32,
+    /// Returned an older version (or nothing) of a slot we stored on it this session.
+    pub withheld: u32,
+    /// Restarts noticed (session start changed): counted like downtime, lightly.
+    pub restarts: u32,
+    pub latency_ms: f64,
+    pub last_session: u64,
+    /// Returned data failing verification: excluded.
+    pub excluded: bool,
+}
+
+impl Reliability {
+    pub fn score(&self) -> f64 {
+        if self.excluded {
+            return f64::NEG_INFINITY;
+        }
+        let total = (self.reachable + self.unreachable).max(1) as f64;
+        let up = self.reachable as f64 / total;
+        up - 0.5 * self.withheld as f64 - 0.05 * self.restarts as f64 - self.latency_ms / 10_000.0
+    }
+}
+
+pub struct HelperMailbox {
+    p2p: Arc<P2p>,
+    helpers: Vec<EndpointAddr>,
+    records: Mutex<HashMap<EndpointId, Reliability>>,
+    /// What we stored where this session: (helper, topic, writer) -> version.
+    stored: Mutex<HashMap<(EndpointId, [u8; 32], [u8; 32]), u64>>,
+    writes_per_slot: usize,
+    reads_per_topic: usize,
+}
+
+fn writer_key(seed: &[u8; 32]) -> SecretKey {
+    let k = kt_engine::crypto::derive(seed, "kt/helper-writer/v1", b"");
+    SecretKey::from_bytes(&k.0)
+}
+
+impl HelperMailbox {
+    pub fn new(p2p: Arc<P2p>, helpers: Vec<EndpointAddr>) -> HelperMailbox {
+        HelperMailbox { p2p, helpers, records: Mutex::new(HashMap::new()), stored: Mutex::new(HashMap::new()), writes_per_slot: 3, reads_per_topic: 4 }
+    }
+
+    pub fn records(&self) -> HashMap<EndpointId, Reliability> {
+        self.records.lock().expect("lock").clone()
+    }
+
+    /// Helpers for a topic: best reliability first, ties broken by a per-topic hash (so
+    /// writers and readers tend to agree without talking).
+    fn ranked(&self, topic: &[u8; 32]) -> Vec<EndpointAddr> {
+        let rec = self.records.lock().expect("lock");
+        let mut v: Vec<(i64, [u8; 32], EndpointAddr)> = self
+            .helpers
+            .iter()
+            .filter(|h| !rec.get(&h.id).is_some_and(|r| r.excluded))
+            .map(|h| {
+                let s = rec.get(&h.id).map(|r| r.score()).unwrap_or(0.5);
+                let mut m = topic.to_vec();
+                m.extend_from_slice(h.id.as_bytes());
+                (-(s * 1000.0) as i64, *blake3::hash(&m).as_bytes(), h.clone())
+            })
+            .collect();
+        v.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+        v.into_iter().map(|x| x.2).collect()
+    }
+
+    async fn call(&self, h: &EndpointAddr, req: &Request) -> Option<Response> {
+        let t = Instant::now();
+        let res = async {
+            let conn = self.p2p.connection_alpn(h.clone(), HELPER_ALPN).await?;
+            let (mut s, mut r) = conn.open_bi().await.map_err(|e| e.to_string())?;
+            send_frame(&mut s, req).await?;
+            let _ = s.finish();
+            recv_frame::<Response>(&mut r).await
+        }
+        .await;
+        let mut rec = self.records.lock().expect("lock");
+        let e = rec.entry(h.id).or_default();
+        match res {
+            Ok(r) => {
+                e.reachable += 1;
+                let ms = t.elapsed().as_secs_f64() * 1000.0;
+                e.latency_ms = if e.latency_ms == 0.0 { ms } else { e.latency_ms * 0.8 + ms * 0.2 };
+                Some(r)
+            }
+            Err(_) => {
+                e.unreachable += 1;
+                None
+            }
+        }
+    }
+
+    async fn info(&self, h: &EndpointAddr) -> Option<HelperInfo> {
+        match self.call(h, &Request::Info).await? {
+            Response::Info(i) => {
+                let mut rec = self.records.lock().expect("lock");
+                let e = rec.entry(h.id).or_default();
+                if e.last_session != 0 && e.last_session != i.session_start_ms {
+                    e.restarts += 1;
+                    // RAM was lost: what we stored there before is gone, not withheld.
+                    self.stored.lock().expect("lock").retain(|k, _| k.0 != h.id);
+                }
+                e.last_session = i.session_start_ms;
+                Some(i)
+            }
+            _ => None,
+        }
+    }
+
+    async fn put_one(&self, h: &EndpointAddr, topic: [u8; 32], key: &SecretKey, version: u64, blob: &[u8]) -> Option<PutReply> {
+        self.info(h).await?;
+        let writer = *key.public().as_bytes();
+        let sig = key.sign(&put_message(&topic, version, blob)).to_bytes().to_vec();
+        let mut nonce = 0u64;
+        for _ in 0..2 {
+            let req = Request::Put { topic, writer, version, blob: blob.to_vec(), sig: sig.clone(), nonce };
+            match self.call(h, &req).await? {
+                Response::Put(PutReply::NeedPow(bits)) if bits <= 24 => {
+                    nonce = tokio::task::spawn_blocking(move || solve_pow(&topic, &writer, version, bits)).await.ok()?;
+                }
+                Response::Put(r) => {
+                    if matches!(r, PutReply::Stored | PutReply::Stale) {
+                        self.stored.lock().expect("lock").insert((h.id, topic, writer), version);
+                    }
+                    return Some(r);
+                }
+                _ => return None,
+            }
+        }
+        None
+    }
+}
+
+impl Mailbox for HelperMailbox {
+    fn name(&self) -> String {
+        format!("helpers({})", self.helpers.len())
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities { replace: true, max_slot: 640 * 1024, ttl: Some(Duration::from_secs(14 * 24 * 3600)), read_auth: false, subscribe: false, write_budget: None }
+    }
+
+    fn writer_id(&self, writer_seed: &[u8; 32]) -> [u8; 32] {
+        *writer_key(writer_seed).public().as_bytes()
+    }
+
+    fn write<'a>(&'a self, w: &'a SlotWrite) -> BoxFut<'a, WriteOutcome> {
+        Box::pin(async move {
+            let key = writer_key(&w.writer_seed);
+            let version = now_ms();
+            let targets: Vec<EndpointAddr> = self.ranked(&w.topic).into_iter().take(self.writes_per_slot).collect();
+            if targets.is_empty() {
+                return WriteOutcome::Unavailable;
+            }
+            let results = futures_util::future::join_all(targets.iter().map(|h| self.put_one(h, w.topic, &key, version, &w.blob))).await;
+            let stored = results.iter().filter(|r| matches!(r, Some(PutReply::Stored) | Some(PutReply::Stale))).count();
+            if stored > 0 {
+                WriteOutcome::Stored { stored, tried: targets.len() }
+            } else if results.iter().any(|r| matches!(r, Some(PutReply::TooLarge))) {
+                WriteOutcome::Refused("slot too large for helpers".into())
+            } else {
+                WriteOutcome::Unavailable
+            }
+        })
+    }
+
+    fn read<'a>(&'a self, topics: &'a [[u8; 32]]) -> BoxFut<'a, Vec<SlotRead>> {
+        Box::pin(async move {
+            let mut per: HashMap<EndpointId, (EndpointAddr, Vec<[u8; 32]>)> = HashMap::new();
+            for t in topics {
+                for h in self.ranked(t).into_iter().take(self.reads_per_topic) {
+                    per.entry(h.id).or_insert_with(|| (h.clone(), Vec::new())).1.push(*t);
+                }
+            }
+            let calls = per.into_values().map(|(h, ts)| async move {
+                let info = self.info(&h).await;
+                let r = self.call(&h, &Request::Get { topics: ts.clone(), have: vec![] }).await;
+                (h, ts, info, r)
+            });
+            let results = futures_util::future::join_all(calls).await;
+            let mut best: HashMap<([u8; 32], [u8; 32]), SlotRead> = HashMap::new();
+            for (h, ts, _info, r) in results {
+                let Some(Response::Slots(slots)) = r else { continue };
+                let got: HashMap<([u8; 32], [u8; 32]), u64> = slots.iter().map(|(k, v, _)| (*k, *v)).collect();
+                // Withholding check: slots we stored on this helper this session.
+                let stored: Vec<_> = self.stored.lock().expect("lock").iter().filter(|(k, _)| k.0 == h.id && ts.contains(&k.1)).map(|(k, v)| ((k.1, k.2), *v)).collect();
+                for (k, v) in stored {
+                    if got.get(&k).is_none_or(|g| *g < v) {
+                        self.records.lock().expect("lock").entry(h.id).or_default().withheld += 1;
+                    }
+                }
+                for ((t, w), v, blob) in slots {
+                    if !ts.contains(&t) {
+                        continue;
+                    }
+                    if best.get(&(t, w)).is_none_or(|b| b.version < v) {
+                        best.insert((t, w), SlotRead { topic: t, writer: w, version: v, blob });
+                    }
+                }
+            }
+            best.into_values().collect()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn signed(key: &SecretKey, topic: [u8; 32], v: u64, blob: &[u8]) -> Vec<u8> {
+        key.sign(&put_message(&topic, v, blob)).to_bytes().to_vec()
+    }
+
+    #[test]
+    fn store_rules() {
+        let h = HelperStore::new(HelperLimits { capacity: 10_000, per_topic: 6_000, max_slot: 5_000, base_pow_bits: 4, young_age: Duration::from_secs(0), young_topic_cap: 0 });
+        let k = SecretKey::from_bytes(&[1; 32]);
+        let w = *k.public().as_bytes();
+        let t = [9; 32];
+        let blob = vec![1u8; 1000];
+        // New slot needs PoW.
+        assert!(matches!(h.put(t, w, 1, blob.clone(), &signed(&k, t, 1, &blob), 0), PutReply::NeedPow(_) | PutReply::Stored));
+        let n = solve_pow(&t, &w, 1, 12);
+        assert_eq!(h.put(t, w, 1, blob.clone(), &signed(&k, t, 1, &blob), n), PutReply::Stored);
+        // Refreshes are free; stale versions refused; forged signatures refused.
+        assert_eq!(h.put(t, w, 2, blob.clone(), &signed(&k, t, 2, &blob), 0), PutReply::Stored);
+        assert_eq!(h.put(t, w, 2, blob.clone(), &signed(&k, t, 2, &blob), 0), PutReply::Stale);
+        let other = SecretKey::from_bytes(&[2; 32]);
+        assert_eq!(h.put(t, w, 3, blob.clone(), &signed(&other, t, 3, &blob), 0), PutReply::BadSignature);
+        assert_eq!(h.put(t, w, 3, vec![0; 6000], &signed(&k, t, 3, &[0; 6000]), 0), PutReply::TooLarge);
+        assert_eq!(h.get(&[t], &[]).len(), 1);
+        assert!(h.get(&[t], &[(t, w, 2)]).is_empty());
+    }
+}
