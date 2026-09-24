@@ -42,7 +42,8 @@
 - [ ] iroh P2P (LAN with rotating IDs, direct, relays per D49 outcome, member relaying)
 - [ ] Discovery: Nostr slot + Mainline DHT (pkarr) + n0 DNS
 - [ ] Helper storage protocol (basic) + reliability records
-- [ ] Operator manifest (signed, baseline + fetch)
+- [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
+- [ ] Operator manifest, real-world part (needs the user): generate the real offline operator key (same handling as the release keystore), choose the hosting URLs (jurisgames.com, the public repo)
 
 ### M3: Sharing
 - [ ] Invites (8-word code, link, QR; all layers; 30 days; multi-use; cancel)
@@ -73,7 +74,7 @@
 
 ## Next action
 1. LAN discovery with rotating IDs; simultaneous dial timing via Nostr ephemeral events.
-2. Discovery beyond slots (pkarr/DHT, n0 DNS), helper storage protocol for strangers (RAM), operator manifest.
+2. Discovery beyond slots (pkarr/DHT on a local testnet, n0 DNS as an option), Nostr live subscriptions + simultaneous-dial signaling, helper storage protocol for strangers (RAM).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
