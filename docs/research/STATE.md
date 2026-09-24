@@ -4,6 +4,7 @@
 Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experiments and attacks on our own system. Then fix what fails, with evidence. Done = every box below checked and the final report written.
 
 ## Safety rules (never break)
+- **This is a technical prototype and research phase. Findings and solutions are proposals: never apply them to DESIGN.md or UX-PRINCIPLES.md. The user picks what stays.**
 - No load tests, floods or attacks against third-party infrastructure (public Nostr relays, iroh relays, DHT nodes, STUN, Blossom). Heavy or adversarial tests run against **local** instances only.
 - Probing public relays: at most a handful of small, well-formed events per relay, only to check acceptance and limits. Read NIP-11 info first.
 - Nothing is published; the repo stays private. Emulators run headless.
@@ -30,15 +31,15 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] E0 Toolchain: Android NDK, cargo-ndk, Rust Android targets
 - [x] E1 Loro: history growth for realistic workloads, shallow snapshots, importing updates that depend on trimmed history, large-list performance
 - [x] E2 Argon2id: timing across parameters on this PC; attacker GPU rate (hashcat benchmark if available)
-- [ ] E3 iroh: two local endpoints, local relay, connection paths, binary size impact
+- [x] E3 iroh: two local endpoints, local relay, connection paths, binary size impact
 - [x] E4 Nostr: local relay (addressable replacement, size limits, rates) + polite acceptance probe of candidate public relays
 - [x] E5 Helper network simulation: churn, replication factor, availability, reputation, eclipse
-- [ ] E6 Android size: release build of engine prototype (iroh + Loro) for arm64-v8a, stripped
+- [x] E6 Android size: release build of engine prototype (iroh + Loro) for arm64-v8a, stripped
 - [x] E7 Invite codes: EFF list, entropy, derivation, expiry
 - [ ] E8 Key epochs: rotation prototype and tests
 
-### P3: Fixes
-- [ ] Apply confirmed fixes to `docs/DESIGN.md` (+ UX-PRINCIPLES.md), each citing its evidence
+### P3: Decision list (the user decides; DO NOT edit DESIGN.md / UX-PRINCIPLES.md)
+- [ ] `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks.
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
 - [x] A1 Invite-code brute force (measured rates, not estimates)
@@ -68,3 +69,5 @@ Collect the P1 reports when the workflow finishes, then continue with P2 experim
 - E4: 8/8 major free relays accepted new keys + addressable kind 30078 + custom kind 31234, opaque 60 KB content; replacement correct. Most run strfry (128 KB msg limit; damus/primal 1 MB) -> chunking required; monoculture risk. Use NIP-78 kind 30078.
 - E5: RAM-only phone-heavy helpers need r~15-20 for ~99% without member refresh; member refresh is essential; reputation gives +6-10 pts vs dishonest helpers; r>=20 tolerates 50% dishonest.
 - E7: EFF large list: 34% of words have a valid 1-typo neighbor -> typos silently become other valid codes (92% of 6-word codes). Proposal: 8 words from EFF short list 2.0 (3-letter autocomplete, 0 typo neighbors, 82.7 bits > 77.5).
+- E3: local iroh connect 2.4 ms; dial-by-ID via n0 669 ms. NEW: iroh defaults depend on n0 alone (relays + DNS/pkarr discovery); mDNS/DHT discovery not in core. Proposal: own discovery via Nostr + pkarr/Mainline DHT; explicit mDNS.
+- E6: full Rust core arm64 = 7.07 MB installed / 4.33 MB compressed (iroh 4.6, loro 1.7, nostr 1.5, crypto 0.3). Estimated app ~15-20 MB installed, ~10 MB download: targets hold.
