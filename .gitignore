@@ -1,0 +1,21 @@
+# Rust
+/target/
+**/target/
+
+# Gradle / Android / IntelliJ
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
