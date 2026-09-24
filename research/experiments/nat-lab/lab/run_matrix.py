@@ -11,6 +11,8 @@ experiments:
   direct_one   option (b): relays disabled, portmapper on, one-sided dial with published addrs
   direct_simul option (b): relays disabled, portmapper on, simultaneous dial (go-file)
   direct_stun  option (b): as direct_simul + side-socket STUN prediction (public ip : iroh port)
+  ct_only      option (c): relays disabled, custom transport (TCP blind forwarder on h1) as first path
+  ct_stun      option (c) + side-socket STUN prediction
 """
 import json, os, subprocess, sys, time, shutil, argparse
 
@@ -91,6 +93,11 @@ def variant_args(exp):
     elif exp == "direct_stun":
         a = b = STUN + ["--stun-predict"]
         simul = True
+    elif exp == "ct_only":
+        # option (c): first path = custom transport over a blind TCP forwarder on helper h1
+        a = b = ["--ct-relay", "7.7.7.10:9000"]
+    elif exp == "ct_stun":
+        a = b = ["--ct-relay", "7.7.7.10:9000"] + STUN + ["--stun-predict"]
     else:
         raise SystemExit(f"unknown experiment {exp}")
     return common, a, b, simul
