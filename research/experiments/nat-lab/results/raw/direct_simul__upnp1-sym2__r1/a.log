@@ -1,0 +1,12 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:53098","[::]:37833"],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.9.0.2:53098"],"relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:33174","10.9.0.2:53098"],"relays":[],"t":54.9}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:33174","10.9.0.2:53098"],"relays":[],"t":3000.8}
+{"ev":"dial_start","peer":{"customs":[],"id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:45860"],"relays":[]},"t":3549.0}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.26:17518)","rtt_ms":42.164001,"sel":true}],"remote_addr":"Ip(7.7.7.26:17518)","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3613.6}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.26:17518)","rtt_ms":42.164001,"sel":true}],"since_ms":43.220434000000004,"t":3613.7}
+{"ev":"connected","ms":1044.317444,"paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.26:17518)","rtt_ms":42.668294,"sel":true}],"t":4593.3}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.26:17518)","rtt_ms":42.668294,"sel":true}],"since_ms":1044.3986,"t":4593.3}
+{"ev":"ttfb","ms":1095.340937,"t":4644.3}
+{"alive_after":true,"connect_ms":1044.317444,"connected":true,"direct":true,"direct_ms":1044.317444,"ev":"summary","final_selected":{"relay":false,"remote":"Ip(7.7.7.26:17518)","rtt_ms":42.132304000000005},"first_path_direct":true,"mbps":null,"n_paths":1,"t":10686.9,"ttfb_ms":1095.340937}

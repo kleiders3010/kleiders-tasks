@@ -1,0 +1,6 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:53366","[::]:45472"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.3.0.2:53366"],"relays":[],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.3.0.2:53366"],"relays":[],"t":3002.8}
+{"ev":"dial_start","peer":{"customs":[],"id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:42109"],"relays":[]},"t":3550.8}
+{"connected":false,"err":"timeout","ev":"summary","ms":10000,"t":13551.1}

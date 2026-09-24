@@ -21,3 +21,4 @@ captures/
 Thumbs.db
 research/experiments/rust/**/fuzz_out/*.txt
 research/experiments/rust/**/fuzz_out/last_input.bin
+/target/
