@@ -27,7 +27,9 @@ use crate::sandbox::{self, Quarantine, SandboxConfig, Verdict};
 use crate::storage::{self, Layout};
 use crate::{crypto, wire, Error, Result};
 
+mod discovery;
 mod slots;
+pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX};
 pub use slots::{topic_for, MemberWhereabouts, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
 
 const MSG_TAG: [u8; 2] = *b"MS";

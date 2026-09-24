@@ -17,6 +17,7 @@ rustls.workspace = true
 iroh.workspace = true
 iroh-relay.workspace = true
 reqwest.workspace = true
+mainline.workspace = true
 rand.workspace = true
 hex.workspace = true
 thiserror.workspace = true
@@ -25,6 +26,7 @@ serde.workspace = true
 postcard.workspace = true
 
 [dev-dependencies]
+mainline.workspace = true
 nostr.workspace = true
 base64.workspace = true
 tokio.workspace = true

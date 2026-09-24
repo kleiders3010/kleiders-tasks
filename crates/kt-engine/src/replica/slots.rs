@@ -284,7 +284,15 @@ impl Replica {
             .unwrap_or_default()
     }
 
-    fn whereabouts_record(&self, g: &GroupId) -> Result<Option<Vec<u8>>> {
+    /// Whether a whereabouts record claims (and is signed by) `device`.
+    pub(super) fn whereabouts_signed_by(&self, bytes: &[u8], device: &DeviceId) -> bool {
+        let Ok(rec) = postcard::from_bytes::<StatusRecord>(bytes) else { return false };
+        let Ok((_, body)) = wire::decode::<WhereBody>(WHERE_TAG, 1, &rec.body) else { return false };
+        let Ok(sig) = <[u8; 64]>::try_from(rec.sig.as_slice()) else { return false };
+        body.device == *device && crypto::verify(&device.0, &rec.body, &sig).is_ok()
+    }
+
+    pub(super) fn whereabouts_record(&self, g: &GroupId) -> Result<Option<Vec<u8>>> {
         let Some(data) = &self.whereabouts else { return Ok(None) };
         let body = WhereBody { group: *g, device: self.identity.id(), created_ms: super::now_ms(), data: data.clone() };
         let body = wire::encode(WHERE_TAG, 1, &body)?;
