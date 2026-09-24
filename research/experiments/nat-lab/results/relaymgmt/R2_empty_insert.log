@@ -1,9 +1,0 @@
-{"ev":"relay_status","relays":[],"t":0.0}
-{"customs":[],"ev":"addr","id":"0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d","ips":["10.3.0.2:57764"],"relays":[],"t":0.0}
-{"customs":[],"ev":"addr","id":"0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d","ips":["7.7.7.23:57764","10.3.0.2:57764"],"relays":[],"t":913.7}
-{"captive":false,"ev":"netreport","global_v4":"7.7.7.23:57764","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":913.8,"udp_v4":true,"udp_v6":false,"varies_v4":null}
-{"ev":"relay_status","relays":[{"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":913.9}
-{"customs":[],"ev":"addr","id":"0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d","ips":["7.7.7.23:57764","10.3.0.2:57764"],"relays":["https://7.7.7.10/"],"t":914.0}
-{"addr":{"customs":[],"id":"0b513ad9b4924015ca0902ed079044d3ac5dbec2306f06948c10da8eb6e39f2d","ips":["7.7.7.23:57764","10.3.0.2:57764"],"relays":["https://7.7.7.10/"]},"ev":"step","op":"insert","prev_existed":false,"reflected_in_addr_ms":420.49282300000004,"t":922.0,"url":"https://7.7.7.10"}
-{"ev":"step","ms":116.313132,"ok":true,"op":"online","t":1038.4}
-{"ev":"relay_status","relays":[{"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":1038.4}
