@@ -358,3 +358,144 @@ All of these are local, with no public relays involved. Pin `loro = "=1.16.2"` u
 
 **Security advisories**
 - RustSec: https://rustsec.org/packages/im.html , https://rustsec.org/packages/sized-chunks.html
+
+## Independent verification
+
+*Verifier pass, 2026-09-24. Method: instead of rereading the report's sources, the claims were tested against **running code**: Rust `loro` 1.16.2 built locally (`--offline` from the cargo cache), the same crate built **without** the `counter` feature to act as an "old client", and the published npm `loro-crdt` 1.0.9, 1.10.8, 1.13.7, 1.13.8, 1.13.9 and 1.16.3 WASM builds (tarballs unpacked to a scratch folder and loaded from Node; nothing installed). Also checked: the cached published crate source (`loro-internal-1.16.2`), the crates.io and npm version APIs, the GitHub issue, PR and release APIs, and the RustSec advisory pages. Android size came from arm64 builds made with `cargo ndk`. All code is in `research/experiments/rust/r3_verify/`. Nothing touched a public relay.*
+
+### Verdicts
+
+| # | Claim | R3 verdict | Upheld? | Verifier's verdict |
+|---|---|---|---|---|
+| 1 | Stable binary encoding across versions | Partial | **Yes** | Partial. It is **more stable in practice** than R3 showed, and still carries no "forever" promise. |
+| 2 | Shallow snapshots, dependent imports, checkpoints | Partial | **Yes, stronger** | Partial. Every boundary behavior reproduced. An abort path that R3 marked "may still abort" **does abort on 1.16.2**. |
+| 3 | Old clients preserve newer data | Partial | **Yes, worse** | Partial. The "re-encode discards the opaque payload" case **reproduced**, and **R3's own fallback fix triggers it**. Mergeable containers are fine on old clients. |
+| 4 | Tree / movable list / maps / rich text production-ready | Partial | **Yes, with corrections** | Partial. #1055 and #1068 no longer reproduce on current versions. PR #1116 is not a convergence bug. |
+| 5 | Performance / memory / size on low-end devices | Unverified | **Partly wrong** | Low-end performance is still unverified. The **native size estimate is 2–4× too high**. Measured per-op sizes match. |
+| 6 | PeerID uniqueness; unauthenticated authorship | Confirmed | **Yes** | Confirmed. Silent divergence and counter squatting reproduced. |
+| 7 | FFI for Kotlin; WASM/Rust size | Partial | **Yes, size corrected** | Partial. The Loro part of the `.so` measures **1.4–1.9 MB** on arm64, not 4–7 MB. |
+
+### What was checked, per claim
+
+**Claim 1 (encoding stability): upheld, with more positive evidence.**
+- The version facts hold. crates.io shows `loro` 1.13.9 → 1.16.0 → 1.16.2, with no Rust 1.14.x, 1.15.x or 1.16.1 (1.9.0 is yanked). npm has 1.14.0–1.16.3. Several fixes R3 cites by version number (1.14.0, 1.14.1, 1.15.x, 1.16.1) are **JS-only release numbers**. In Rust they first ship in 1.16.0 or 1.16.2, so "require ≥ 1.16.2" is the right Rust floor.
+- **Cross-version round trips, both directions, with real old builds:**
+  - Old readers: Rust 1.16.2 wrote snapshots, updates, shallow snapshots and state-only blobs (tree with moves, meta text, map with binary, movable list with move and set, list, text). `loro-crdt` **1.0.9** and **1.10.8** imported every one of them and produced identical values.
+  - New reader: blobs written natively by 1.0.9 and 1.10.8 (tree, text, movable list, counter), and blobs re-exported by those old clients, imported into 1.16.2 with the same values. That is 46 of 54 cases. The other 8 are expected pendings: updates exported from a shallow-based doc can't be imported into an empty doc.
+- **The code confirms the limits R3 described:**
+  - `EncodeMode` accepts only modes 1–4. Any other mode is `IncompatibleFutureEncodingError`, so Loro has an explicit "future format" failure path.
+  - Modes 1 and 2 return `ImportUnsupportedEncodingMode`.
+  - `LoroValueKind::from_u8` accepts only tags 0–9. Anything else is `DecodeDataCorruptionError`.
+- **Net:** past compatibility is demonstrated, and a future guarantee is not given. R3's fix (exact pin, golden corpus, feature floor) stands. **The corpus can be seeded with the npm builds**, as done here, with no need to vendor old crates.
+
+**Claim 2 (shallow snapshots): upheld; several points upgraded from "documented" to "reproduced on 1.16.2".**
+- **Partial apply is real.** A blob held a valid post-root change and a change concurrent with the root. The result was `Err(ImportUpdatesThatDependsOnOutdatedVersion)`, **and** the valid change was applied.
+- **Pending forever.** The rejected peer's next change imports as `Ok` with `pending = {2: 1..2}` and never shows up.
+- **A never-synced peer's genesis change is rejected** with the same error.
+- **A stale device can't catch up from a shallow snapshot**, even with no local edits. Importing the snapshot into its existing doc returns `Ok`, puts every retained change in `pending`, and leaves the value unchanged. This is R3's N2, reproduced. It also means E1 §3 ("the offline device *can* import the other's shallow snapshot") is **wrong**: E1 checked only `Ok` and never checked the value or `pending`.
+- **The root lands far lower than requested.** With one unmerged op from another peer, asking for a root at `[50@1]` gave a root at `[0@1]`, the fork point, so all 50 ops were kept. After the compacting device made one local commit (a merge, single head), the root landed exactly where requested. **Compaction does nothing until the compacting device commits a change after merging.** That conflicts with R3's "never write housekeeping into group documents" (see M4).
+- **Checkpoints:**
+  - `fork_at` and `SnapshotAt` fail on a shallow doc even at its head, with `Not implemented: fork_at on shallow docs`.
+  - `checkout` below the root gives `SwitchToVersionBeforeShallowRoot`. Above the root it works.
+  - `StateOnly(after root)` works. `StateOnly(before root)` gives `FrontiersNotFound`.
+  - E1 §4 ("fork_at works") is true only on **non-shallow** documents.
+- **Correction on #1068.** The issue's exact reproduction **returns a clean `Err` on 1.16.2**; PR #1090 in 1.16.0 fixed it, and the issue was simply never closed. R3's "#1068 … still open" is accurate about the issue tracker but overstates the risk.
+- **PR #1083 case 2 aborts the process on 1.16.2 (reproduced).** Sequence:
+  1. A fresh doc receives a change whose dependency it doesn't have yet, so the change is parked.
+  2. The doc imports a shallow snapshot whose root trims that dependency.
+  3. The doc imports any valid later change from the dependency's peer.
+
+  Result: `pending_changes.rs:338` `unwrap()` on `Err(())`, then `poisoned LoroMutex` while unwinding, then **process abort**. This is exactly the order in which a new or stale device can fetch the design's Nostr slots (a member-device slot before the snapshot slot).
+- **Recovery tested** with `panic = "unwind"`. `catch_unwind` around the import, plus either `mem::forget` of the doc or dropping it inside a second `catch_unwind`, kept the process alive. Dropping it normally aborts. This refines R3's N4 fix: after a caught panic, the doc must never be reused or dropped normally.
+
+**Claim 3 (old clients preserve newer data): upheld, and the "state can be lost" sub-point is real and worse than R3 treated it.**
+- **Old-client setup:** a build without the `counter` feature imported a doc containing counters (a root counter and a counter inside a map). The import succeeded, and the counters read as `Null`.
+  - `StateOnly` and `ShallowSnapshot` exports then fail with `UnknownContainer` (confirmed).
+  - Full `Snapshot` and `Updates` exports succeed.
+- **Data loss reproduced.** The old client **built its doc from updates**, not from a snapshot, and then exported a full snapshot. A new client importing that snapshot shows `cnt = 0.0` instead of 3.0, and the root counter `c` (5.0) **disappears**. The new client's state then **disagrees with a replay of its own oplog** (`state-path == op-replay: false`). Replicas that bootstrapped from that snapshot therefore diverge permanently and silently from replicas that received updates. When the old client's doc came from a snapshot, the values survived.
+- **R3's fix #2 is harmful as written.** It says "old clients catch `UnknownContainer` … and fall back to a full snapshot", and that full snapshot is exactly the corrupting blob. Replacement rule: **a client must never publish a snapshot of a document that contains a container type it doesn't know. It publishes updates only.** Newer clients should prefer updates over snapshots from older app versions, or check a received snapshot by replaying it before trusting its state.
+- **Mergeable containers are safe on old clients (tested on 1.0.9 and 1.10.8).**
+  - They are not unknown *types*. An old client sees an 8-byte binary marker under the key, plus extra roots named `🤝:$meta>body`.
+  - It imports, edits, re-exports and even shallow-exports them without loss, and 1.16.2 resolves them correctly afterwards.
+  - The only cost is that an old app's UI sees binary junk and extra roots, so old app versions must ignore `🤝:` roots and binary values they don't expect.
+
+**Claim 4 (production readiness): upheld as partial, with three corrections.**
+- **#1046** (movable-list panic): its repro **passes and converges on 1.16.2**, which confirms R3's claim that PR #1058 fixed it.
+- **#1055** (undo after import deletes the original tree node): **reproduces on `loro-crdt` 1.13.7 and 1.13.8, and not on 1.13.9 or 1.16.3** (the issue's exact JS repro), nor on Rust 1.16.2. It is fixed. R3's "still open" is true only of the tracker, so drop it from the list of live risks.
+- **PR #1116** is a fix to **purging**, not to an existing convergence bug. `delete_root_container` couldn't purge a mergeable container whose owning tree node was deleted; see M1. R3's reading ("implies they currently may not converge") is not supported. The PR's "peers that never purge converge" describes the new purge ops.
+- **Confirmed:**
+  - Moving a deleted node back gives `TreeNodeDeletedOrNotExist`.
+  - Undoing a delete leaves the original ID deleted and creates a new node (`0@21` became `3@21`).
+  - The soft-delete advice (N8) stands.
+
+**Claim 5 (performance and size): the size estimate is wrong; low-end performance is still unverified.**
+- **Native size, measured on arm64 Android** with the design's release profile (`opt-level = "z"`, LTO, `codegen-units = 1`, `panic = "abort"`, `strip = true`) and NDK r29:
+
+  | Build | Stripped `.so` size | Loro's share |
+  |---|---|---|
+  | Crypto-only baseline | 304,056 B | none |
+  | Baseline + Loro (E6 probe) | 1,735,904 B | **≈ 1.43 MB** |
+  | Loro with a broad API surface (tree, meta text with marks, counter, lists, undo, subscriptions, JSON updates, `fork_at`, checkout, diff, shallow / state-only / snapshot export, `import_batch`) | 1,885,720 B | **≈ 1.9 MB** |
+  | Baseline + Loro at `opt-level = 3` | 2,509,888 B | **≈ 2.2 MB** |
+
+  R3's "4–7 MB per ABI" came from loro-py, a build with pyo3 bindings and a different profile, and is **2–4× too high**. Loro fits §10's "Rust core 8–15 MB" easily.
+- **The WASM size is confirmed** at 3,269,925 B (`loro-crdt` 1.16.3).
+- **Per-op sizes, measured and consistent with R3:**
+  - A single map-set update is **92 B** from a persistent peer and **101 B** when every op comes from a new peer.
+  - Snapshot cost for map sets is 3.9 B/op from one peer (keys overwritten) against **36.7 B/op with a new peer per op**.
+  - Creating a tree node and setting its title is a 115 B update.
+- **The cache fix is in core code:** the bounded 2048-entry value cache lives in core `loro-internal` (`state/container_store/inner_store.rs`), not in the WASM layer.
+- **Performance on a real low-end phone is still unmeasured.**
+
+**Claim 6 (PeerIDs): upheld.**
+- **Counter squatting reproduced.** A member imported V's history, called `set_peer_id(V)` and committed. Receiver R accepted the forged op. V's genuine op at the same counter was then **silently dropped** at R, while V's next op was accepted. V and R diverge permanently, and V never learns of the forged op (`converged=false`).
+- **The mechanism is in the code:** in the published crate source, `trim_the_known_part_of_change` compares counters only, and `check_id_is_not_duplicated` is `#[allow(unused)]`.
+- **The documentation matches:** the loro-docs source for PeerID reuse requires "persist the document's local data … and load it before fetching or applying any remote updates" and says never to let parallel processes share a PeerID.
+
+**Claim 7 (FFI): upheld.**
+- `loro-ffi`'s `uniffi.toml` has only a `[bindings.swift]` section.
+- A GitHub search finds no Kotlin binding; `moheng233/loro-java` has 0 stars and was last pushed 2026-05-09.
+- **Size is corrected** as in claim 5.
+- **Built `.so` files are already 16 KB-aligned** (every `LOAD` segment has `p_align = 16384`) with the NDK r29 already installed, so N15 is handled by the toolchain. Keep a CI check anyway.
+
+### Missed or wrong in R3 (and in the sibling E1 report)
+
+- **M1. Shallow snapshots do purge tombstones, except mergeable children.** This overturns part of E1 §2 and conflicts with R3's `ensureMergeable*` advice.
+  - Test: E1's two-year churn run again (about 20 live items; 5 added and 5 deleted per day), adding a shallow snapshot at head, which E1 never measured.
+
+    | Model | State-only | Shallow snapshot at head |
+    |---|---|---|
+    | LoroTree | 113 KB | **1.2 KB** |
+    | Movable list of maps | 116 KB | **1.1 KB** |
+    | Map of maps | 170 KB | 25.9 KB (deleted-key tombstones stay) |
+    | **Tree with one mergeable text per node** | 196 KB | **129.8 KB** |
+
+    A fresh document holding only the live data is 1.1 KB, and every shallow import had the right value.
+  - So "deleted items purged at compaction" **does work** for tree and movable-list models when the compaction is a shallow snapshot at a causally stable head. E1's "Refuted: needs document re-creation" was based on `StateOnly`, which keeps dead containers' state.
+  - Mergeable child containers are **root** containers and are never trimmed. `delete_root_container` on one whose owning node is already deleted fails in 1.16.2: it prints `Failed to clear handler: ContainerDeleted`, returns nothing, and the content stays in the shallow snapshot. That is PR #1116, still open.
+  - **Fix:**
+    - Purge each task's mergeable children (`delete_root_container`, which works while the owner is alive) **before** calling `tree.delete` at the 30-day purge.
+    - Or wait for PR #1116.
+    - Or keep plain child containers where concurrent creation is impossible, for example ones created together with the node.
+  - Also, **`StateOnly` is a poor checkpoint format.** It keeps dead-container state (113 KB against 1.2 KB), so R3's "store checkpoints as `StateOnly` blobs" should use shallow-at-version or app-level JSON.
+- **M2. The old-client snapshot fallback corrupts data** (claim 3 above). This is the most important correction to R3's fixes.
+- **M3. The PR #1083 abort is live on 1.16.2**, and the design's slot fetch order can trigger it. **Fix:**
+  - Bootstrap from the snapshot slot into a **fresh** doc **before** importing any device slots.
+  - Never import a shallow snapshot into a doc that has parked changes; start a fresh doc, then re-import the buffered blobs.
+  - Build with `panic = "unwind"`, wrap every Loro call in `catch_unwind`, quarantine the doc (never reuse or drop it normally), and reload it from disk.
+  - Watch PR #1083.
+- **M4. An unmerged concurrent head pins the shallow root to the fork point**, so compaction is silently ineffective. The compacting device needs a single-head frontier, which means a local commit after merging. The design has to choose between a tiny app-level op at compaction time and waiting for organic edits; R3's "never write housekeeping data" would need an explicit exception here. After every shallow export, check `shallow_since_frontiers()` against the requested root.
+- **M5. Pending changes are lost on restart (N11 confirmed).** An out-of-order update was pending, the doc was exported as a snapshot and reloaded, and the missing dependency was then delivered. The pending change was **gone** (value `{k1}`, not `{k1, k2}`). R3's persist-raw-blobs fix is required.
+- **M6. RustSec facts in N10 are wrong in the alarming direction.**
+  - **RUSTSEC-2020-0041** (HIGH) affects `sized-chunks` < 0.6.3, patched in ≥ 0.6.3. Loro uses **0.6.5**, so it does **not** apply.
+  - **RUSTSEC-2020-0096** (`im`) is patched in ≥ 15.1.0, and Loro uses 15.1.0.
+  - What does apply is informational only: `im` unmaintained (2026-0248), `im` `OrdSet` unsoundness (2023-0126), `sized-chunks` unmaintained (2026-0251), and **RUSTSEC-2026-0255**. That last one is a `sized-chunks` panic-safety unsoundness with no patch, "reachable … using `catch_unwind` with types whose destructors can panic", which matters because M3's fix introduces `catch_unwind`.
+  - The MPL-2.0+ licensing point stands.
+- **M7. The sibling E1 report needs corrections:**
+  - §3: the offline device's shallow import returns `Ok` but applies nothing.
+  - §4: `fork_at` works only on non-shallow docs.
+  - §2: tombstones, per M1.
+
+### Reproduction
+
+Code and a README are in `research/experiments/rust/r3_verify/` (crates `v3`, `v3nc`, `v3ab`, `v3x`, `e6full`, and Node scripts in `js/`).

@@ -36,7 +36,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] E5 Helper network simulation: churn, replication factor, availability, reputation, eclipse
 - [x] E6 Android size: release build of engine prototype (iroh + Loro) for arm64-v8a, stripped
 - [x] E7 Invite codes: EFF list, entropy, derivation, expiry
-- [ ] E8 Key epochs: rotation prototype and tests
+- [x] E8 Key epochs: rotation prototype and tests
 
 ### P3: Decision list (the user decides; DO NOT edit DESIGN.md / UX-PRINCIPLES.md)
 - [ ] `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
@@ -61,7 +61,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-Remaining: E8 key-epoch analysis (use R7), collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
+Remaining: collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
@@ -75,3 +75,4 @@ Remaining: E8 key-epoch analysis (use R7), collect the P1 research reports (work
 - A5 CRITICAL: a member reusing another's PeerID causes permanent silent divergence (a real edit lost for one member) and frames the victim as author. Proposal: PeerID = hash(device key), signed updates, own-ops-only per device, checked on the isolated copy; drop the shared snapshot slot in favor of verified document epochs. Mass delete is recoverable via history (keep a min 30-day window). Size bombs: a 50 MB update is imported with no limit; add engine limits.
 - A2-A4 (analysis): rollback only delays (monotonic signed reads); flooding degrades helpers but not delivery; gap: helpers can't tell legit reads, so cap young groups. Eclipse: the bootstrap hash must be keyed with the group secret; add IP/ASN diversity against sleepers.
 - A7: one global iroh endpoint ID links a device's groups; the DHT discovery key must rotate with the secret. A8: link/QR carry the permanent secret, so every leak (clipboard history, cloud clipboard, browser sync, photo backups) is permanent. Proposal: links/QR carry short-lived invites (same mechanism as codes).
+- E8: epoch simulator, 3000 randomized runs: concurrent add+remove re-included removed devices in 441 runs until the rule "every new epoch subtracts all known removals" was added; then 3000/3000 OK (no leaks to removed devices, convergence). Mutual removal empties small groups (38/3000).
