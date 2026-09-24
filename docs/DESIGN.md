@@ -121,9 +121,7 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
     - The name lives in the personal group and is published to each group's member list. Changing it updates everywhere.
     - It's asked for the first time the user shares or joins a list, never at first launch. Solo users never need one.
     - Every person gets a generated avatar (initials on an HCT hue derived from their identity key). An optional small profile photo can come later, stored as a tiny thumbnail in the group document, not as a blob.
-    - Duplicate names in a group are told apart by avatar and, if needed, a short identity tag ("Alex · 4F2A").
-    - Users can set private nicknames for others, visible only to themselves (a sub-option).
-  - Recovery simplifies: Block Store only needs the personal group secret; everything else follows from it.
+    - Duplicate names in a group are told apart by avatar and, if needed, a short identity tag ("Alex · 4F2A").  - Recovery simplifies: Block Store only needs the personal group secret; everything else follows from it.
   - **Linking requires confirmation on an existing device** ("Link 'Pixel 8'? Only approve if it's yours"), and the link QR expires after 5 minutes, because linking grants access to everything. This is the only join flow with approval.
 - **Key epochs (in the engine from day one).** Group secrets can be rotated: a new epoch key is encrypted to each remaining device's public key and distributed through the group. Removed devices keep what they already had but can't read anything new.
   - Used for **"Remove device"** (lost or stolen): removing a device rotates the personal group and every group the user belongs to, automatically. Other members' apps switch over silently.
