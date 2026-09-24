@@ -427,3 +427,108 @@ if (mAppWidgetManager != null
 - whether Chrome can set a sensitive-clipboard flag;
 - whether Xiaomi's clipboard-access prompt exists on global ROMs;
 - whether the JobScheduler batching flags are enabled in production A16/A17 builds.
+
+---
+
+## Independent verification
+
+*Added 2026-09-24 by a separate verifier who tried to refute the findings above. Method: AOSP **release branches** (`android14-release`, `android15-release`, `android16-release`, `android16-qpr1/qpr2-release`, `android17-release`) instead of `main`, including the framework resource file that sets the Doze defaults (`core/res/res/values/config_device_idle.xml`); AndroidX Glance and Lifecycle source; and docs and Play pages the report didn't cite (Play target-API page, 16 KB page-size page, Restore Credentials, the A15 force-stop section). Research only: nothing was installed and no relay traffic was sent.*
+
+### Verdicts on the checked claims
+
+| # | Report verdict | Upheld? | Corrected verdict / severity | Main reason |
+|---|---|---|---|---|
+| C1 | Partial, medium | Yes, but the Doze timing is wrong | **Partial, high** | On Android 15+ deep Doze starts about **1–3 min** after the screen goes off on a still phone, not about 1 h (see V1) |
+| C2 | Partial, medium | Yes | Partial, medium | `isBoundWidgetPackage()` → `STANDBY_BUCKET_ACTIVE` is still in `android17-release`; A16/17 ACTIVE quota 20 min / 60 min confirmed in `android17-release` code |
+| C3 | Partial, medium | Yes, but the fix needs a timing change | Partial, medium | All constants unchanged in `android17-release`; the EJ "starts before `schedule()` returns" guarantee doesn't apply at `ProcessLifecycleOwner` ON_STOP (see V3) |
+| C4 | Partial, high | Yes, with nuance | Partial, high | Constants confirmed in A17. The charge-limiter risk depends on the device, and the A15 firewall is behind a flag (see V4) |
+| C5 | Confirmed, medium | Yes | Confirmed, medium | FGS timeout doc: 6 h / 24 h per type, reset when the app comes to the foreground, target 35+ |
+| C6 | Partial, medium | Yes | Partial, medium | LNP doc: opt-in on 36 via `RESTRICT_LOCAL_NETWORK`, mandatory for target 37+; IPv6 "directly-connected routes" and "multiple-subnets" count as local |
+| C7 | Confirmed, low | Yes | Confirmed, low | Two refinements (see V7) |
+| C8 | Partial, high | Yes, and it's worse | **Partial, high** | Cloud restore needs Android 12+ on non-Pixel phones (see V8) |
+| C9 | Confirmed, medium | Yes, but a key gap was missed | **Confirmed with a data-loss gap, high** | Auto Backup has the same skip-restore gap as Block Store (see V9) |
+| C10 | Partial, medium | Yes | Partial, medium | Toast only on `getPrimaryClip()`; 1 h auto-clear unchanged in A17 |
+| C11a | Partial, low | Yes, one statement is too strong | Partial, low | The checkbox backport is confirmed. Glance sessions are regular one-time work, and updates within a live 45 s session don't start new jobs |
+| C11b | Confirmed, none | Yes | Confirmed, none | ML Kit: no camera permission; needs Play services; minSdk 23 (the app's is 26) |
+
+### V1. Doze starts within minutes on Android 15+, not after an hour (C1)
+
+- `DeviceIdleController` reads its defaults from framework resources (`initDefault()`). The in-code `mDefault…` values the report quoted (30 min + 30 min) are overridden. The release-branch values are:
+
+  | Resource | A14 | A15 | A16 / A16 QPR1–2 / **A17** |
+  |---|---|---|---|
+  | `device_idle_inactive_to_ms` | 30 min | 1 min | **15 s** |
+  | `device_idle_idle_after_inactive_to_ms` | 30 min | 1 min | **15 s** |
+  | `device_idle_sensing_to_ms` / `locating_to_ms` | 4 min / 30 s | 30 s / 15 s | 15 s / 15 s |
+  | `device_idle_idle_to_ms` (first deep window) | 60 min | **15 min** | 60 min |
+  | `device_idle_max_idle_to_ms` | 6 h | 6 h | 6 h |
+  | `device_idle_light_max_idle_to_ms` | 15 min | 30 min (linear growth) | 30 min (linear growth) |
+
+- **Consequence:** a phone lying still with the screen off (desk, nightstand) reaches deep Doze within about **1 min on A16/A17** and about 3 min on A15. On A16/A17 it then syncs at about +1 h, +3 h, +7 h, +13 h. In a pocket (moving), light idle allows maintenance windows 5 → 30 min apart. "Usually within 15 minutes" is wrong for most idle time, not only overnight.
+- OEM overlays and Google's server-side config can change these values, so E2 should measure the real gaps on a Pixel, a Samsung and a Xiaomi.
+- **Fix:** the §8 text should say something like "when your phone is lying unused, updates can take an hour or more". Treat 15 min as the best case while the phone is in use.
+- Samsung detail the report dropped: "sleeping" applies to apps unused for about 3 days **"and causing poor system health (ex. battery consumption)"**. Deep sleeping (16 days) has no such condition.
+
+### V2. Cite release branches, not `main`
+
+`QuotaController` on googlesource `main` still shows ACTIVE = 10 min per 30 min. `android17-release` has `DEFAULT_CURRENT_ALLOWED_TIME_PER_PERIOD_ACTIVE_MS` = 20 min and `DEFAULT_LATEST_WINDOW_SIZE_ACTIVE_MS` = 60 min, which matches the docs table. The public `main` lags the release branches, so future AOSP citations should use `android16-release` / `android17-release`. Every other constant the report cites was re-checked in `android17-release` and is unchanged: FGS grace 5 s, deferral 10 s / 2 min, `shortService` 3 min, dataSync 6 h, runtime while charging 30 min, batching 31 min, `BATTERY_CHARGING_ENFORCE_LEVEL` 90 and 15 min delay, clipboard 1 h, `MIN_WINDOW` 10 min, background firewall 5 s / 2 s / 20 s.
+
+### V3. Expedited flush: enqueue before the app stops being foreground (C3)
+
+- The `JobInfo.setExpedited` javadoc guarantees a start before `schedule()` returns only for **the foreground app** (TIRAMISU+).
+- `ProcessLifecycleOwner` posts ON_PAUSE/ON_STOP with `TIMEOUT_MS = 700` ms, so at ON_STOP the app is no longer TOP. `JobSchedulerService.scheduleAsPackage()` still tries to run a ready job right away, but there's no guarantee.
+- **Fix:** enqueue the expedited work from `Activity.onPause` (via `ActivityLifecycleCallbacks`) or after each local commit while the app is visible. Keep ON_STOP only as the backstop.
+- `QuotaController` gives EJs a **1 min top-app grace** after the app leaves TOP (`EJ_GRACE_PERIOD_TOP_APP_MS`), so this doesn't burn EJ quota.
+- The Play FGS help page (13392821) doesn't name `shortService`, so whether it needs a Play Console declaration is still **unverified**.
+
+### V4. Charging nuances (C4)
+
+- A charge limiter that **holds** the level steady doesn't flip JobScheduler to "discharging". `BatteryStatsImpl` flips only when the level **drops** while plugged in.
+- Devices whose HAL reports an adaptive or long-life charging policy count as charging at ≥ 70 % (`isConsideredCharging()`). So the limiter risk depends on the device; test in E7, don't assume it.
+- "Mostly refuted" is slightly too strong. While JobScheduler considers the phone charging, chained one-time jobs can start with sub-second gaps, well inside the 2 s firewall and 10 s freezer delays. The problem is the conditions (charging semantics, batching, concurrency, OEM behavior), not the chaining mechanism. The report's fix (probabilistic reachability; don't promise it) still holds.
+- The background firewall (`FIREWALL_CHAIN_BACKGROUND`) is enabled unconditionally in `android16-release` and `android17-release`. In `android15-release` it's behind the aconfig flag `network_blocked_for_top_sleeping_and_above` ("boot-stable"), so A15 devices may or may not have it.
+
+### V7. Exact alarms: two refinements (C7)
+
+- AOSP `AlarmManagerService` allows **72** while-idle alarms per hour for apps targeting S+. The 7/h figure is the pre-S compatibility quota, which the docs table quotes.
+- The A14 exact-alarm doc says that when data moves by **backup and restore, the permission is denied**. After a restore or D2D transfer, reminders silently fall back to inexact alarms until the user grants the permission again. Check it on first launch after a restore.
+
+### V8. Block Store cloud restore needs Android 12+ on non-Pixel phones (C8)
+
+The Block Store doc says for cloud restore: "Target devices are supported based on their vendors. Pixel devices can use this feature from Android 9 (API 29) and all other devices must be running Android 12 (API 31) or above". D2D restore works on Android 9+ targets. Restore Credentials (Credential Manager) are also restored only during new-device setup (cloud or D2D), so they don't close the skip-restore gap either.
+
+### V9. Auto Backup has the same skip-restore gap, so §11's "data is lost only if…" is false (C9)
+
+- The Auto Backup doc says: "If the user didn't go through the device setup wizard, then the device can restore only from its own backups."
+- So a single-phone user who skips restore during setup gets neither Block Store (personal secret) nor Auto Backup (solo lists). The Nostr copies are then unreadable, because they're encrypted with group secrets that only the personal group holds.
+- That contradicts DESIGN.md §11: "Data is lost only if a user had no Android backup, no other devices…".
+- **Fix:** on first launch with nothing restored, show a one-time plain-words prompt: "Had this app on another phone? Link it, or restore from your backup file". Also recommend connecting a cloud backup to single-device users (see the report's C8 fix).
+
+### Important items missed for R4
+
+1. **Doze timing on A15+** (V1). The largest correction, and it changes the §8 user-facing text.
+2. **Force-stop on Android 15** (A15 all-apps behavior doc):
+   - The system cancels all pending intents, and **"temporarily disables all the app's widgets"** (grayed out) until the app is opened again.
+   - The app stays in the stopped state, so no jobs or alarms run.
+   - OEM "cleaners" and the user's force-stop therefore kill sync *and* the widget. The widget's ACTIVE-bucket exemption doesn't help, and the "blocked background sync" detector can't run until the app is opened.
+   - **Fix:** detect the gap on next launch (`ApplicationExitInfo` `REASON_USER_REQUESTED` / last successful sync time) and explain it.
+3. **16 KB page-size requirement** for the Rust `.so` files:
+   - Play requires 16 KB support for apps targeting 35+ on 64-bit devices. Updates that don't comply are blocked from **February 1, 2027** (page-sizes doc).
+   - NDK r28+ aligns to 16 KB by default; older NDKs need `-Wl,-z,max-page-size=16384`. AGP 8.5.1+ is needed for zip alignment.
+   - Add an ELF alignment check to the §10 build size check.
+4. **Play target API timeline:** new apps and updates must target **36 since August 31, 2026** (extension to November 1, 2026). Going by the yearly pattern (an inference), target 37 will probably be required around August 2027, and then local-network enforcement can't be avoided.
+5. **Target 37 "safer native DCL":** `System.load()` of a writable native file throws `UnsatisfiedLinkError`. This matters only if engine libraries are ever loaded from app storage, not from the APK. Low.
+6. **Glance cost is per session, not per redraw.** A widget session is a plain (non-expedited) `OneTimeWorkRequest`; updates that arrive while it's live (45 s initial timeout) are events inside the same job. Batching updates into one burst per sync run keeps them inside one session. A tap on the widget is still subject to JobScheduler start latency.
+7. **Clipboard toast conditions:** `ClipboardService` shows no toast when the clipboard is empty or the clip belongs to the calling app. The toast appears on most, not all, fresh installs.
+
+### Sources used by the verifier (independent of the report's)
+
+- AOSP release branches (android.googlesource.com, `refs/heads/android14-release`, `android15-release`, `android16-release`, `android16-qpr1-release`, `android16-qpr2-release`, `android17-release`): `core/res/res/values/config_device_idle.xml`; `QuotaController.java`; `AppStandbyController.java`; `NetworkPolicyManagerService.java`; `NetworkPolicyManager.java`; `ActivityManagerConstants.java`; `JobSchedulerService.java`; `BatteryStatsImpl.java`; `ClipboardService.java`; `AlarmManagerService.java`
+- AndroidX `ProcessLifecycleOwner.kt` (`TIMEOUT_MS = 700`): https://github.com/androidx/androidx/blob/androidx-main/lifecycle/lifecycle-process/src/main/java/androidx/lifecycle/ProcessLifecycleOwner.kt
+- Glance `SessionManager.kt` / `SessionWorker.kt` / `CheckBoxTranslator.kt` (androidx-main)
+- Android 15 behavior changes, force-stop and widgets: https://developer.android.com/about/versions/15/behavior-changes-all
+- Play target API requirements: https://developer.android.com/google/play/requirements/target-sdk
+- 16 KB page sizes: https://developer.android.com/guide/practices/page-sizes
+- Restore Credentials: https://developer.android.com/identity/sign-in/restore-credentials
+- Block Store, Auto Backup, local network permission and definition, FGS timeout, background FGS start, exact alarms (A14), and the Play pages 9888170 and 13392821, re-read on 2026-09-24 for the specific quotes above
+- Samsung app management (re-read for the "causing poor system health" condition): https://developer.samsung.com/mobile/app-management.html

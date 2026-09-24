@@ -37,6 +37,9 @@ Date: 2026-09-24. Code: `research/experiments/e5_helper_sim.py` (2,000 helpers, 
 - **Reputation helps against dishonest helpers:** +6–10 points at r=6–10. At r ≥ 20 the network tolerates even 50% dishonest helpers at ~99.5%.
 - Helpers alone never guarantee delivery in the first hour after a write, when few are online. That's why Nostr and member devices run in parallel.
 
+## Reality check from R5 (prior art): participation
+This simulation assumed 2,000 helpers. R5 found real volunteer participation is **0.01–0.3%** of users (Syncthing ~100 relays for ~1M devices; Tor ~8k relays for ~2.5M daily users, with active recruitment and funding), not the ~10% §7a implies. At 10k users that's roughly **1–30 helpers**, far too few for r = 20. **The helper network only becomes meaningful at hundreds of thousands of users,** and even then it's the first network of its kind (no precedent serves offline phones with volunteers). R8 adds that phone helpers relaying for strangers conflict with Play's Device & Network Abuse policy (proxy services only allowed when they're the app's core purpose). These points belong in the decision list.
+
 ## Follow-ups
 - Model tier-1 member mailboxes and Nostr together for end-to-end availability.
 - Eclipse is not modeled: helper sets are chosen by reliability, not ID (see A4).
