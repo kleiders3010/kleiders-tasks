@@ -46,7 +46,8 @@
 - [ ] n0 DNS discovery as an optional best-effort layer (a config flag on the iroh endpoint)
 - [x] Live mode (`kt-net/src/live.rs`): Nostr live subscriptions push members' slots (29 ms locally); knocks (ephemeral kind 25711, throwaway keys, sealed whereabouts) make online members dial each other at once (D49 (b) signaling)
 - [x] Helper storage (`kt-net/src/helper.rs`): RAM store for strangers' slots on the device's iroh endpoint (ALPN `kt/helper/1`); signed puts; load-scaled proof of work for new slots (refreshes free); per-topic and young-topic caps; eviction by least recent refresh; session start for restart detection. `HelperMailbox` client (plugs into the mailbox interface) with local reliability records (reachability, latency, withholding, restarts, exclusion). Tested: a stranger's helper carries changes between members who are never online together
-- [ ] Helper network, remaining: replication among a group's helper set, handoff before going offline, helper set recorded in the group document, sharing reliability records within groups, daily-rotated bootstrap point, declared evictions (so eviction isn't scored as withholding), phone helping rules (Wi-Fi + charging jobs, M4)
+- [x] Helper replication (fan-out lists, forwarded signed puts), handoff before going offline, declared evictions
+- [ ] Helper network, remaining: helper set recorded in the group document (app layer), sharing reliability records within groups, daily-rotated bootstrap point for first joins (M3), phone helping rules (Wi-Fi + charging jobs, M4)
 - [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
 - [ ] Operator manifest, real-world part (needs the user): generate the real offline operator key (same handling as the release keystore), choose the hosting URLs (jurisgames.com, the public repo)
 
@@ -66,7 +67,7 @@
 - [ ] Notifications from merged state
 
 ## Current state
-- **M2 in progress (2026-09-24).** 68 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- **M2 in progress (2026-09-24).** 71 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
 - Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
