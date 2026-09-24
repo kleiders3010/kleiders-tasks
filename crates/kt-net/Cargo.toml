@@ -1,0 +1,23 @@
+[package]
+name = "kt-net"
+description = "Transports for kt-engine: capability-based mailboxes (Nostr first), sync driver"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+kt-engine = { path = "../kt-engine" }
+tokio.workspace = true
+tokio-websockets.workspace = true
+futures-util.workspace = true
+nostr.workspace = true
+base64.workspace = true
+http.workspace = true
+rand.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+blake3.workspace = true
+
+[dev-dependencies]
+loro.workspace = true
+rand.workspace = true

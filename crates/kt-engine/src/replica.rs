@@ -52,7 +52,7 @@ impl Message {
 
 /// App-specific knowledge the engine needs for document epochs (D24). The engine stays
 /// generic (principle 7); the domain crate implements this.
-pub trait DocSemantics {
+pub trait DocSemantics: Send + Sync {
     /// Canonical representation of the live state; equal means "same list for the user".
     fn normalized(&self, doc: &LoroDoc) -> Vec<u8>;
     /// A fresh document with the same live state (no history, no tombstones), authored by `peer`.
