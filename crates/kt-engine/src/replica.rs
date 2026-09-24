@@ -28,7 +28,7 @@ use crate::storage::{self, Layout};
 use crate::{crypto, wire, Error, Result};
 
 mod slots;
-pub use slots::{topic_for, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
+pub use slots::{topic_for, MemberWhereabouts, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
 
 const MSG_TAG: [u8; 2] = *b"MS";
 const MSG_VERSION: u16 = 1;
@@ -41,6 +41,9 @@ pub enum Message {
     Envelope(Vec<u8>),
     /// A member's signed per-document generation report (see `slots`).
     Status(Vec<u8>),
+    /// A member device's signed, transport-defined "where am I" (network addresses), shared
+    /// only inside sealed slots (DESIGN §6 discovery).
+    Whereabouts(Vec<u8>),
 }
 
 impl Message {
@@ -127,6 +130,8 @@ pub struct Replica {
     /// Hashes of payloads already validated and imported (skip re-running the sandbox on
     /// resent slots). Bounded; forgetting only costs a re-validation.
     imported: std::collections::HashSet<[u8; 32]>,
+    /// This device's current whereabouts (opaque, from the transport layer).
+    whereabouts: Option<Vec<u8>>,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
 }
@@ -148,6 +153,7 @@ impl Replica {
             accepted_groups: BTreeSet::new(),
             parked: Vec::new(),
             imported: std::collections::HashSet::new(),
+            whereabouts: None,
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
         };
@@ -464,6 +470,7 @@ impl Replica {
             }
             Message::Envelope(b) => self.apply_envelope_bytes(&b, true),
             Message::Status(b) => self.receive_status(&b),
+            Message::Whereabouts(b) => self.receive_whereabouts(&b),
         }
     }
 

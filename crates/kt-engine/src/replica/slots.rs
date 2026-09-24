@@ -83,6 +83,23 @@ struct StatusRecord {
 }
 
 const STATUS_TAG: [u8; 2] = *b"ST";
+const WHERE_TAG: [u8; 2] = *b"WH";
+
+#[derive(Serialize, Deserialize)]
+struct WhereBody {
+    group: GroupId,
+    device: DeviceId,
+    created_ms: u64,
+    data: Vec<u8>,
+}
+
+/// A member device's latest whereabouts, as received.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MemberWhereabouts {
+    pub device: DeviceId,
+    pub created_ms: u64,
+    pub data: Vec<u8>,
+}
 
 #[derive(Serialize, Deserialize)]
 struct SlotPayload {
@@ -212,6 +229,9 @@ impl Replica {
                 out.push(v);
             }
             out.push(t.epoch.0.to_vec());
+            if let Some(w) = &self.whereabouts {
+                out.push(w.clone());
+            }
         }
         Ok(out)
     }
@@ -239,6 +259,56 @@ impl Replica {
             .filter(|m| **m != me)
             .any(|m| known.get(&(*m, *d)).copied().unwrap_or(0) < mine);
         lagging.then(|| b[8..].to_vec())
+    }
+
+    /// Set what this device publishes as its whereabouts (transport-defined bytes, e.g. an
+    /// iroh endpoint address). Changing it changes the slot content (so it gets rewritten).
+    pub fn set_whereabouts(&mut self, data: Option<Vec<u8>>) {
+        self.whereabouts = data;
+    }
+
+    /// Latest whereabouts of the other current members of `g`.
+    pub fn member_whereabouts(&self, g: &GroupId) -> Vec<MemberWhereabouts> {
+        let Some(state) = self.groups.get(g) else { return Vec::new() };
+        let me = self.identity.id();
+        self.stored_whereabouts(g)
+            .into_iter()
+            .filter(|w| w.device != me && state.epochs.is_current_member(&w.device))
+            .collect()
+    }
+
+    fn stored_whereabouts(&self, g: &GroupId) -> Vec<MemberWhereabouts> {
+        std::fs::read(self.layout.group_dir(g).join("whereabouts"))
+            .ok()
+            .and_then(|b| postcard::from_bytes(&b).ok())
+            .unwrap_or_default()
+    }
+
+    fn whereabouts_record(&self, g: &GroupId) -> Result<Option<Vec<u8>>> {
+        let Some(data) = &self.whereabouts else { return Ok(None) };
+        let body = WhereBody { group: *g, device: self.identity.id(), created_ms: super::now_ms(), data: data.clone() };
+        let body = wire::encode(WHERE_TAG, 1, &body)?;
+        let sig = self.identity.sign(&body).to_vec();
+        Ok(Some(postcard::to_stdvec(&StatusRecord { body, sig }).map_err(|e| Error::Encoding(e.to_string()))?))
+    }
+
+    pub(super) fn receive_whereabouts(&mut self, bytes: &[u8]) -> Result<()> {
+        let rec: StatusRecord = postcard::from_bytes(bytes).map_err(|e| Error::Encoding(e.to_string()))?;
+        let body: WhereBody = wire::decode(WHERE_TAG, 1, &rec.body)?.1;
+        let sig: [u8; 64] = rec.sig.as_slice().try_into().map_err(|_| Error::Crypto("bad signature length"))?;
+        crypto::verify(&body.device.0, &rec.body, &sig)?;
+        let state = self.groups.get(&body.group).ok_or_else(|| Error::NotFound("group".into()))?;
+        if !state.epochs.is_current_member(&body.device) || body.data.len() > 4096 {
+            return Err(Error::Rejected("whereabouts from a non-member or too large".into()));
+        }
+        let mut all = self.stored_whereabouts(&body.group);
+        if all.iter().any(|w| w.device == body.device && w.created_ms >= body.created_ms) {
+            return Ok(());
+        }
+        all.retain(|w| w.device != body.device);
+        all.push(MemberWhereabouts { device: body.device, created_ms: body.created_ms, data: body.data });
+        let b = postcard::to_stdvec(&all).map_err(|e| Error::Encoding(e.to_string()))?;
+        crate::storage::write_atomic(&self.layout.group_dir(&body.group).join("whereabouts"), &b)
     }
 
     fn status_record(&self, g: &GroupId) -> Result<Vec<u8>> {
@@ -317,6 +387,9 @@ impl Replica {
         let key = state.keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("head key".into()))?;
         let docs: Vec<_> = state.docs.keys().copied().collect();
         messages.push(Message::Status(self.status_record(&t.group)?).encode()?);
+        if let Some(w) = self.whereabouts_record(&t.group)? {
+            messages.push(Message::Whereabouts(w).encode()?);
+        }
         for d in docs {
             let ds = &self.groups[&t.group].docs[&d];
             // The generation's proposal (the document's base), if nobody else carries it.

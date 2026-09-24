@@ -14,7 +14,20 @@ use serde::{Deserialize, Serialize};
 
 use kt_engine::replica::{ReadTopic, Replica};
 
-use crate::mailbox::{Mailbox, SlotWrite, WriteOutcome};
+use crate::mailbox::{Mailbox, SlotRead, SlotWrite, WriteOutcome};
+use crate::slotstore::SlotStore;
+
+/// Pseudo mailbox index for the local slot store in `written`.
+const STORE: usize = usize::MAX;
+
+/// Writer identity for own slots in the local store (and so on peer-to-peer links).
+pub fn store_writer(writer_seed: &[u8; 32]) -> [u8; 32] {
+    *blake3::Hasher::new_derive_key("kt/store-writer/v1").update(writer_seed).finalize().as_bytes()
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
 
 /// Rewrite an unchanged slot after this long (mailboxes may prune old data).
 pub const REFRESH: Duration = Duration::from_secs(3 * 24 * 3600);
@@ -66,6 +79,7 @@ pub struct Syncer {
     /// Slots the last read showed missing (force a rewrite).
     lost: Mutex<HashSet<(usize, [u8; 32], [u8; 32])>>,
     state_file: Option<PathBuf>,
+    store: Arc<SlotStore>,
 }
 
 impl Syncer {
@@ -76,6 +90,16 @@ impl Syncer {
     /// Like [`Syncer::new`], remembering what was written and read in `state_file`.
     /// Mailbox indices must stay stable across runs for a given file.
     pub fn with_state(replica: Arc<Mutex<Replica>>, mailboxes: Vec<Arc<dyn Mailbox>>, state_file: Option<PathBuf>) -> Arc<Syncer> {
+        Self::build(replica, mailboxes, state_file, None)
+    }
+
+    /// Full constructor: `store_file` keeps the local slot store (own groups) on disk.
+    pub fn build(
+        replica: Arc<Mutex<Replica>>,
+        mailboxes: Vec<Arc<dyn Mailbox>>,
+        state_file: Option<PathBuf>,
+        store_file: Option<PathBuf>,
+    ) -> Arc<Syncer> {
         let st: PersistedState = state_file
             .as_ref()
             .and_then(|p| std::fs::read(p).ok())
@@ -88,7 +112,12 @@ impl Syncer {
             seen: Mutex::new(st.seen.into_iter().collect()),
             lost: Mutex::new(HashSet::new()),
             state_file,
+            store: Arc::new(SlotStore::open(store_file)),
         })
+    }
+
+    pub fn store(&self) -> Arc<SlotStore> {
+        self.store.clone()
     }
 
     fn save(&self) {
@@ -100,6 +129,7 @@ impl Syncer {
         if let Ok(b) = postcard::to_stdvec(&st) {
             let _ = kt_engine::storage::write_atomic(p, &b);
         }
+        self.store.save();
     }
 
     pub fn replica(&self) -> Arc<Mutex<Replica>> {
@@ -121,6 +151,7 @@ impl Syncer {
         let mut report = WriteReport::default();
         for (t, fp) in plans {
             let due: Vec<usize> = (0..self.mailboxes.len())
+                .chain(std::iter::once(STORE))
                 .filter(|mi| {
                     let key = (*mi, t.topic, t.writer_seed);
                     if self.lost.lock().expect("lock").contains(&key) {
@@ -143,6 +174,11 @@ impl Syncer {
                 continue;
             };
             let w = SlotWrite { topic: t.topic, writer_seed: t.writer_seed, blob };
+            if due.contains(&STORE) {
+                self.store.put(&SlotRead { topic: t.topic, writer: store_writer(&t.writer_seed), version: now_ms(), blob: w.blob.clone() });
+                self.written.lock().expect("lock").insert((STORE, t.topic, t.writer_seed), Written { fingerprint: fp, at: now_secs() });
+            }
+            let due: Vec<usize> = due.into_iter().filter(|mi| *mi != STORE).collect();
             let outcomes = futures_util::future::join_all(due.iter().map(|mi| self.mailboxes[*mi].write(&w))).await;
             for (mi, o) in due.iter().zip(outcomes) {
                 let key = (*mi, t.topic, t.writer_seed);
@@ -200,6 +236,7 @@ impl Syncer {
                         continue;
                     }
                     seen.insert(key, s.version);
+                    self.store.put(&s);
                     marked.entry(s.topic).or_default().push(key);
                     by_topic.entry(s.topic).or_default().push(s.blob);
                 }
@@ -240,6 +277,46 @@ impl Syncer {
             }
         }
         self.save();
+        report
+    }
+
+    /// Apply slots received from a peer: keep the newer ones in the store and open them.
+    pub async fn apply_incoming(&self, slots: Vec<SlotRead>) -> ReadReport {
+        let mut report = ReadReport::default();
+        let replica = self.replica.clone();
+        let (topics, my_targets) = tokio::task::spawn_blocking(move || {
+            let r = replica.lock().expect("replica lock");
+            (r.read_topics(), r.slot_targets())
+        })
+        .await
+        .unwrap_or_default();
+        let own: HashSet<[u8; 32]> = my_targets.iter().map(|t| store_writer(&t.writer_seed)).collect();
+        let mut by_topic: HashMap<[u8; 32], Vec<Vec<u8>>> = HashMap::new();
+        for s in slots {
+            if own.contains(&s.writer) || !topics.iter().any(|t| t.topic == s.topic) {
+                continue;
+            }
+            if self.store.put(&s) {
+                by_topic.entry(s.topic).or_default().push(s.blob);
+            } else {
+                report.already_seen += 1;
+            }
+        }
+        for t in topics {
+            let Some(blobs) = by_topic.remove(&t.topic) else { continue };
+            let replica = self.replica.clone();
+            let res = tokio::task::spawn_blocking(move || {
+                let refs: Vec<&[u8]> = blobs.iter().map(|b| b.as_slice()).collect();
+                (refs.len(), replica.lock().expect("replica lock").open_slots(&t, &refs))
+            })
+            .await;
+            if let Ok((n, Ok(r))) = res {
+                report.slots_opened += n;
+                report.messages += r.messages;
+                report.rejected += r.failed + r.bad_slots;
+            }
+        }
+        self.store.save();
         report
     }
 

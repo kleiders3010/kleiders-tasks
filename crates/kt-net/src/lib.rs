@@ -6,5 +6,7 @@
 
 pub mod mailbox;
 pub mod nostr;
+pub mod p2p;
+pub mod slotstore;
 pub mod sync;
 pub mod testrelay;
