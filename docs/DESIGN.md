@@ -193,7 +193,14 @@ All layers run in parallel (principle 4). **Preference order when several work**
   - stop at the first `rate-limited:` and back off exponentially with jitter;
   - `created_at` strictly increasing per slot, within relay clock-skew limits.
 - **Sizes (D12):** ≤ 64 KiB of event JSON (strfry's default event limit; the advertised 128 KB–1 MB is the frame size). Chunks ≤ 40 KiB with generation/index/count/hash, switched atomically between two buffers. Document epochs keep most lists in one chunk.
-- **Relay health by reading back:** "OK" doesn't mean stored. The app tracks which relays actually keep and return events. The default relay list ships with the app and is updated through the **signed operator manifest** (§7b).
+- **Relay health by reading back:** "OK" doesn't mean stored. The app tracks which relays actually keep and return events.
+- **Self-sustaining relay list (decided 2026-09-24):** the list shipped with the app is only a **seed** (one live relay at install time is enough). Devices then maintain their own lists automatically, with nothing shown to the user:
+  - **discover** candidates from Nostr itself: NIP-66 relay-monitor events (kind 30166) and NIP-65 relay lists (kind 10002), read from relays that already work;
+  - **keep only relays that prove themselves** by read-back; new candidates get a small trial share, failing relays drop out;
+  - **each group's relay set is recorded in the group's data**, so all its devices write and read the same relays. When a set degrades, a member device picks replacements from its healthy relays and publishes the new set; the others switch on their next sync and keep reading the previous set for a while;
+  - health observations are shared within groups, like helper reliability records.
+
+  None of this depends on the developer: it keeps working if every developer-run service disappears. The operator manifest (§7b) is **not** used to maintain public relays.
 - Every device keeps full data, so relays are a mailbox, never the only copy. Slots are refreshed by background sync.
 - **Reality (R2, E4):** works today on the big free relays (fresh keys, custom kinds, opaque content accepted). Risks, accepted for launch (D13): per-IP rate limits (Damus bans 1 h after repeated rejections), operator hostility to "relays as storage", strfry monoculture, relay churn. The fallback is our own network (member devices, helpers, select nodes).
 
@@ -234,7 +241,7 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
 
 ## 7b. Operator manifest (optional developer capacity, D56)
 
-- An **optional, signed file** listing "select" capacity with priority weights: the developer's devices, any future servers or free-tier VMs, iroh relays, Nostr relay list updates, STUN servers.
+- An **optional, signed file** listing only the **developer's own special hosting** ("select" capacity) with priority weights: the developer's devices, any future servers or free-tier VMs, developer-run iroh relays, helpers, or Nostr relays. It is **not** a maintenance channel for public relays (those are self-sustaining, §7): if the developer and all their tools disappear, nothing degrades except these bonuses.
 - **Ships with a baseline copy.** Updates are fetched from several sources (jurisgames.com, a public GitHub repo, a Nostr event, the DHT), so no single host matters.
 - **Verified with a separate offline signing key.** A compromised website or GitHub account can't forge it.
 - **Hard rules:** it can only *add* candidates, never disable P2P, Nostr or helpers. Select nodes run the normal helper protocol (ciphertext only, same reliability checks). The last good copy is kept if all sources fail.
@@ -367,7 +374,7 @@ Every obligatory cost is paid by users' own devices and bandwidth or absorbed by
 
 1. **Foundation:** Rust engine skeleton (pinned deps, `panic = "unwind"`), Loro documents with signed per-device updates, the import sandbox, storage, UniFFI bridge, minimal Compose UI on Android and desktop (local-only). Size budget in the build.
 2. **Identity and groups:** device keys, personal group, key epochs (E8 rules), device linking (D6), secure storage.
-3. **Nostr sync:** per-device slots, write budget, chunking, relay health, the operator manifest (baseline + signed updates).
+3. **Nostr sync:** per-device slots, write budget, chunking, relay health, self-sustaining relay discovery; the operator manifest for developer-hosted extras only.
 4. **Invites:** one code, link and QR; published and fetched through every available layer (grows with phases 3–6).
 5. **P2P with iroh:** LAN (rotating IDs), direct internet, discovery via Nostr + DHT + n0, member relaying, helper/select relays per the D49 outcome.
 6. **Helper network:** storage helping on desktops and phones, reliability records, handoff, selection.
