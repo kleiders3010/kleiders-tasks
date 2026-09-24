@@ -11,6 +11,7 @@ Split in two:
 # Part A: your decisions
 
 **D51. Should default-on helpers also relay *live* connections for strangers?** *(storage helping is already decided: on)*
+- *User direction: relay capability must exist; a developer-run select relay (your PC or a free server) is the early guarantee. Final choice waits for the D49 lab data on how many helpers are reachable.*
 - (a) Default-on, like storage helping: maximum coverage.
 - (b) A separate opt-in relay level.
 - (c) Own groups only.
