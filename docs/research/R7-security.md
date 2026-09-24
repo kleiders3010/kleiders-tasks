@@ -368,3 +368,153 @@ Cited from the literature but not re-fetched in this session (the search budget 
 - Matrix Megolm rotation defaults (100 messages / 1 week), from a search snippet: https://uhoreg.gitlab.io/matrix-tutorial/megolm.html
 
 Assumptions I made (not sourced): a GPU rental price of $0.30/h per RTX 4090; GPU rates for other Argon2 parameters scaled by m × t; low-end ARM Argon2 timings estimated from the KeePassDroid anecdote and hashcat's CPU figures.
+
+## Independent verification
+
+*Added 2026-09-24 by an independent verifier. I tried to refute the eight claim verdicts above using my own checks: primary source code on GitHub (Loro, RustCrypto `argon2`, AOSP `ClipboardService`, iroh CHANGELOG, localfirst/auth), full-text papers read locally (DCGKA, Kleppmann & Howard's BEC paper, Laurie & Clayton, S/Kademlia), the RFC 9420 text, and the Google API reference. Web search was unavailable (the session's search budget was spent), so every source below was fetched directly. Nothing was installed and no traffic went to Nostr relays.*
+
+### Verdicts
+
+| # | Claim | Original verdict | Upheld? | Notes |
+|---|---|---|---|---|
+| 1 | 6-word codes + Argon2id | Partial | **Yes** | Every number checks out (see below). One small addition about hyphenated words. |
+| 2 | Key epochs | Partial / underspecified, High | **Yes** | The conclusion holds. Two supporting details are overstated or out of date: the RFC 9420 §14 wording, and p2panda's audit status. |
+| 3 | Authorship not authenticated | Confirmed, High | **Yes** | The fix is incomplete: signatures stop impersonation but not a member equivocating on its *own* IDs. |
+| 4 | Malicious members / untrusted input | Partial, High | **Yes, and stronger** | `catch_unwind` alone does not help: #1106 aborts even with unwinding. The "scratch fork" fix uses the very API that aborted. |
+| 5 | Sealed backups / Auto Backup E2E | Partial, Medium | **Yes** | Block Store's per-entry limit is 1,024 bytes in the API reference, not 4 KB. |
+| 6 | Helper network trust | Partial, Medium | **Yes** | The quotes and the grinding estimate hold. |
+| 7 | Metadata / unlinkable groups | Refuted, Medium | **Yes** | DESIGN.md §9 itself says relays see IPs and endpoint IDs, which contradicts the §7 unlinkability sentence. |
+| 8 | Invite secrets in links / clipboard / QR | Partial, High | **Yes** | Add Android's 1-hour clipboard auto-clear, the risk that link scanners trigger a join, and App Links verification. |
+
+### Claim 1: invite codes
+
+- **Math recomputed independently:**
+  - log2(7776) = 12.925 bits per word, so 6 words = 77.55 bits.
+  - 4 words, N=1e6, 1e5 H/s: 10.2 h.
+  - 5 words: 9.0 years.
+  - 6 words: 70,050 years at 1e5 H/s, 412 years at 1.7e7 H/s, and 4.1 years at N=1e8 (about $108M).
+  - Date-salted at 1e4 invites/day: 41,000 years per success.
+  - 59 RTX 4090s give 1e5 H/s.
+  - DESIGN.md's "minutes" (4 words) and "days to years" (5 words) are wrong. Its "years to decades" for a 2,048-word list is right (23 years).
+- **GPU rate.** I re-read the hashcat v7.0.0 release notes: "GPU, NVIDIA GeForce RTX 4090: 1703 H/s" at m=65536, t=3, p=1. Confirmed.
+- **argon2 0.6.0.** From the GitHub source: `Cargo.toml` has `parallel = ["dep:rayon"]` (optional). `lib.rs` has only `cpufeatures::new!(avx2_cpuid, "avx2")` with `compress_avx2`, and there is no NEON path. Confirmed.
+- **EFF list.** Re-downloaded: 7,776 unique words, and the list is prefix-free (0 prefix pairs). The hyphenated words are exactly `drop-down`, `felt-tip`, `t-shirt` and `yo-yo`. Note that `down` and `shirt` *are* list words, but `drop`, `felt`, `t` and `yo` are not, so the researcher's "greedy parse works" holds. **Addition:** 1 − (7772/7776)^6 ≈ **0.31% of codes** contain a hyphenated word. A naive split-and-validate parser would reject about 1 in 325 valid codes, so this belongs in the E7 tests.
+
+### Claim 2: key epochs
+
+- **Corrections to the supporting evidence (the verdict doesn't change):**
+  - **RFC 9420 §14 doesn't require a Delivery Service to totally order Commits.** The actual text: "Applications MUST have an established way to resolve conflicting Commit messages for the same epoch. They can do this either by preventing conflicting messages from occurring in the first place, or by developing rules for deciding which Commit out of several sent in an epoch will be canonical."
+    - In practice this means a server. The DCGKA paper says "MLS typically depends on a semi-trusted server to determine the sequence of commits", and it's "not safe for one subset of users to perform a commit, because a different subset of users may perform a different commit". So "MLS doesn't fit" still holds.
+    - The relevant lesson for Kleiders is MLS's canonical-commit rule: the losing branch's removal is discarded and has to be redone. That's the same problem the researcher's "intersection successor epoch" rule solves.
+  - **p2panda-encryption is not audited.** The current README says "This crate has not yet received a security audit." The Feb 2025 blog called an audit "pending". Replace "audited-in-progress" in the Claim 2 fix with "unaudited (audit announced 2025)".
+- **Confirmed from primary text:**
+  - DCGKA (§5.2) takes group membership as a pluggable "Decentralized Group Membership (DGM) function" ("For space reasons we elide a detailed discussion of these algorithms"). It also assumes *authenticated* causal broadcast, so it depends on Claim 3 being fixed first.
+  - localfirst/auth `membershipResolver.ts` contains `resolveMutualRemovals` ("mutual and circular removals are resolved by seniority"), `cantAddBackRemovedMember` and `cantDoAnythingWhenRemoved`. Note that localfirst/auth has **admin roles**, and only admins can remove. Kleiders' "anyone can remove anyone" is a stricter case than the prior art covers.
+  - p2panda blog: "If two members remove each other at the same time, they will both leave the group."
+  - BeeKEM: "the remove paths are blanked after all other concurrent operations are merged".
+  - DMLS draft (2025-03-17): "damaging their FS".
+  - Keybase: "the PTK must rotate. This can happen lazily."
+  - Matrix (Albrecht et al.): "a malicious homeserver can add users under their control…", plus the device-addition attack.
+
+### Claim 3: authorship (also the requested spot-check of this "confirmed" claim)
+
+- **Quotes verified in Loro's source** (`crates/loro/src/lib.rs`, v1.16.2):
+  - `set_peer_id`: "Duplicate PeerIDs can produce conflicting OpIDs and corrupt the document" and "Do not assign a fixed PeerID to a user or device without strict single-ownership locking. Prefer the default random PeerID per process/session."
+  - `export_json_in_id_span`: "ideal for hash calculations and integrity checks".
+  - `ImportBlobMetadata` (in `loro-internal/src/encoding.rs`) has `partial_start_vv` and `partial_end_vv`, which "only contain counters from peers included within the import blob". So the peer-binding check the researcher proposes can be implemented.
+- **Divergence confirmed independently** by Kleppmann & Howard, "Byzantine Eventual Consistency" (arXiv 2012.00472, §4.3). A faulty replica makes two messages with the same vector timestamp, so honest replicas "detect that their vector timestamps are equal, and thus incorrectly believe that they are in the same state, even though their sets of messages are different." Loro syncs by version vector, so this applies directly.
+- **Gap in the fix.** Binding PeerIDs to device keys and signing blobs stops *impersonation*. It does **not** stop a malicious member **equivocating on its own PeerID**: signing two different blobs for the same (peer, counter) range and sending each to different members. Both signatures are valid, the replicas split permanently, and Loro can't reconcile them.
+  - Mitigation: include the content hash of each (peer, counter-range) in the signed blob metadata, and gossip these signed digests. Two valid signatures over conflicting hashes for one range are proof of equivocation, so the author can be excluded.
+  - Repair still needs a rule, for example "the lowest hash wins and the other branch is re-applied as new ops by the honest holder", or the hash-DAG option (c).
+- **Partly present already.** DESIGN.md already signs at the transport level: Nostr events use per-device keys (§7), and helper "slot data is signed by member keys" (§7a). What's missing is binding the Loro PeerIDs *inside* a blob to that signer, and signatures that survive relaying (member relay layer 6, snapshots).
+- **Cost wording.** "Tens of µs" per Ed25519 operation is plausible on modern cores but unmeasured on Cortex-A53-class phones. Either way it's negligible per blob.
+
+### Claim 4: malicious members
+
+- **Confirmed:**
+  - UniFFI's manual (GitHub source): "UniFFI can't always catch panics, for example when the Rust panic handler is set to `abort`."
+  - `loro-kv-store` 1.16.0 depends on `lz4_flex` 0.11 and `xxhash-rust`.
+  - Auto Backup: over 25 MB, "the system calls `onQuotaExceeded()` and doesn't back up data to the cloud." It resumes once the data falls back under the limit, so the DoS lasts only while the list stays bloated.
+  - Loro #1088 (opened 3 Sept 2026, closed via PR #1108): snapshots "silently import successfully but crash on first read", giving "a crash loop on every cold start once such a snapshot is persisted".
+- **The fix is too weak.**
+  - **Loro #1106** (19 Sept 2026, closed via PR #1107) goes `unwrap()` on `None`, then "poisoned LoroMutex", then a **non-unwinding panic in a destructor, then SIGABRT**. A panic during unwinding aborts even with `panic = "unwind"`, so `catch_unwind` can't catch it.
+  - The trigger was **`fork_at`** followed by a historical diff. That's exactly the "import into a scratch fork" the fix recommends.
+  - **Corrected fix:**
+    - Keep `panic = "unwind"` and `catch_unwind`.
+    - Also validate untrusted blobs in a **separate OS process**: an Android `android:process=":import"` service, or a child process on desktop. An abort, stack overflow or OOM then kills only that process.
+    - Validate by loading into a *fresh* `LoroDoc` from bytes, not with `fork_at`.
+    - After any caught panic, throw away the `LoroDoc` instance, because its mutex may be poisoned.
+    - Keep the quarantine journal.
+- **History-budget shrink (N4) is only partly mitigated.** DESIGN.md's 30-day trash keeps deleted tasks in the state, so a *UI* deletion doesn't shrink it right away. But the trash is an app-level convention: a malicious member can send raw Loro delete ops, or overwrite every field with empty text, and skip the trash entirely. The attack stands against the stated threat model. Medium–High is fairer than High, because desktops keep a larger archive budget.
+
+### Claim 5: backups
+
+- **Confirmed** (Auto Backup docs): client-side encryption is on only on Android 9+ "as long as the user has enabled backup… and has set a screen lock". `disableIfNoEncryptionCapabilities` (Android 12+) and `requireFlags="clientSideEncryption"` (API 28+) both exist. `BlockstoreClient.isEndToEndEncryptionAvailable()`: "available for Pie and above devices with a lockscreen PIN/pattern".
+- **Correction:** the `BlockstoreClient` API reference gives `MAX_ENTRY_COUNT` = 16 and **`MAX_SIZE` = 1024** ("Maximum allowed size of byte blobs"). The Block Store guide says "maximum 4kb per entry". Design for **1 KB per entry**. A 32-byte personal-group secret plus a wrapped seal key fit easily, but anything larger (for example several group secrets) may not.
+
+### Claim 6: helper network
+
+- **Confirmed from the PDFs:**
+  - Laurie & Clayton: "the limits we would wish to set are of the same order of magnitude as global averages for usage… making the system completely infeasible to deploy."
+  - S/Kademlia: "limiting free nodeId generation with crypto puzzles" and "parallel lookups over multiple disjoint paths".
+- **Grinding estimate.** Beating the closest honest node among n≈1,000 takes about n key generations, and holding all r slots about r·n. That's microseconds of Ed25519 key generation each, so the "cheap eclipse" point holds. The damage is bounded by DESIGN.md's own design: the bootstrap set is used only for first join, and Nostr runs in parallel. So "Medium (later phase)" is right.
+
+### Claim 7: metadata
+
+- **Confirmed:**
+  - NIP-42: "Clients MAY provide signed events from multiple pubkeys in a sequence of AUTH messages. Relays MUST treat all pubkeys as authenticated accordingly."
+  - iroh 1.2.0 (released 2026-09-09): endpoints "automatically publish their own addressing information… they could also publish their direct addresses". "Number 0 runs a public instance of a PkarrPublisher". `AddrFilter::relay_only()` and `MemoryLookup` both exist. The EndpointId *is* the endpoint's stable public key.
+  - **iroh no longer uses STUN at all.** The CHANGELOG lists "*(iroh)* Remove stun-rs (#3546)", and relays offer a QAD server. So DESIGN.md §6's layer 3 "iroh + public STUN" and §9's "STUN" are out of date.
+- **Why "refuted" is right.** DESIGN.md §9 already says Nostr relays see "the uploader's IP" and iroh relays see "IP addresses, endpoint IDs". That contradicts §7's "a device's groups can't be linked to each other" for any relay operator. The claim can hold only against third parties reading public relay data, and even there flushing all groups at the same moment ("leaving the app flushes immediately") creates correlated `created_at` values that such a reader can see.
+
+### Claim 8: invite secrets
+
+- **Confirmed:**
+  - Safe Links "rewrites" and "wraps" URLs via `*.safelinks.protection.outlook.com`, checks them at time of click, detonates URLs "that don't have a valid reputation… asynchronously in the background", and offers "Track user clicks". It covers Teams and Office apps (time-of-click, not rewritten), and the Built-in protection preset turns it on for every Defender for Office 365 tenant.
+  - Krause (10 Aug 2022): "The Instagram app injects their JavaScript code into every website shown". Any script in the page context can read `location.hash`.
+  - AOSP `ClipboardService`: "The default IME is always allowed to access the clipboard."
+  - The Windows exclusion formats are exactly as stated.
+- **Missed mitigating fact:** AOSP auto-clears the clipboard **1 hour** after a copy (`DEFAULT_CLIPBOARD_TIMEOUT_MILLIS = 3600000`, DeviceConfig `auto_clear_enabled` defaults to true; added in Android 13, and OEMs may change it). That caps how long the system clipboard is exposed. It also creates a **functional cliff**: if install and first launch take more than an hour, the "Get the app" invite is gone. Keyboard clipboard histories (Gboard, SwiftKey cloud clipboard) are separate and keep their own copies.
+
+### Things the researcher missed (for this dimension)
+
+1. **Self-equivocation** survives signing (Claim 3 above). Add signed range digests with equivocation proofs, plus a repair rule.
+2. **Aborts that `catch_unwind` can't catch** (double panics, stack overflow, OOM), and `fork_at` itself being the aborting path in #1106. Validate untrusted imports in a separate process.
+3. **Link scanners execute pages.** Safe Links detonation and other security sandboxes open the URL and run its JavaScript. If the future web client (or the landing page) ever **joins automatically** from the fragment, a scanner becomes a ghost member or uses up an invite. Always require a user gesture before joining. The same lesson came from email magic-link logins.
+4. **App Links verification.** Invite links must be verified https **Android App Links**. Unverified web links and custom schemes go through the disambiguation dialog, where another app can register the same pattern and receive the secret. `assetlinks.json` must be served at the *domain root* `/.well-known/`, which a GitHub Pages *project* site (`user.github.io/repo`) can't do without a user/org site or a custom domain. Jekyll also skips dot-directories unless configured. Verification needs Google services, so the `foss` flavor on de-Googled devices may fall back to the chooser.
+5. **GitHub Pages can't set HTTP response headers**, so the recommended CSP can only be a `<meta http-equiv>` tag, which has no `frame-ancestors` support. Keep the landing page script-minimal and self-contained.
+6. **Harvest-now-decrypt-later.** Epoch keys wrapped with X25519 and posted to public Nostr relays, which can be archived forever, are the exact target Signal's PQXDH was built against ("designed to prevent 'harvest now, decrypt later' attacks"). The code/HKDF/XChaCha path is symmetric and fine. Because formats are "forever compatible" (principle 8), reserve a hybrid KEM suite ID (X25519 + ML-KEM) in the rotation format now.
+7. **No forward secrecy against public archives.** Any later leak of an epoch key decrypts everything archived under that epoch. Periodic rotation (the researcher's PCS fix) is also the only FS bound, so state it that way in §9.
+8. **Group-derived pkarr/Mainline records.** If discovery publishes under a key derived from the group (§6), every member *and ex-member* holds the signing key and can overwrite the record. BEP 44 values are capped ("MAY reject… longer than 1000 bytes") and use seq/CAS last-writer-wins, so members clobber each other. The records are readable by anyone who knows the public key. Derive the key per epoch, encrypt the contents, and publish per device rather than per group.
+9. **AEAD context binding.** §7's message format puts version and group-ID hash outside the ciphertext. Bind (format version, group, epoch, slot, sender device) as XChaCha20-Poly1305 associated data, so a member can't replay a ciphertext into another slot, epoch or version context.
+
+### Sources used by the verifier
+
+- hashcat v7.0.0 release notes (raw): https://raw.githubusercontent.com/hashcat/hashcat/master/docs/releases_notes_v7.0.0.md
+- RustCrypto argon2 source: https://raw.githubusercontent.com/RustCrypto/password-hashes/master/argon2/Cargo.toml, https://raw.githubusercontent.com/RustCrypto/password-hashes/master/argon2/src/lib.rs
+- EFF large wordlist (re-analyzed locally): https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
+- RFC 9420 §14 text: https://www.rfc-editor.org/rfc/rfc9420.txt
+- DCGKA full text (§2, Table 1, §5.2): https://eprint.iacr.org/2020/1281.pdf
+- p2panda-encryption README ("not yet received a security audit"): https://raw.githubusercontent.com/p2panda/p2panda/main/p2panda-encryption/README.md; blog: https://p2panda.org/2025/02/24/group-encryption.html
+- localfirst/auth resolver: https://raw.githubusercontent.com/local-first-web/auth/main/packages/auth/src/team/membershipResolver.ts
+- Keyhive notebook 02: https://www.inkandswitch.com/keyhive/notebook/02/
+- DMLS draft: https://www.ietf.org/archive/id/draft-kohbrok-mls-decentralized-mls-00.html
+- Keybase teams crypto: https://book.keybase.io/docs/teams/crypto
+- Matrix attacks: https://nebuchadnezzar-megolm.github.io/
+- Loro source: https://raw.githubusercontent.com/loro-dev/loro/main/crates/loro/src/lib.rs, https://raw.githubusercontent.com/loro-dev/loro/main/crates/loro-internal/src/encoding.rs, https://raw.githubusercontent.com/loro-dev/loro/main/crates/kv-store/Cargo.toml
+- Loro issues: https://github.com/loro-dev/loro/issues/1088, https://github.com/loro-dev/loro/issues/1106
+- Kleppmann & Howard, Byzantine Eventual Consistency: https://arxiv.org/pdf/2012.00472
+- UniFFI manual source: https://raw.githubusercontent.com/mozilla/uniffi-rs/main/docs/manual/src/internals/rust_calls.md
+- Android Auto Backup: https://developer.android.com/guide/topics/data/autobackup
+- BlockstoreClient API reference (MAX_SIZE 1024, MAX_ENTRY_COUNT 16): https://developers.google.com/android/reference/com/google/android/gms/auth/blockstore/BlockstoreClient; guide: https://developer.android.com/identity/block-store
+- NIP-42: https://raw.githubusercontent.com/nostr-protocol/nips/master/42.md
+- iroh docs and CHANGELOG ("Remove stun-rs"): https://docs.rs/iroh/latest/iroh/, https://docs.rs/iroh/latest/iroh/address_lookup/index.html, https://raw.githubusercontent.com/n0-computer/iroh/main/CHANGELOG.md
+- BEP 44: https://www.bittorrent.org/beps/bep_0044.html
+- S/Kademlia: https://telematics.tm.kit.edu/publications/Files/267/SKademlia_2007.pdf; Laurie & Clayton: https://www.cl.cam.ac.uk/~rnc1/proofwork.pdf
+- Safe Links: https://learn.microsoft.com/en-us/defender-office-365/safe-links-about
+- Krause 2022: https://krausefx.com/blog/ios-privacy-instagram-and-facebook-can-track-anything-you-do-on-any-website-in-their-in-app-browser
+- AOSP ClipboardService (IME access, 1-hour auto-clear): https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/main/services/core/java/com/android/server/clipboard/ClipboardService.java
+- Android 13 copy/paste: https://developer.android.com/about/versions/13/features/copy-paste
+- Windows clipboard formats: https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats
+- Android App Links: https://developer.android.com/training/app-links
+- Signal PQXDH: https://signal.org/docs/specifications/pqxdh/

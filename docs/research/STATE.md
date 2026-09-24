@@ -46,7 +46,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [ ] A2 Rollback / withholding by helpers
 - [ ] A3 Junk flooding of helpers (fake groups)
 - [ ] A4 Eclipse / fake-helper positioning
-- [ ] A5 Malicious group member (mass delete, huge documents, format bombs, replaying old epochs, writing after removal)
+- [x] A5 Malicious group member (mass delete, huge documents, format bombs, replaying old epochs, writing after removal)
 - [x] A6 Parser fuzzing of engine message formats
 - [ ] A7 Metadata leakage analysis (relays, DHT, helpers)
 - [ ] A8 Invite / link / clipboard / QR exposure paths (keyboards, cloud clipboard, screenshots)
@@ -72,3 +72,4 @@ Collect the P1 reports when the workflow finishes, then continue with P2 experim
 - E3: local iroh connect 2.4 ms; dial-by-ID via n0 669 ms. NEW: iroh defaults depend on n0 alone (relays + DNS/pkarr discovery); mDNS/DHT discovery not in core. Proposal: own discovery via Nostr + pkarr/Mainline DHT; explicit mDNS.
 - E6: full Rust core arm64 = 7.07 MB installed / 4.33 MB compressed (iroh 4.6, loro 1.7, nostr 1.5, crypto 0.3). Estimated app ~15-20 MB installed, ~10 MB download: targets hold.
 - A6 CRITICAL: fuzzing Loro 1.16.2 import (checksum recomputed like an attacker would) aborts the process within seconds; 4 distinct panic sites, 85-byte minimum input; double panic (poisoned lock) -> abort, catch_unwind can't help. Any member or disk corruption = app crash loop. Proposals: process-isolated import, crash-loop breaker, upstream report (needs the user's OK to publish).
+- A5 CRITICAL: a member reusing another's PeerID causes permanent silent divergence (a real edit lost for one member) and frames the victim as author. Proposal: PeerID = hash(device key), signed updates, own-ops-only per device, checked on the isolated copy; drop the shared snapshot slot in favor of verified document epochs. Mass delete is recoverable via history (keep a min 30-day window). Size bombs: a 50 MB update is imported with no limit; add engine limits.
