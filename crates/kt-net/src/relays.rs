@@ -282,7 +282,17 @@ pub fn install_resolver(syncer: &Arc<Syncer>, mb: &NostrMailbox) {
         let r = replica.lock().ok()?;
         let g = r.read_topics().into_iter().find(|t| t.topic == *topic)?.group;
         let (cur, prev) = r.mailbox_set(&g, LAYER);
-        let cur = cur?;
+        let Some(cur) = cur else {
+            // Joining: write and read where the invite record says members look (and our pool).
+            let hints = r.endpoint_hints(&g, LAYER);
+            return (!hints.is_empty()).then(|| crate::nostr::TopicRelays {
+                current: hints,
+                previous: vec![],
+                previous_is_pool: true,
+                read_previous: true,
+                write_previous: true,
+            });
+        };
         let age = now_ms().saturating_sub(cur.created_ms);
         Some(crate::nostr::TopicRelays {
             previous_is_pool: prev.is_none(),

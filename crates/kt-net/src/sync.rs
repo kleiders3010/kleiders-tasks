@@ -71,7 +71,7 @@ struct PersistedState {
 
 pub struct Syncer {
     replica: Arc<Mutex<Replica>>,
-    mailboxes: Vec<Arc<dyn Mailbox>>,
+    mailboxes: Mutex<Vec<Arc<dyn Mailbox>>>,
     /// (mailbox, topic, writer seed) -> what was last written.
     written: Mutex<HashMap<(usize, [u8; 32], [u8; 32]), Written>>,
     /// (mailbox, topic, writer) -> newest version applied.
@@ -107,13 +107,23 @@ impl Syncer {
             .unwrap_or_default();
         Arc::new(Syncer {
             replica,
-            mailboxes,
+            mailboxes: Mutex::new(mailboxes),
             written: Mutex::new(st.written.into_iter().collect()),
             seen: Mutex::new(st.seen.into_iter().collect()),
             lost: Mutex::new(HashSet::new()),
             state_file,
             store: Arc::new(SlotStore::open(store_file)),
         })
+    }
+
+    /// Add a mailbox after construction (e.g. a helper mailbox, which needs the P2P endpoint,
+    /// which needs this syncer). Indices stay stable: mailboxes are only appended.
+    pub fn add_mailbox(&self, mb: Arc<dyn Mailbox>) {
+        self.mailboxes.lock().expect("lock").push(mb);
+    }
+
+    fn mbs(&self) -> Vec<Arc<dyn Mailbox>> {
+        self.mailboxes.lock().expect("lock").clone()
     }
 
     pub fn store(&self) -> Arc<SlotStore> {
@@ -149,8 +159,9 @@ impl Syncer {
         .await
         .unwrap_or_default();
         let mut report = WriteReport::default();
+        let mailboxes = self.mbs();
         for (t, fp) in plans {
-            let due: Vec<usize> = (0..self.mailboxes.len())
+            let due: Vec<usize> = (0..mailboxes.len())
                 .chain(std::iter::once(STORE))
                 .filter(|mi| {
                     let key = (*mi, t.topic, t.writer_seed);
@@ -179,7 +190,7 @@ impl Syncer {
                 self.written.lock().expect("lock").insert((STORE, t.topic, t.writer_seed), Written { fingerprint: fp, at: now_secs() });
             }
             let due: Vec<usize> = due.into_iter().filter(|mi| *mi != STORE).collect();
-            let outcomes = futures_util::future::join_all(due.iter().map(|mi| self.mailboxes[*mi].write(&w))).await;
+            let outcomes = futures_util::future::join_all(due.iter().map(|mi| mailboxes[*mi].write(&w))).await;
             for (mi, o) in due.iter().zip(outcomes) {
                 let key = (*mi, t.topic, t.writer_seed);
                 match o {
@@ -216,13 +227,14 @@ impl Syncer {
             }
             let topic_ids: Vec<[u8; 32]> = new_topics.iter().map(|t| t.topic).collect();
             done_topics.extend(topic_ids.iter().copied());
-            let reads = futures_util::future::join_all(self.mailboxes.iter().map(|m| m.read(&topic_ids))).await;
+            let mailboxes = self.mbs();
+            let reads = futures_util::future::join_all(mailboxes.iter().map(|m| m.read(&topic_ids))).await;
             // Group new slot versions by topic.
             let mut by_topic: HashMap<[u8; 32], Vec<Vec<u8>>> = HashMap::new();
             let mut marked: HashMap<[u8; 32], Vec<Key>> = HashMap::new();
             for (mi, slots) in reads.into_iter().enumerate() {
                 let own: HashMap<[u8; 32], [u8; 32]> =
-                    my_targets.iter().map(|t| (self.mailboxes[mi].writer_id(&t.writer_seed), t.topic)).collect();
+                    my_targets.iter().map(|t| (mailboxes[mi].writer_id(&t.writer_seed), t.topic)).collect();
                 let mut own_seen: HashSet<([u8; 32], [u8; 32])> = HashSet::new();
                 for s in slots {
                     if own.get(&s.writer) == Some(&s.topic) {
@@ -245,7 +257,7 @@ impl Syncer {
                     if !topic_ids.contains(&t.topic) {
                         continue;
                     }
-                    let w = self.mailboxes[mi].writer_id(&t.writer_seed);
+                    let w = mailboxes[mi].writer_id(&t.writer_seed);
                     let key = (mi, t.topic, t.writer_seed);
                     if self.written.lock().expect("lock").contains_key(&key) && !own_seen.contains(&(t.topic, w)) {
                         self.lost.lock().expect("lock").insert(key);

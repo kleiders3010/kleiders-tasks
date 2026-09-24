@@ -68,6 +68,9 @@ struct JoinBody {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PendingJoin {
     pub group: GroupId,
+    /// Where the group's members look (from the invite record), until we learn the sets.
+    #[serde(default)]
+    pub hints: Vec<(String, String)>,
     pub epoch: EpochId,
     pub invite_id: [u8; 32],
     pub kind: CodeKind,
@@ -206,6 +209,7 @@ impl Replica {
                     inviter_name,
                     whereabouts: self.whereabouts.clone(),
                     published_ms: super::now_ms(),
+                    hints: self.invite_hints(&g),
                 };
                 out.push((lookup, invite::seal_record(&rec, &lookup, &rkey)?));
             }
@@ -241,6 +245,7 @@ impl Replica {
         self.add_invite_key(rec.group, rec.epoch, crypto::SymKey(rec.epoch_key));
         std::fs::create_dir_all(self.layout.group_dir(&rec.group))?;
         let p = PendingJoin {
+            hints: rec.hints.clone(),
             group: rec.group,
             epoch: rec.epoch,
             invite_id: rec.invite_id,
@@ -275,6 +280,45 @@ impl Replica {
             let _ = self.save_pending(&waiting);
         }
         done
+    }
+
+    /// A few endpoints per layer from the group's sets, for invite records (kept small: the
+    /// record must fit a DHT item).
+    fn invite_hints(&self, g: &GroupId) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        for (layer, n) in [("nostr", 2usize), ("helpers", 1usize)] {
+            if let Some(set) = self.mailbox_set(g, layer).0 {
+                for e in set.endpoints.into_iter().take(n) {
+                    out.push((layer.to_string(), e));
+                }
+            }
+        }
+        out
+    }
+
+    /// Endpoints to use for `g` on `layer`: the group's set, or while joining, the hints
+    /// from the invite record.
+    pub fn endpoint_hints(&self, g: &GroupId, layer: &str) -> Vec<String> {
+        if let Some(set) = self.mailbox_set(g, layer).0 {
+            return set.endpoints;
+        }
+        self.pending_joins().into_iter().filter(|p| p.group == *g).flat_map(|p| p.hints).filter(|(l, _)| l == layer).map(|(_, e)| e).collect()
+    }
+
+    /// Our signed join request for `g`, to hand to a member directly (P2P).
+    pub fn pending_join_request(&self, g: &GroupId) -> Option<Vec<u8>> {
+        let p = self.pending_joins().into_iter().find(|p| p.group == *g)?;
+        self.join_request(&p).ok()
+    }
+
+    /// A join request handed to us directly by a joining device (P2P): same checks as in a
+    /// slot. Returns the group if the device was added (or already was a member).
+    pub fn accept_join_request(&mut self, bytes: &[u8]) -> Result<GroupId> {
+        let s: Signed = postcard::from_bytes(bytes).map_err(|e| Error::Encoding(e.to_string()))?;
+        let body: JoinBody = wire::decode(JOIN_TAG, 1, &s.body)?.1;
+        self.receive_join_request(bytes)?;
+        let ok = self.groups.get(&body.group).is_some_and(|st| st.epochs.is_current_member(&s.author));
+        if ok { Ok(body.group) } else { Err(Error::Rejected("join request not accepted".into())) }
     }
 
     /// Our signed join request for a pending join (goes into a join slot).

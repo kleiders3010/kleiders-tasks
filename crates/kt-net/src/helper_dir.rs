@@ -204,7 +204,7 @@ fn encode_ref(h: &HelperRef) -> String {
     hex::encode(postcard::to_stdvec(h).unwrap_or_default())
 }
 
-fn decode_ref(s: &str) -> Option<HelperRef> {
+pub fn decode_ref(s: &str) -> Option<HelperRef> {
     postcard::from_bytes(&hex::decode(s).ok()?).ok()
 }
 
@@ -215,7 +215,14 @@ pub fn install_resolver(syncer: &Arc<Syncer>, hmb: &HelperMailbox) {
         let r = replica.lock().ok()?;
         let g = r.read_topics().into_iter().find(|t| t.topic == *topic)?.group;
         let (cur, prev) = r.mailbox_set(&g, LAYER);
-        let mut v: Vec<iroh::EndpointAddr> = cur?.endpoints.iter().filter_map(|e| decode_ref(e)?.to_addr()).collect();
+        let endpoints = match cur {
+            Some(c) => c.endpoints,
+            None => r.endpoint_hints(&g, LAYER), // joining: the invite record's helpers
+        };
+        if endpoints.is_empty() {
+            return None;
+        }
+        let mut v: Vec<iroh::EndpointAddr> = endpoints.iter().filter_map(|e| decode_ref(e)?.to_addr()).collect();
         for p in prev.map(|p| p.endpoints).unwrap_or_default() {
             if let Some(a) = decode_ref(&p).and_then(|h| h.to_addr()) {
                 if !v.iter().any(|x| x.id == a.id) {

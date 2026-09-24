@@ -158,6 +158,10 @@ pub struct InviteRecord {
     pub whereabouts: Option<Vec<u8>>,
     /// When this copy was made: joiners prefer the newest (most current epoch key).
     pub published_ms: u64,
+    /// A few of the group's endpoints per layer (e.g. ("nostr", relay URL), ("helpers",
+    /// helper)), so the joiner writes its request where members look and knows a helper
+    /// from the start, even without Nostr.
+    pub hints: Vec<(String, String)>,
 }
 
 pub fn seal_record(r: &InviteRecord, lookup: &[u8; 32], key: &SymKey) -> Result<Vec<u8>> {
@@ -207,6 +211,7 @@ mod tests {
             inviter_name: "Alex".into(),
             whereabouts: None,
             published_ms: 1,
+            hints: vec![],
         };
         let s = seal_record(&r, &l1, &k1).unwrap();
         assert_eq!(open_record(&s, &l1, &k1).unwrap(), r);

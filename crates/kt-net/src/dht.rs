@@ -65,6 +65,21 @@ impl DhtDiscovery {
         nodes.len()
     }
 
+    /// Store a value (≤ 1000 bytes) as a mutable item under a key derived from `seed`.
+    pub async fn put_value(&self, seed: [u8; 32], value: &[u8]) -> bool {
+        if value.len() > 1000 {
+            return false;
+        }
+        let item = MutableItem::new(SigningKey::from_bytes(&seed), value, now_secs(), None);
+        self.dht.put_mutable(item, None).await.is_ok()
+    }
+
+    /// Read the newest value stored under a key derived from `seed`.
+    pub async fn get_value(&self, seed: [u8; 32]) -> Option<Vec<u8>> {
+        let pk = SigningKey::from_bytes(&seed).verifying_key().to_bytes();
+        self.dht.get_mutable_most_recent(&pk, None).await.map(|i| i.value().to_vec())
+    }
+
     pub async fn bootstrapped(&self) -> bool {
         self.dht.bootstrapped().await
     }

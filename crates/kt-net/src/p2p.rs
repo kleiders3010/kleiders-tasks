@@ -35,6 +35,8 @@ use crate::slotstore::Summary;
 use crate::sync::{ReadReport, Syncer};
 
 pub const ALPN: &[u8] = b"kt/slots/1";
+/// Invite records by lookup key (D55 layers 1 and 3: the inviter's and members' devices).
+pub const INVITE_ALPN: &[u8] = b"kt/invite/1";
 const MAX_FRAME: usize = 32 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -104,6 +106,9 @@ struct Hello {
     /// The dialer's device-signed whereabouts for the group: proves that this endpoint
     /// belongs to a current member device, even if the responder hasn't heard of it yet.
     proof: Option<Vec<u8>>,
+    /// A joining device's signed join request (it holds an invite): the responder adds it
+    /// if the invite is open, then serves it as a member.
+    join: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -158,6 +163,8 @@ pub struct P2p {
     syncer: Arc<Syncer>,
     conns: Mutex<HashMap<(EndpointId, Vec<u8>), Connection>>,
     helper: Option<Arc<crate::helper::HelperStore>>,
+    /// Sealed invite records we serve, by lookup key.
+    invites: Mutex<HashMap<[u8; 32], Vec<u8>>>,
 }
 
 impl P2p {
@@ -186,7 +193,7 @@ impl P2p {
         };
         let mut b = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
-            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec()])
+            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec()])
             .relay_mode(relay_mode);
         if !cfg.portmap {
             b = b.portmapper_config(PortmapperConfig::Disabled);
@@ -198,7 +205,7 @@ impl P2p {
         }
         let ep = b.bind().await.map_err(|e| e.to_string())?;
         let helper = cfg.helper.clone().map(crate::helper::HelperStore::new);
-        let p = Arc::new(P2p { ep, syncer, conns: Mutex::new(HashMap::new()), helper });
+        let p = Arc::new(P2p { ep, syncer, conns: Mutex::new(HashMap::new()), helper, invites: Mutex::new(HashMap::new()) });
         let acc = p.clone();
         tokio::spawn(async move { acc.accept_loop().await });
         Ok(p)
@@ -269,6 +276,55 @@ impl P2p {
         Ok(c)
     }
 
+    /// Serve these sealed invite records (lookup key -> record) to anyone who asks by key.
+    pub fn set_invite_board(&self, records: Vec<([u8; 32], Vec<u8>)>) {
+        *self.invites.lock().expect("lock") = records.into_iter().collect();
+    }
+
+    /// Ask a device for the invite record under `lookup`.
+    pub async fn fetch_invite(&self, addr: EndpointAddr, lookup: [u8; 32]) -> Option<Vec<u8>> {
+        let conn = self.connection_alpn(addr, INVITE_ALPN).await.ok()?;
+        let (mut s, mut r) = conn.open_bi().await.ok()?;
+        send_frame(&mut s, &lookup).await.ok()?;
+        let _ = s.finish();
+        recv_frame::<Option<Vec<u8>>>(&mut r).await.ok().flatten()
+    }
+
+    /// Joining: hand our join request for `g` to a member device directly, then sync with
+    /// it as a member. Returns true once we're in.
+    pub async fn join_via(&self, g: GroupId, addr: EndpointAddr) -> bool {
+        let (join, topics) = {
+            let r = self.syncer.replica();
+            let r = r.lock().expect("replica lock");
+            (r.pending_join_request(&g), r.read_topics().into_iter().filter(|t| t.group == g).map(|t| t.topic).collect::<Vec<_>>())
+        };
+        let Some(join) = join else { return false };
+        let res = async {
+            let conn = self.connection(addr.clone()).await?;
+            let (mut s, mut r) = conn.open_bi().await.map_err(|e| e.to_string())?;
+            let store = self.syncer.store();
+            send_frame(&mut s, &Hello { topics: topics.clone(), have: store.summary(&topics), proof: None, join: Some(join) }).await?;
+            let reply: Reply = recv_frame(&mut r).await?;
+            send_frame(&mut s, &Push { slots: vec![] }).await?;
+            let _ = s.finish();
+            let incoming: Vec<SlotRead> = reply.slots.into_iter().filter(|x| topics.contains(&x.topic)).map(SlotRead::from).collect();
+            self.syncer.apply_incoming(incoming).await;
+            let _ack: Ack = recv_frame(&mut r).await?;
+            Ok::<(), String>(())
+        }
+        .await;
+        if res.is_err() {
+            return false;
+        }
+        // Now a member (if accepted): a normal exchange with the same device brings the rest.
+        self.publish_whereabouts();
+        let topics = self.topics_of(&g);
+        let _ = self.exchange(g, addr, topics).await;
+        let r = self.syncer.replica();
+        let r = r.lock().expect("replica lock");
+        r.epochs(&g).is_some_and(|e| e.is_current_member(&r.device_id()))
+    }
+
     /// Our helper store, if helping.
     pub fn helper(&self) -> Option<Arc<crate::helper::HelperStore>> {
         self.helper.clone()
@@ -300,7 +356,7 @@ impl P2p {
         let (mut s, mut r) = conn.open_bi().await.map_err(|e| e.to_string())?;
         let store = self.syncer.store();
         let proof = self.syncer.replica().lock().expect("replica lock").own_whereabouts_record(&g);
-        send_frame(&mut s, &Hello { topics: topics.clone(), have: store.summary(&topics), proof }).await?;
+        send_frame(&mut s, &Hello { topics: topics.clone(), have: store.summary(&topics), proof, join: None }).await?;
         let reply: Reply = recv_frame(&mut r).await?;
         let push: Vec<WireSlot> = store.newer_than(&topics, &reply.have).into_iter().map(WireSlot::from).collect();
         let sent = push.len();
@@ -318,6 +374,18 @@ impl P2p {
             tokio::spawn(async move {
                 let Ok(conn) = inc.await else { return };
                 let remote = conn.remote_id();
+                if conn.alpn() == INVITE_ALPN {
+                    while let Ok((mut s, mut r)) = conn.accept_bi().await {
+                        let board = me.invites.lock().expect("lock").clone();
+                        tokio::spawn(async move {
+                            if let Ok(lookup) = recv_frame::<[u8; 32]>(&mut r).await {
+                                let _ = send_frame(&mut s, &board.get(&lookup).cloned()).await;
+                                let _ = s.finish();
+                            }
+                        });
+                    }
+                    return;
+                }
                 if conn.alpn() == crate::helper::HELPER_ALPN {
                     // Helping strangers: no membership needed, the store enforces its rules.
                     let Some(h) = me.helper.clone() else {
@@ -363,7 +431,20 @@ impl P2p {
 
     async fn serve(&self, remote: EndpointId, mut s: SendStream, mut r: RecvStream) -> Result<(), String> {
         let hello: Hello = recv_frame(&mut r).await?;
-        let allowed = self.allowed_topics(remote, hello.proof.as_deref());
+        let mut joined = None;
+        if let Some(j) = &hello.join {
+            // Adds the device if its invite is open (checks as for a join slot); then our
+            // fresh slots (with the Add epoch) go into the store for this very reply.
+            let res = self.syncer.replica().lock().expect("replica lock").accept_join_request(j);
+            if let Ok(g) = res {
+                self.syncer.write_round().await;
+                joined = Some(g);
+            }
+        }
+        let mut allowed = self.allowed_topics(remote, hello.proof.as_deref());
+        if let Some(g) = joined {
+            allowed.extend(self.topics_of(&g));
+        }
         if allowed.is_empty() {
             return Err("not a member".into());
         }

@@ -104,6 +104,10 @@ pub struct Lan {
     sock: UdpSocket,
     replica: Arc<Mutex<Replica>>,
     cfg: LanConfig,
+    /// Extra entries to beacon (sealed invite records under their lookup tag).
+    extra: Mutex<Vec<([u8; 16], Vec<u8>)>>,
+    /// Tags we're listening for (a joiner's invite lookup) and what we heard under them.
+    watched: Mutex<std::collections::HashMap<[u8; 16], Vec<Vec<u8>>>>,
     /// Fires when a beacon taught us a (new) member address.
     pub learned: tokio::sync::Notify,
 }
@@ -115,7 +119,14 @@ impl Lan {
             let _ = sock.join_multicast_v4(LAN_GROUP, Ipv4Addr::UNSPECIFIED);
             let _ = sock.set_multicast_loop_v4(false);
         }
-        let lan = Arc::new(Lan { sock, replica, cfg, learned: tokio::sync::Notify::new() });
+        let lan = Arc::new(Lan {
+            sock,
+            replica,
+            cfg,
+            extra: Mutex::new(Vec::new()),
+            watched: Mutex::new(std::collections::HashMap::new()),
+            learned: tokio::sync::Notify::new(),
+        });
         let rx = lan.clone();
         tokio::spawn(async move { rx.recv_loop().await });
         Ok(lan)
@@ -125,9 +136,24 @@ impl Lan {
         self.sock.local_addr()
     }
 
+    /// Also beacon these entries (e.g. sealed invite records under their lookup tag).
+    pub fn set_extra(&self, entries: Vec<([u8; 16], Vec<u8>)>) {
+        *self.extra.lock().expect("lock") = entries;
+    }
+
+    /// Listen for entries under `tag` (collected until taken).
+    pub fn watch(&self, tag: [u8; 16]) {
+        self.watched.lock().expect("lock").entry(tag).or_default();
+    }
+
+    pub fn take_heard(&self, tag: &[u8; 16]) -> Vec<Vec<u8>> {
+        self.watched.lock().expect("lock").get_mut(tag).map(std::mem::take).unwrap_or_default()
+    }
+
     /// Send one beacon now.
     pub async fn beacon(&self) -> usize {
-        let entries = self.replica.lock().expect("replica lock").lan_beacon_entries(window_now());
+        let mut entries = self.replica.lock().expect("replica lock").lan_beacon_entries(window_now());
+        entries.extend(self.extra.lock().expect("lock").iter().cloned());
         if entries.is_empty() {
             return 0;
         }
@@ -159,8 +185,18 @@ impl Lan {
             let w = window_now();
             let mut applied = false;
             {
+                let entries = decode(&buf[..n]);
+                let mut watched = self.watched.lock().expect("lock");
+                for (tag, sealed) in &entries {
+                    if let Some(v) = watched.get_mut(tag) {
+                        if v.len() < 16 {
+                            v.push(sealed.to_vec());
+                        }
+                    }
+                }
+                drop(watched);
                 let mut r = self.replica.lock().expect("replica lock");
-                for (tag, sealed) in decode(&buf[..n]) {
+                for (tag, sealed) in entries {
                     applied |= r.open_lan_entry(w, &tag, sealed);
                 }
             }
