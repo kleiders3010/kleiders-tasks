@@ -35,7 +35,8 @@
 - [x] Sync driver (`kt-net/src/sync.rs`): rewrites only changed / due / lost slots; state persisted across processes
 - [x] Local test relay (`kt-net/src/testrelay.rs`, `kt relay`) with rate-limit / size / silent-drop / offline knobs; `kt sync`
 - [x] Runs on Android: the `kt` CLI cross-compiled (arm64) on the test tablet syncs with the PC; sandboxed imports work there
-- [ ] Public relay session (organic, approved 2026-09-24): in progress
+- [x] Public relay session (organic, approved 2026-09-24): all edits synced over 7 real relays, kind 35711 accepted everywhere, no rate limits, 100% read-back (`docs/research/E11-public-nostr-session.md`)
+- [x] iroh P2P (`kt-net/src/p2p.rs`): whereabouts in sealed slots, slot store, member-to-member exchange with delivery acks, non-members refused, member relaying (store-and-forward)
 - [ ] iroh P2P (LAN with rotating IDs, direct, relays per D49 outcome, member relaying)
 - [ ] Discovery: Nostr slot + Mainline DHT (pkarr) + n0 DNS
 - [ ] Helper storage protocol (basic) + reliability records
@@ -68,9 +69,9 @@
 - Fixed during M1: new members couldn't read pre-join history (Add epochs now carry wrapped history keys); the outgoing queue and own-op send positions are now persisted (the CLI's short-lived processes exposed both).
 
 ## Next action
-1. Read the public relay session log (`scratchpad/public/session2.log`) and record results (acceptance of kind 35711 per relay, read-back, any rate limits).
-2. iroh P2P per D49: endpoint with an empty custom relay map, LAN discovery with rotating IDs, direct dial with simultaneous-open timing via Nostr ephemeral signaling, helper relays with IPv4 URLs, a slot-sync protocol over iroh connections (same sealed slots).
-3. Discovery (Nostr slot + pkarr/DHT + n0 DNS), helper storage protocol, operator manifest.
+1. Helper iroh relay embedded in the app (desktop helpers; iroh-relay server, IPv4 URL, group-token access) + test through it; PC ↔ tablet over a relay tunneled with `adb reverse` (TCP).
+2. LAN discovery with rotating IDs; simultaneous dial timing via Nostr ephemeral events.
+3. Discovery beyond slots (pkarr/DHT, n0 DNS), helper storage protocol for strangers (RAM), operator manifest.
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
