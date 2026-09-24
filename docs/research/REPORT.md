@@ -31,7 +31,7 @@
 | P2P / Nostr apps are fine on Play | many shipped in 2026 (R8) |
 
 ## What failed or needed correction
-See `DECISIONS.md` for all 44 items. Most significant beyond the five above:
+See `DECISIONS.md` for all 45 items (`FINDINGS.md` has the full synthesis: 103 claims, 20 confirmed, 63 partial, 15 refuted, 5 unverified). Most significant beyond the five above:
 - **My own earlier recommendation (NIP-78 kind 30078) was wrong:** the spec changed on 2026-09-03. Use a dedicated kind. (D10)
 - **Android is stricter than §8 assumes:** background network is cut ~5 s after leaving the app, the process freezes at 10 s, and Doze windows reach 6 h, which widgets don't prevent. "Usually within 15 minutes" is wrong for idle phones. (D16, D17)
 - **Deleted tasks never leave a Loro document;** the "30-day trash purge" needs document re-creation, as does the checkpoint plan. (D24, D25)
@@ -39,6 +39,7 @@ See `DECISIONS.md` for all 44 items. Most significant beyond the five above:
 - **Phone helpers conflict with Play policy.** (D19)
 - **Loro depends on MPL-2.0 crates and unmaintained ones,** including a memory-safety advisory that triggers on panics. (D29)
 - **Windows unsigned installers get blocked,** but the Microsoft Store is free. **Flathub bans AI-generated manifests,** which likely excludes us. (D39, D40)
+- **Invitees on iPhone have no path at all.** A shared list only works if the other person can join (D45).
 - **Time-sensitive:** Android developer verification (regional enforcement from 2026-09-30). The package name should be settled before the first upload: kleiders.com isn't yours, jurisgames.com is. (D37, D38)
 
 ## Still open (not verified)

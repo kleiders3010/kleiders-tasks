@@ -68,6 +68,11 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   6. All network-visible identifiers (Nostr tags, DHT keys, slot keys) derive from the *current epoch key* and rotate daily.
   7. Periodic rotation (~30 days, and on every device add) heals silent leaks.
   8. Block Store is updated right after the personal group rotates.
+- **Also from the synthesis (FINDINGS #5):**
+  - bind version, group, epoch, slot and sender as AEAD associated data;
+  - reserve a hybrid post-quantum key-exchange suite ID now (cheap now, hard to add later);
+  - notify all members of every join;
+  - p2panda-encryption / Keyhive are candidate rule sets to adopt (p2panda is unaudited).
 - **Side effect to accept:** with no roles, mutual removal empties small groups (A removes B while B removes A). 38/3,000 in the simulation.
 - **Alternatives evaluated:** MLS (needs a totally ordered server, so no). Keeping the current underspecified design isn't safe.
 - **Confidence:** medium (simplified model; see E8 limits).
@@ -79,7 +84,8 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - Link QR codes are accepted only from "Your devices → Link this device", **never** from the general scanner or the join path.
   - A full-screen warning on the *scanning* device ("This gives ALL your lists to the device showing this code").
   - A "New device linked" notification on all existing devices, with one-tap removal (uses D5).
-- **Alternative evaluated:** requiring proximity (same network / Bluetooth). Stronger against remote phishing, but it blocks legitimate linking across networks and adds permissions (local network / Nearby). I'd hold it in reserve.
+- **Alternative evaluated:** requiring proximity (same network / Bluetooth). Stronger against remote phishing, but it blocks legitimate linking across networks and adds permissions (local network / Nearby).
+- **Disagreement to flag:** my lean was to hold proximity in reserve. The synthesis (FINDINGS #3) recommends **local-only linking by default**, with internet linking behind an extra warning, and **never silently merging a non-empty device** (which touches your earlier "linking merges your lists" decision). Both positions rest on the same evidence; it's a convenience vs safety call.
 - **Confidence:** medium-high.
 
 ### D7. Links and QR codes carry the permanent group secret: every leak is forever
@@ -140,12 +146,15 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - A per-relay write budget: e.g. ≤ 1 event/min sustained, small bursts, a priority queue. Live collaboration goes over P2P anyway.
   - **Each group uses only a subset of relays** (e.g. 3 of 8, chosen from its epoch key), which cuts per-relay load.
   - Always back off on rejection.
+  - Synthesis specifics (FINDINGS #7): ~6 events/min per relay **shared across all groups**, burst 5; foreground slot rewrites every 30–60 s with jitter; stop at the first `rate-limited:` and back off exponentially; a strictly increasing `created_at` per slot.
+  - **"OK" doesn't mean stored:** judge relay health by reading events back.
+  - Update the relay list at runtime from a **signed** list.
 - **Alternative evaluated:** bundle several groups into one event. Fewer events, but it links groups openly and breaks per-group addressable replacement. Worse.
 - **Confidence:** medium (the exact limits vary by relay and change over time).
 
 ### D12. Event size: ≤ 64 KiB, not 128 KB
 - **Evidence:** R2 claim 5 (strfry's default `maxEventSize` is 65,536; NIP-11 advertises the websocket frame size), E4 (60 KB accepted).
-- **Proposal:** design for ≤ 64 KiB of event JSON (~47 KiB of payload), with chunking. Document epochs (D24) keep most lists in 1 chunk.
+- **Proposal:** design for ≤ 64 KiB of event JSON (~47 KiB of payload), with chunking: chunks of ≤ 40 KiB carrying generation/index/count/hash, switched atomically between two buffers (FINDINGS #7). Document epochs (D24) keep most lists in 1 chunk.
 
 ### D13. Relay operators dislike "relays as storage", and most relays run the same software
 - **Evidence:**
@@ -168,6 +177,11 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - (c) Self-hosted relays: violates "no hosting".
   - (d) Users' home desktops as relays: an iroh relay needs a public address and TLS, which home PCs behind NAT don't have. Not feasible.
 - **Honestly, (a) is the only option inside the constraints, and it's weaker than the design assumed.** LAN and direct connections work without n0.
+- **Added by the synthesis:**
+  - shipping on relays against their stated terms is also a Play "Device & Network Abuse" exposure, which strengthens the case for asking n0 in writing (your call: outward contact);
+  - make the relay list configurable and health-tracked;
+  - use a rotating transport key certified by the device key (also helps D23);
+  - make member relaying and desktop members the primary live fallback.
 - **Confidence:** high on the facts.
 
 ### D15. Realistic hole-punching success is lower than the design says
@@ -196,6 +210,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - (b) **Revisit the doorbell** (FCM through a free stateless worker). **You declined this earlier.** The new evidence is only that the delay is longer than we assumed (hours, not 15 min) and that this is the #1 complaint category.
 
   I'm listing (b) because of the new evidence, not to relitigate. Your call.
+- **Note:** the synthesis (FINDINGS #9) goes further than I did: it recommends *designing* the content-free doorbell now (UnifiedPush / FCM) even if it's built later. It also recommends that notifications come only from merged state (batched, showing their age, dropping stale ones).
 - **Confidence:** medium on how much (a) satisfies users. **Not verified:** a real diary study (R6 suggests one).
 
 ### D18. Don't say "up to date"
@@ -282,6 +297,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - pin Loro versions;
   - keep a golden corpus of every format ever written, tested in CI;
   - a per-group "feature floor": don't use new container types until every device in the group supports them.
+- **Why it matters beyond display (FINDINGS, R3-3):** an old client that publishes a full snapshot of a document containing unknown container types **loses that data and desyncs newer clients**. D2 (own-ops-only, no shared snapshots) removes the main path. The feature floor covers the rest.
 
 ### D29. Loro pulls in MPL-2.0 and unmaintained crates
 - **Evidence:** R3. `im`, `sized-chunks` and `bitmaps` are MPL-2.0+ and unmaintained, with RUSTSEC advisories including an unpatched HIGH one. This conflicts with principle 9 ("MIT, Apache or BSD only").
@@ -309,7 +325,10 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 
 ### D31. Block Store only restores during new-device setup
 - **Evidence:** R4 (verifier upheld). Users who skip restore during phone setup get nothing, so the main shared-list recovery path fails silently.
-- **Proposal:** at first launch on a new phone with no restored data, show one short prompt suggesting linking from another device or restoring a cloud backup. **Not evaluated further;** there's no API to pull Block Store data later on a new device.
+- **Contradiction:** R4 says Block Store entries are 4 KB; the synthesis cites the API reference at **1 KB**. Design for ≤ 1 KB (the personal secret fits easily). Also (synthesis):
+  - cloud restore on non-Pixel phones works only from Android 12;
+  - Keystore-wrapped secrets restore as undecryptable data.
+- **Proposal:** at first launch on a new phone with no restored data, show one short prompt suggesting linking from another device or restoring a cloud backup. The synthesis agrees and adds: make device linking the default recovery, and show backup state under "Your devices". **Not evaluated further;** there's no API to pull Block Store data later on a new device.
 
 ### D32. Backups hold every group's live secret
 - **Evidence:** R7. A sealed backup is readable by anyone who reverse-engineers the format once.
@@ -399,6 +418,14 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 ### D44. Who holds the keys if you step away
 - **Evidence:** R5. The Syncthing Android fork's maintainer vanished in 2025, leaving signing-key custody unclear.
 - **Proposal:** back up the signing keys and write a succession note. "Backward compatible forever" needs it.
+
+### D45. Invitees on iPhone have no path (new, from the synthesis)
+- **Problem:** a shared list's value depends on the *other* person joining. iOS is ~60% of US mobile use (R6-1). The design has no iOS app, and the invite page offers only Play.
+- **Options evaluated:**
+  - (a) **Web guest client** (already an "extra" in the build order). Nostr works natively in browsers; iroh in WASM is relay-only and depends on n0's dev relays (R1), so a web guest would sync through Nostr only.
+  - (b) **iOS app later.** The Rust engine is portable, but it's a second UI and a paid Apple developer account ($99/yr, conflicts with C2).
+  - (c) **Accept Android + desktop only,** and say so on the invite page.
+- **Confidence:** high that it matters for adoption; the choice is a product call.
 
 ---
 

@@ -25,7 +25,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] R7 Security design review (invite codes, Argon2 params, key epochs, sealed backups, helper trust)
 - [x] R8 Policy and feasibility (Play policies, data safety, FGS, Drive / OneDrive OAuth, GitHub Pages)
 - [x] Adversarial verification of each report's key findings
-- [ ] Synthesis: `docs/research/FINDINGS.md` (claim → verdict → evidence → fix)
+- [x] Synthesis: `docs/research/FINDINGS.md` (claim → verdict → evidence → fix)
 
 ### P2: Experiments (local). Code in `research/experiments/`, results in `docs/research/E*.md`
 - [x] E0 Toolchain: Android NDK, cargo-ndk, Rust Android targets
@@ -39,7 +39,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] E8 Key epochs: rotation prototype and tests
 
 ### P3: Decision list (the user decides; DO NOT edit DESIGN.md / UX-PRINCIPLES.md)
-- [x] (draft; integrate FINDINGS.md when the synthesis agent finishes) `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
+- [x] `docs/research/DECISIONS.md` (45 items, FINDINGS integrated): every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
 - [x] A1 Invite-code brute force (measured rates, not estimates)
@@ -52,7 +52,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] A8 Invite / link / clipboard / QR exposure paths (keyboards, cloud clipboard, screenshots)
 
 ### P5: Final report
-- [ ] `docs/research/REPORT.md`: what held, what failed, what changed, what's still open
+- [x] `docs/research/REPORT.md`: what held, what failed, what changed, what's still open
 
 ## Current state
 - P1 research workflow launched (2026-09-24).
@@ -61,7 +61,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-When the workflow's synthesis finishes (FINDINGS.md): cross-check it against DECISIONS.md (add anything missing), then write REPORT.md (P5). Remaining: collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
+**DONE.** All phases complete. Waiting for the user's Keep / Change / Drop decisions in DECISIONS.md. A loop firing now should stop.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
