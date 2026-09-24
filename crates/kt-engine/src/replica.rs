@@ -28,6 +28,8 @@ use crate::storage::{self, Layout};
 use crate::{crypto, wire, Error, Result};
 
 mod discovery;
+mod invites;
+pub use invites::{OpenInvite, PendingJoin};
 mod slots;
 pub use discovery::{DhtLookup, DhtPublish, DHT_VALUE_MAX, LAN_WINDOW_SECS};
 pub use slots::{topic_for, MemberWhereabouts, ReadTopic, SlotReport, SlotRole, SlotTarget, FORWARD_WINDOW_MS, READ_EPOCHS};
@@ -46,6 +48,10 @@ pub enum Message {
     /// A member device's signed, transport-defined "where am I" (network addresses), shared
     /// only inside sealed slots (DESIGN §6 discovery).
     Whereabouts(Vec<u8>),
+    /// A member's signed open-invite record (so any member can re-post and accept).
+    Invite(Vec<u8>),
+    /// A joining device's signed request (in its join slot).
+    JoinRequest(Vec<u8>),
 }
 
 impl Message {
@@ -84,6 +90,9 @@ pub enum Event {
     Parked,
     EpochAccepted { group: GroupId, epoch: EpochId },
     DocEpochSwitched { group: GroupId, doc: DocId, generation: u32, rebased: bool },
+    /// We added a device that presented an open invite or link code ("every join
+    /// notifies the group"; for the personal group: "New device linked · Undo").
+    DeviceJoined { group: GroupId, device: DeviceId, via_link: bool },
 }
 
 struct DocState {
@@ -134,6 +143,7 @@ pub struct Replica {
     imported: std::collections::HashSet<[u8; 32]>,
     /// This device's current whereabouts (opaque, from the transport layer).
     whereabouts: Option<Vec<u8>>,
+    invite_cache: invites::InviteCache,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
 }
@@ -156,6 +166,7 @@ impl Replica {
             parked: Vec::new(),
             imported: std::collections::HashSet::new(),
             whereabouts: None,
+            invite_cache: Default::default(),
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
         };
@@ -473,6 +484,8 @@ impl Replica {
             Message::Envelope(b) => self.apply_envelope_bytes(&b, true),
             Message::Status(b) => self.receive_status(&b),
             Message::Whereabouts(b) => self.receive_whereabouts(&b),
+            Message::Invite(b) => self.receive_invite(&b),
+            Message::JoinRequest(b) => self.receive_join_request(&b),
         }
     }
 

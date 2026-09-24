@@ -7,6 +7,7 @@ pub mod envelope;
 pub mod epochs;
 pub mod ids;
 pub mod identity;
+pub mod invite;
 pub mod limits;
 pub mod replica;
 pub mod sandbox;

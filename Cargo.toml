@@ -24,6 +24,7 @@ thiserror = "=2.0.21"
 anyhow = "=1.0.100"
 zeroize = "=1.9.0"
 hex = "=0.4.3"
+argon2 = { version = "=0.5.3", default-features = false, features = ["alloc"] }
 # Networking (M2). Versions match what iroh 1.2 already pulls in, so they add no app size.
 tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
 tokio-websockets = { version = "=0.13.3", features = ["client", "server", "ring", "getrandom", "rustls-webpki-roots"] }
@@ -43,3 +44,9 @@ lto = true
 codegen-units = 1
 panic = "unwind"
 strip = true
+
+# Argon2id (64 MiB) is painfully slow unoptimized; tests derive invite keys often.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3

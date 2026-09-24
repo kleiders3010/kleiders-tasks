@@ -45,6 +45,8 @@ pub fn topic_for(key: &SymKey, epoch: &EpochId) -> [u8; 32] {
 pub enum SlotRole {
     Main,
     Forward,
+    /// A joining device's request, under the invite epoch's topic.
+    Join,
 }
 
 /// A slot this device should write.
@@ -164,6 +166,17 @@ impl Replica {
                     }
                 }
             }
+            // Epochs a device we just added may still be listening on (see invites).
+            for (e, since) in self.answer_epochs(g) {
+                if now.saturating_sub(since) < FORWARD_WINDOW_MS {
+                    push(e, SlotRole::Forward);
+                }
+            }
+        }
+        for (p, topic, seed) in self.join_targets() {
+            if !out.iter().any(|t| t.group == p.group) {
+                out.push(SlotTarget { group: p.group, epoch: p.epoch, topic, role: SlotRole::Join, writer_seed: seed });
+            }
         }
         out
     }
@@ -216,8 +229,12 @@ impl Replica {
     fn slot_messages_fingerprint_input(&mut self, t: &SlotTarget) -> Result<Vec<Vec<u8>>> {
         // Envelopes carry random nonces, so fingerprint the plaintext ingredients instead.
         let me_peer = self.identity.peer_id();
+        if t.role == SlotRole::Join {
+            return Ok(vec![b"join".to_vec(), t.epoch.0.to_vec()]);
+        }
         let state = self.groups.get(&t.group).ok_or_else(|| Error::NotFound("group".into()))?;
         let mut out: Vec<Vec<u8>> = self.carried_records(&t.group)?.into_iter().collect();
+        out.extend(self.invite_messages(&t.group)?);
         if t.role == SlotRole::Main {
             for (d, ds) in &state.docs {
                 let cur = ds.doc.oplog_vv().get(&me_peer).copied().unwrap_or(0);
@@ -398,6 +415,10 @@ impl Replica {
     }
 
     fn slot_messages(&mut self, t: &SlotTarget) -> Result<Vec<Vec<u8>>> {
+        if t.role == SlotRole::Join {
+            let p = self.pending_joins().into_iter().find(|p| p.group == t.group).ok_or_else(|| Error::NotFound("pending join".into()))?;
+            return Ok(vec![Message::JoinRequest(self.join_request(&p)?).encode()?]);
+        }
         let mut messages = Vec::new();
         for r in self.carried_records(&t.group)? {
             messages.push(Message::Epoch(r).encode()?);
@@ -415,6 +436,9 @@ impl Replica {
         let key = state.keys.get(&t.epoch).cloned().ok_or_else(|| Error::NotFound("head key".into()))?;
         let docs: Vec<_> = state.docs.keys().copied().collect();
         messages.push(Message::Status(self.status_record(&t.group)?).encode()?);
+        for inv in self.invite_messages(&t.group)? {
+            messages.push(Message::Invite(inv).encode()?);
+        }
         if let Some(w) = self.whereabouts_record(&t.group)? {
             messages.push(Message::Whereabouts(w).encode()?);
         }
