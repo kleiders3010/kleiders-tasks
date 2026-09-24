@@ -44,7 +44,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - poisoned locks panic on the next use by design (`test_poisoned_lock_panics_after_unwind`).
 - **Confidence:** high that (1) contains crashes. **Not verified:** the cost of a separate process on Android, especially inside background jobs.
 
-### D4. No size limits: one member can push 50 MB to everyone
+### D4. No size limits: one member can push 50 MB to everyone: ✅ CHANGED → soft limits (2026-09-24)
 - **Problem:** a 50 MB text insert became a 50 MB update, which every member imported in 0.1 s. P2P has no cap. A list over 25 MB also **silently disables Android Auto Backup** for every member (R7).
 - **Evidence:** A5 §3, R7.
 - **Proposal:** engine limits before import:
