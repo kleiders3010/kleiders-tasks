@@ -44,6 +44,7 @@
 - [x] LAN discovery (`kt-net/src/lan.rs`, D57): beacons with 10-minute rotating tags and sealed device-signed whereabouts, padded entry counts; members learn LAN addresses and dial directly; outsiders learn nothing. Tested on loopback; multicast on a real LAN not yet tested (it would trigger a Windows firewall prompt on this PC)
 - [x] P2P membership proof: `Hello` carries the dialer's device-signed whereabouts naming its endpoint, so a responder serves a member it hasn't heard of yet
 - [ ] n0 DNS discovery as an optional best-effort layer (a config flag on the iroh endpoint)
+- [x] Live mode (`kt-net/src/live.rs`): Nostr live subscriptions push members' slots (29 ms locally); knocks (ephemeral kind 25711, throwaway keys, sealed whereabouts) make online members dial each other at once (D49 (b) signaling)
 - [ ] Helper storage protocol (basic) + reliability records
 - [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
 - [ ] Operator manifest, real-world part (needs the user): generate the real offline operator key (same handling as the release keystore), choose the hosting URLs (jurisgames.com, the public repo)
@@ -64,7 +65,7 @@
 - [ ] Notifications from merged state
 
 ## Current state
-- **M2 in progress (2026-09-24).** 53 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- **M2 in progress (2026-09-24).** 66 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
 - Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
@@ -76,9 +77,8 @@
 - Fixed during M1: new members couldn't read pre-join history (Add epochs now carry wrapped history keys); the outgoing queue and own-op send positions are now persisted (the CLI's short-lived processes exposed both).
 
 ## Next action
-1. Nostr live subscriptions (near-real-time sync while apps are open) + knock signaling for simultaneous dial.
-2. Helper storage protocol for strangers (RAM), reliability records, selection.
-3. Then M3 (invites, device linking).
+1. Helper storage protocol for strangers (RAM), reliability records, selection.
+2. Then M3 (invites, device linking).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
