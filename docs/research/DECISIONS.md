@@ -375,7 +375,8 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 
 ### D40. Flathub bans AI-generated manifests and scrutinizes AI-generated code: ✅ DECIDED: Flathub not pursued (2026-09-24)
 - **Evidence:** R8. "Manifests must not contain AI-generated or AI-assisted content"; AI-generated code must be disclosed and may be rejected. This project is AI-assisted.
-- **Implication:** Flathub is likely closed to us. Linux via AppImage and .deb/.rpm on our own releases. Flatpak outside Flathub is possible but loses discoverability.
+- **Correction (2026-09-24):** "likely closed" overstated it. The policy requires a **human-written manifest**, **human submission**, and **disclosure** of AI-generated code, with discretionary rejection "based on the extent or role of generated material". It isn't a ban on AI-assisted apps. Big apps like Spotify are unaffected because their Flathub packages are community-written wrappers around official binaries, which Flathub doesn't review. For us: possible, with honest disclosure and some rejection risk, after months of release history.
+- **Implication (original):** Flathub is likely closed to us. Linux via AppImage and .deb/.rpm on our own releases. Flatpak outside Flathub is possible but loses discoverability.
 
 ### D41. GitHub Pages needs a public repo
 - **Evidence:** R8. Free-plan Pages requires a public repo; private release assets aren't public; the unauthenticated API allows 60 requests/h per IP.
