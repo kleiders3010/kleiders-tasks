@@ -201,6 +201,11 @@ impl Replica {
                 }
             }
             self.groups.insert(g, state);
+            // Keys received through invites (before being added).
+            let invite_keys: Vec<(EpochId, [u8; 32])> = std::fs::read(self.layout.group_dir(&g).join("invite_keys")).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default();
+            for (e, k) in invite_keys {
+                self.groups.get_mut(&g).expect("inserted").keys.entry(e).or_insert(SymKey(k));
+            }
             self.refresh_keys(&g);
             for d in self.layout.docs(&g)? {
                 let doc = match std::fs::read(self.layout.doc_snapshot(&g, &d)) {
@@ -284,7 +289,17 @@ impl Replica {
             docs: BTreeMap::new(),
             new_records: Vec::new(),
         });
-        state.keys.insert(epoch, key);
+        state.keys.insert(epoch, key.clone());
+        // Kept with the group: the next process (app restart, background job) still reads.
+        let _ = std::fs::create_dir_all(self.layout.group_dir(&g));
+        let path = self.layout.group_dir(&g).join("invite_keys");
+        let mut all: Vec<(EpochId, [u8; 32])> = std::fs::read(&path).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default();
+        if !all.iter().any(|(e, _)| *e == epoch) {
+            all.push((epoch, key.0));
+            if let Ok(b) = postcard::to_stdvec(&all) {
+                let _ = storage::write_atomic(&path, &b);
+            }
+        }
     }
 
     pub fn create_group(&mut self) -> Result<GroupId> {

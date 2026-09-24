@@ -148,3 +148,28 @@ fn cancelled_invites_and_removals_close_them() {
     net.sync(&mut [&mut a, &mut e]);
     assert!(!e.epochs(&g).is_some_and(|x| x.is_current_member(&e.device_id())), "the removal closed invite 2");
 }
+
+#[test]
+fn a_joiner_restarting_before_being_let_in_still_gets_in() {
+    let mut net = Net::default();
+    let mut a = dev("pa");
+    let g = a.create_group().unwrap();
+    let d = a.create_doc(&g).unwrap();
+    a.doc(&g, &d).unwrap().get_map("tasks").insert("t1", "milk").unwrap();
+    a.commit(&g, &d).unwrap();
+    let (code, _) = a.create_invite(&g, CodeKind::Invite, MONTH).unwrap();
+    net.sync(&mut [&mut a]);
+    let root = std::env::temp_dir().join(format!("kt-inv-restart-{}-{}", std::process::id(), rand::random::<u32>()));
+    let sb = SandboxConfig { worker: PathBuf::from(env!("CARGO_BIN_EXE_kt-import-worker")), timeout: Duration::from_secs(20) };
+    {
+        let mut b = Replica::open(&root.join("identity"), &root.join("data"), sb.clone()).unwrap();
+        let rec = net.lookup(&code.to_text(), CodeKind::Invite).unwrap();
+        b.begin_join(&rec).unwrap();
+        net.sync(&mut [&mut b]); // posts the join request, then the app is closed
+    }
+    // The app starts again (new process): the invite key must still be there.
+    let mut b = Replica::open(&root.join("identity"), &root.join("data"), sb).unwrap();
+    net.sync(&mut [&mut a, &mut b]);
+    assert!(b.epochs(&g).unwrap().is_current_member(&b.device_id()));
+    assert!(value(&b, &g, &d).contains("milk"));
+}

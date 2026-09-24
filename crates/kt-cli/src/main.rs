@@ -52,6 +52,9 @@ fn usage() -> &'static str {
                                plus peer-to-peer with member devices (--p2p / --iroh-relay);
                                --serve keeps answering peers for SECS afterwards;
                                --dht publishes/looks up whereabouts on the Mainline DHT
+  invite GROUP [--days N]      create an invite (8 words; published on the next sync)
+  join-code WORD... [--relays ...] [--p2p] [--dht]
+                               find an invite on every enabled layer and ask to join
   relay [--port P]             run a local test Nostr relay (no --home needed)
   helper-relay [--port P] [--token T]  run a helper iroh relay (no --home needed)"
 }
@@ -180,11 +183,16 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
         Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
         None => BASELINE_RELAYS.iter().map(|s| s.to_string()).collect(),
     };
+    let me_name = app.display_name();
+    let names: std::collections::HashMap<GroupId, (String, String)> = app.groups().into_iter().map(|g| (g.group, (g.name, me_name.clone()))).collect();
     let replica = Arc::new(Mutex::new(app.into_replica()));
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let url_refs: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
         let mb = Arc::new(kt_net::nostr::NostrMailbox::new(&url_refs, kt_net::nostr::NostrPolicy::default()));
+        // Real relays: the self-sustaining relay list (seed = these URLs). Local test
+        // relays (ws://) keep the fixed list.
+        let keeper = urls.iter().all(|u| u.starts_with("wss://")).then(|| kt_net::relays::RelayDirectory::new(&url_refs, Some(home.join("data").join("relays.dir"))));
         // One state file per relay set: mailbox indices must be stable for a given file.
         let set_id = hex::encode(&kt_engine::crypto::hash("kt/relayset/v1", urls.join(",").as_bytes())[..6]);
         let state = home.join("data").join(format!("sync-{set_id}.state"));
@@ -194,6 +202,14 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
             Some(state),
             Some(home.join("data").join("slots.store")),
         );
+        if let Some(dir) = &keeper {
+            kt_net::relays::install_resolver(&syncer, &mb);
+            let rep = kt_net::relays::maintain(&syncer, &mb, dir).await;
+            if rep.sets_created + rep.sets_repaired > 0 {
+                println!("  relays: {} group set(s) created, {} repaired ({} candidates known)", rep.sets_created, rep.sets_repaired, dir.candidates().len());
+            }
+        }
+        let mut dht_handle: Option<Arc<kt_net::dht::DhtDiscovery>> = None;
         let peer = if p2p.enabled {
             let cfg = kt_net::p2p::P2pConfig { relays: p2p.iroh_relays.clone(), relay_only: p2p.relay_only, portmap: true, ..Default::default() };
             let p = kt_net::p2p::P2p::start(syncer.clone(), cfg).await.map_err(|e| anyhow!(e))?;
@@ -204,6 +220,8 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
             if p2p.dht {
                 match kt_net::dht::DhtDiscovery::with_cache(replica.clone(), home.join("data").join("dht_nodes.txt"), None) {
                     Ok(d) => {
+                        let d = Arc::new(d);
+                        dht_handle = Some(d.clone());
                         let t = std::time::Instant::now();
                         let boot = tokio::time::timeout(Duration::from_secs(20), d.bootstrapped()).await.unwrap_or(false);
                         let pubr = d.publish().await;
@@ -238,6 +256,18 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
                 );
             }
         }
+        // Open invites: today's record on every enabled layer, plus copies for every
+        // remaining day on the storing layers (so a joiner finds it while we're offline).
+        let layers = kt_net::invite_net::InviteLayers { p2p: peer.clone(), dht: dht_handle.clone(), nostr: Some(mb.clone()), helpers: None, lan: None };
+        let names_fn = |g: &GroupId| names.get(g).cloned().unwrap_or_default();
+        let ir = kt_net::invite_net::publish(&syncer, &layers, &names_fn).await;
+        if ir.records > 0 {
+            let ahead = kt_net::invite_net::publish_ahead(&syncer, &layers, &names_fn).await;
+            println!("  invites: {} open; today's record on {} relay set(s), {} DHT; {ahead} day copies published ahead", ir.records, ir.nostr, ir.dht);
+        }
+        for p in replica.lock().expect("lock").settle_joins() {
+            println!("  joined '{}' (invited by {})", p.group_name, p.inviter_name);
+        }
         if let (Some(p), true) = (&peer, p2p.serve > 0) {
             println!("  answering peers for {} s", p2p.serve);
             tokio::time::sleep(Duration::from_secs(p2p.serve)).await;
@@ -265,6 +295,63 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
         }
     }
     Ok(())
+}
+
+fn run_join_code(app: App, relays: Option<String>, words: &str, p2p: P2pOpts) -> Result<()> {
+    use std::sync::{Arc, Mutex};
+    let code = kt_engine::invite::Code::parse(words).map_err(|e| anyhow!("{e}"))?;
+    let urls: Vec<String> = match relays {
+        Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        None => BASELINE_RELAYS.iter().map(|s| s.to_string()).collect(),
+    };
+    let replica = Arc::new(Mutex::new(app.into_replica()));
+    let rt = tokio::runtime::Runtime::new()?;
+    rt.block_on(async {
+        let url_refs: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
+        let mb = Arc::new(kt_net::nostr::NostrMailbox::new(&url_refs, kt_net::nostr::NostrPolicy::default()));
+        let syncer = kt_net::sync::Syncer::new(replica.clone(), vec![mb.clone() as Arc<dyn kt_net::mailbox::Mailbox>]);
+        if urls.iter().all(|u| u.starts_with("wss://")) {
+            kt_net::relays::install_resolver(&syncer, &mb);
+        }
+        let peer = if p2p.enabled {
+            let cfg = kt_net::p2p::P2pConfig { relays: p2p.iroh_relays.clone(), relay_only: p2p.relay_only, portmap: true, ..Default::default() };
+            let p = kt_net::p2p::P2p::start(syncer.clone(), cfg).await.map_err(|e| anyhow!(e))?;
+            p.publish_whereabouts();
+            Some(p)
+        } else {
+            None
+        };
+        let dht = if p2p.dht {
+            kt_net::dht::DhtDiscovery::new(replica.clone(), None, None).ok().map(Arc::new)
+        } else {
+            None
+        };
+        let layers = kt_net::invite_net::InviteLayers { p2p: peer.clone(), dht, nostr: Some(mb.clone()), helpers: None, lan: None };
+        let t = std::time::Instant::now();
+        let found = kt_net::invite_net::fetch(&layers, &code, kt_engine::invite::CodeKind::Invite, &[], Duration::from_millis(0)).await;
+        let Some((rec, source)) = found else {
+            if kt_net::invite_net::fetch(&layers, &code, kt_engine::invite::CodeKind::Link, &[], Duration::from_millis(0)).await.is_some() {
+                bail!("this is a device link code, not an invite: use it to link this device to your own account");
+            }
+            bail!("no invite found for these words (check them, or it may have expired or been cancelled)");
+        };
+        println!(
+            "found an invite to '{}' from {} via {:?} in {:.1} s (valid for {} more day(s))",
+            rec.group_name,
+            rec.inviter_name,
+            source,
+            t.elapsed().as_secs_f64(),
+            rec.expires_ms.saturating_sub(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)) / 86_400_000
+        );
+        let direct = kt_net::invite_net::join(&syncer, peer.as_ref(), &rec).await.map_err(|e| anyhow!(e))?;
+        syncer.sync_once().await; // posts our join request where the group looks
+        if direct {
+            println!("joined directly through the inviter's device");
+        } else {
+            println!("asked to join; you'll be let in as soon as a member's device sees it (run `kt sync` to check)");
+        }
+        Ok::<(), anyhow::Error>(())
+    })
 }
 
 fn run() -> Result<()> {
@@ -328,6 +415,10 @@ fn run() -> Result<()> {
     let mut app = open(&home)?;
     if cmd == "sync" {
         return run_sync(app, &home, relays_flag, rounds, every, p2p);
+    }
+    if cmd == "join-code" {
+        let words = args[1..].join(" ");
+        return run_join_code(app, relays_flag, &words, p2p);
     }
     match cmd.as_str() {
         "init" => println!("device ready: {}", &device_key(&app.replica.device_public())[..16]),
@@ -440,6 +531,19 @@ fn run() -> Result<()> {
                     other => println!("  {other:?}"),
                 }
             }
+        }
+        "invite" => {
+            let g = app.find_group(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
+            if g.personal {
+                bail!("your personal group is for your own devices (device linking), not invites");
+            }
+            let days: u64 = args.iter().position(|a| a == "--days").and_then(|i| args.get(i + 1)).and_then(|d| d.parse().ok()).unwrap_or(30).clamp(1, 30);
+            let (code, expires) = app.replica.create_invite(&g.group, kt_engine::invite::CodeKind::Invite, days * 86_400_000).map_err(|e| anyhow!("{e}"))?;
+            let words: Vec<&str> = code.to_words();
+            println!("invite to '{}' (valid {days} day(s), until day {}):", g.name, expires / 86_400_000);
+            println!("  {}", words[..4].join(" "));
+            println!("  {}", words[4..].join(" "));
+            println!("(published on your next `kt sync`)");
         }
         "epoch" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
