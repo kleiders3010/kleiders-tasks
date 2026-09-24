@@ -37,6 +37,8 @@
 - [x] Runs on Android: the `kt` CLI cross-compiled (arm64) on the test tablet syncs with the PC; sandboxed imports work there
 - [x] Public relay session (organic, approved 2026-09-24): all edits synced over 7 real relays, kind 35711 accepted everywhere, no rate limits, 100% read-back (`docs/research/E11-public-nostr-session.md`)
 - [x] iroh P2P (`kt-net/src/p2p.rs`): whereabouts in sealed slots, slot store, member-to-member exchange with delivery acks, non-members refused, member relaying (store-and-forward)
+- [x] Helper relay (`kt-net/src/helper_relay.rs`, `kt helper-relay`): embedded iroh-relay server, token access, per-client cap. **Verified PC ↔ tablet** with Nostr dead: the tablet's sync reached the PC through the helper relay (tunneled over USB with `adb reverse`), 3 slots sent and confirmed, 3 received, 0.62 s on the tablet
+- [ ] Helper relay TLS: Let's Encrypt IP certificates via ACME (validated in E10 against a local CA; needs a publicly reachable machine to test for real)
 - [ ] iroh P2P (LAN with rotating IDs, direct, relays per D49 outcome, member relaying)
 - [ ] Discovery: Nostr slot + Mainline DHT (pkarr) + n0 DNS
 - [ ] Helper storage protocol (basic) + reliability records
@@ -59,6 +61,7 @@
 
 ## Current state
 - **M2 in progress (2026-09-24).** 53 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
   - slot fingerprints changed between processes (hash-map order), so every run rewrote every slot;
@@ -69,9 +72,8 @@
 - Fixed during M1: new members couldn't read pre-join history (Add epochs now carry wrapped history keys); the outgoing queue and own-op send positions are now persisted (the CLI's short-lived processes exposed both).
 
 ## Next action
-1. Helper iroh relay embedded in the app (desktop helpers; iroh-relay server, IPv4 URL, group-token access) + test through it; PC ↔ tablet over a relay tunneled with `adb reverse` (TCP).
-2. LAN discovery with rotating IDs; simultaneous dial timing via Nostr ephemeral events.
-3. Discovery beyond slots (pkarr/DHT, n0 DNS), helper storage protocol for strangers (RAM), operator manifest.
+1. LAN discovery with rotating IDs; simultaneous dial timing via Nostr ephemeral events.
+2. Discovery beyond slots (pkarr/DHT, n0 DNS), helper storage protocol for strangers (RAM), operator manifest.
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
