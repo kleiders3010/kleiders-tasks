@@ -5,6 +5,7 @@
 # Gradle / Android / IntelliJ
 .gradle/
 build/
+!docs/build/
 local.properties
 .idea/
 *.iml
