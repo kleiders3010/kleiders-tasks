@@ -1,6 +1,11 @@
-//! Helper network, storage side (DESIGN §7a): devices keep other groups' slots in RAM,
-//! like torrent seeding, so a group's changes wait somewhere even when all its members
-//! are offline.
+//! Helper network, storage side (DESIGN §7a): devices keep other groups' slots in RAM and
+//! on disk, like torrent seeding, so a group's changes wait somewhere even when all its
+//! members are offline.
+//!
+//! **Disk copy** (decided 2026-09-24; RAM-only phones lost everything between jobs): one
+//! encrypted file per slot, managed strictly because disk doesn't clear itself: the same
+//! byte caps and quotas as RAM, slots unrefreshed for [`HelperLimits::ttl_ms`] deleted,
+//! corrupt files deleted, [`wipe_disk`] when helping is turned off.
 //!
 //! **Helper (server):** [`HelperStore`], served on the device's iroh endpoint under
 //! [`HELPER_ALPN`].
@@ -184,6 +189,14 @@ fn now_ms() -> u64 {
 
 // ---------------------------------------------------------------- helper (server)
 
+/// Where and how the disk copy lives.
+#[derive(Clone, Debug)]
+pub struct DiskConfig {
+    pub dir: std::path::PathBuf,
+    /// Device-held key (encryption at rest); `SymKey` never prints.
+    pub key: kt_engine::crypto::SymKey,
+}
+
 #[derive(Clone, Debug)]
 pub struct HelperLimits {
     /// RAM for strangers' slots (e.g. 16–32 MB on phones, 64–256 MB on desktops).
@@ -195,6 +208,10 @@ pub struct HelperLimits {
     /// A topic younger than this may use at most `young_topic_cap` bytes.
     pub young_age: Duration,
     pub young_topic_cap: u64,
+    /// Slots not refreshed for this long are deleted (RAM and disk).
+    pub ttl_ms: u64,
+    /// Keep a disk copy (None = RAM only).
+    pub disk: Option<DiskConfig>,
 }
 
 impl Default for HelperLimits {
@@ -206,20 +223,45 @@ impl Default for HelperLimits {
             base_pow_bits: 12,
             young_age: Duration::from_secs(24 * 3600),
             young_topic_cap: 256 * 1024,
+            ttl_ms: 14 * 24 * 3600 * 1000,
+            disk: None,
         }
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct Entry {
     put: SignedPut,
-    refreshed: Instant,
+    /// Wall-clock ms (survives restarts with the disk copy).
+    refreshed: u64,
     /// The slot's helper set as its writer told us (for handoff).
     set: Vec<HelperRef>,
+    /// When its topic was first seen (young-topic cap), ms.
+    topic_first_seen: u64,
 }
 
 struct TopicInfo {
-    first_seen: Instant,
+    first_seen: u64,
     bytes: u64,
+}
+
+const DISK_AAD: &[u8] = b"kt/helper-disk/v1";
+
+fn entry_file(dir: &std::path::Path, key: &([u8; 32], [u8; 32])) -> std::path::PathBuf {
+    let mut m = key.0.to_vec();
+    m.extend_from_slice(&key.1);
+    let h = hex::encode(&blake3::hash(&m).as_bytes()[..16]);
+    dir.join(&h[..2]).join(&h[2..])
+}
+
+fn verify_put(p: &SignedPut) -> bool {
+    let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(&p.writer), <[u8; 64]>::try_from(p.sig.as_slice())) else { return false };
+    pk.verify(&put_message(&p.topic, p.version, &p.blob), &Signature::from_bytes(&sig)).is_ok()
+}
+
+/// Delete a helper's disk copy (helping turned off).
+pub fn wipe_disk(dir: &std::path::Path) {
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 pub struct HelperStore {
@@ -256,13 +298,108 @@ impl HelperStore {
     }
 
     pub fn new(limits: HelperLimits) -> Arc<HelperStore> {
-        Arc::new(HelperStore {
-            limits,
+        let store = HelperStore {
             session_start_ms: now_ms(),
+            limits,
             inner: Mutex::new((HashMap::new(), HashMap::new(), 0)),
             evicted: Mutex::new(std::collections::HashSet::new()),
             peers: Mutex::new(HashMap::new()),
-        })
+        };
+        Arc::new(store.load_disk())
+    }
+
+    /// Reload the disk copy: verify every file (signature, expiry, caps), delete what
+    /// doesn't pass. The store's start time is kept with it, so a restart that kept the
+    /// data isn't taken for data loss.
+    fn load_disk(mut self) -> HelperStore {
+        let Some(d) = self.limits.disk.clone() else { return self };
+        let _ = std::fs::create_dir_all(&d.dir);
+        let start_file = d.dir.join("store_start");
+        match std::fs::read(&start_file).ok().and_then(|b| b.try_into().ok().map(u64::from_le_bytes)) {
+            Some(t) => self.session_start_ms = t,
+            None => {
+                let _ = kt_engine::storage::write_atomic(&start_file, &self.session_start_ms.to_le_bytes());
+            }
+        }
+        let now = now_ms();
+        let mut loaded: Vec<Entry> = Vec::new();
+        for shard in std::fs::read_dir(&d.dir).into_iter().flatten().flatten() {
+            if !shard.path().is_dir() {
+                continue;
+            }
+            for f in std::fs::read_dir(shard.path()).into_iter().flatten().flatten() {
+                let ok = std::fs::read(f.path())
+                    .ok()
+                    .and_then(|b| kt_engine::crypto::open(&d.key, DISK_AAD, &b).ok())
+                    .and_then(|b| postcard::from_bytes::<Entry>(&b).ok())
+                    .filter(|e| verify_put(&e.put) && now.saturating_sub(e.refreshed) < self.limits.ttl_ms && e.put.blob.len() as u64 <= self.limits.max_slot);
+                match ok {
+                    Some(e) if entry_file(&d.dir, &(e.put.topic, e.put.writer)) == f.path() => loaded.push(e),
+                    _ => {
+                        let _ = std::fs::remove_file(f.path());
+                    }
+                }
+            }
+        }
+        // Newest first, within the caps (a smaller cap after a settings change trims here).
+        loaded.sort_by_key(|e| std::cmp::Reverse(e.refreshed));
+        {
+            let (entries, topics, used) = self.inner.get_mut().expect("lock");
+            for e in loaded {
+                let n = e.put.blob.len() as u64;
+                let t = topics.entry(e.put.topic).or_insert(TopicInfo { first_seen: e.topic_first_seen, bytes: 0 });
+                if *used + n > self.limits.capacity || t.bytes + n > self.limits.per_topic {
+                    let _ = std::fs::remove_file(entry_file(&d.dir, &(e.put.topic, e.put.writer)));
+                    continue;
+                }
+                t.first_seen = t.first_seen.min(e.topic_first_seen);
+                t.bytes += n;
+                *used += n;
+                entries.insert((e.put.topic, e.put.writer), e);
+            }
+        }
+        self
+    }
+
+    fn disk_write(&self, e: &Entry) {
+        let Some(d) = &self.limits.disk else { return };
+        let path = entry_file(&d.dir, &(e.put.topic, e.put.writer));
+        if let (Some(parent), Ok(b)) = (path.parent(), postcard::to_stdvec(e)) {
+            let _ = std::fs::create_dir_all(parent);
+            let _ = kt_engine::storage::write_atomic(&path, &kt_engine::crypto::seal(&d.key, DISK_AAD, &b));
+        }
+    }
+
+    fn disk_remove(&self, key: &([u8; 32], [u8; 32])) {
+        if let Some(d) = &self.limits.disk {
+            let _ = std::fs::remove_file(entry_file(&d.dir, key));
+        }
+    }
+
+    /// Delete slots nobody refreshed within the TTL (RAM and disk). Returns how many.
+    pub fn sweep(&self) -> usize {
+        let now = now_ms();
+        let mut g = self.inner.lock().expect("lock");
+        let (entries, topics, used) = &mut *g;
+        let stale: Vec<([u8; 32], [u8; 32])> = entries.iter().filter(|(_, e)| now.saturating_sub(e.refreshed) >= self.limits.ttl_ms).map(|(k, _)| *k).collect();
+        for k in &stale {
+            if let Some(e) = entries.remove(k) {
+                let n = e.put.blob.len() as u64;
+                *used -= n;
+                if let Some(t) = topics.get_mut(&k.0) {
+                    t.bytes -= n;
+                }
+            }
+            self.disk_remove(k);
+        }
+        topics.retain(|_, t| t.bytes > 0);
+        stale.len()
+    }
+
+    /// How many slots are held, and bytes used.
+    pub fn held(&self) -> (usize, u64) {
+        let g = self.inner.lock().expect("lock");
+        (g.0.len(), g.2)
     }
 
     pub fn info(&self) -> HelperInfo {
@@ -304,9 +441,12 @@ impl HelperStore {
                 0
             }
         };
-        let ti = topics.entry(topic).or_insert(TopicInfo { first_seen: Instant::now(), bytes: 0 });
+        let now = now_ms();
+        let ti = topics.entry(topic).or_insert(TopicInfo { first_seen: now, bytes: 0 });
+        let topic_first_seen = ti.first_seen;
         let new_topic_bytes = ti.bytes - old_len + blob.len() as u64;
-        let cap = if ti.first_seen.elapsed() < self.limits.young_age { self.limits.young_topic_cap } else { self.limits.per_topic };
+        let young = now.saturating_sub(ti.first_seen) < self.limits.young_age.as_millis() as u64;
+        let cap = if young { self.limits.young_topic_cap } else { self.limits.per_topic };
         if new_topic_bytes > cap {
             return PutReply::Full;
         }
@@ -316,6 +456,7 @@ impl HelperStore {
             let victim = entries.iter().filter(|(k, _)| k.0 != topic).min_by_key(|(_, e)| e.refreshed).map(|(k, _)| *k);
             let Some(v) = victim else { return PutReply::Full };
             let e = entries.remove(&v).expect("exists");
+            self.disk_remove(&v);
             let n = e.put.blob.len() as u64;
             let mut ev = self.evicted.lock().expect("lock");
             if ev.len() < 100_000 {
@@ -330,7 +471,9 @@ impl HelperStore {
         *used = *used - old_len + blob.len() as u64;
         topics.get_mut(&topic).expect("inserted").bytes = new_topic_bytes;
         let set = if set.is_empty() { entries.get(&key).map(|e| e.set.clone()).unwrap_or_default() } else { set };
-        entries.insert(key, Entry { put: p, refreshed: Instant::now(), set });
+        let entry = Entry { put: p, refreshed: now, set, topic_first_seen };
+        self.disk_write(&entry);
+        entries.insert(key, entry);
         self.evicted.lock().expect("lock").remove(&key);
         PutReply::Stored
     }
@@ -712,13 +855,86 @@ impl Mailbox for HelperMailbox {
 mod tests {
     use super::*;
 
+    fn disk_limits(dir: &std::path::Path, key: [u8; 32]) -> HelperLimits {
+        HelperLimits {
+            base_pow_bits: 0,
+            young_age: Duration::from_secs(0),
+            disk: Some(DiskConfig { dir: dir.to_path_buf(), key: kt_engine::crypto::SymKey(key) }),
+            ..Default::default()
+        }
+    }
+
+    fn put(h: &HelperStore, seed: u8, topic: u8, v: u64, len: usize) -> PutReply {
+        let k = SecretKey::from_bytes(&[seed; 32]);
+        let t = [topic; 32];
+        let blob = vec![seed; len];
+        let sig = k.sign(&put_message(&t, v, &blob)).to_bytes().to_vec();
+        h.put(t, *k.public().as_bytes(), v, blob, &sig, 0)
+    }
+
+    #[test]
+    fn disk_copy_survives_restarts_and_is_managed() {
+        let dir = std::env::temp_dir().join(format!("kt-hdisk-{}", rand::random::<u32>()));
+        let h = HelperStore::new(disk_limits(&dir, [7; 32]));
+        assert_eq!(put(&h, 1, 1, 1, 500), PutReply::Stored);
+        assert_eq!(put(&h, 2, 2, 1, 500), PutReply::Stored);
+        let start = h.info().session_start_ms;
+        drop(h);
+        // Restart: same data, same store start (a restart isn't data loss).
+        let h = HelperStore::new(disk_limits(&dir, [7; 32]));
+        assert_eq!(h.held().0, 2);
+        assert_eq!(h.info().session_start_ms, start);
+        // Files are encrypted: no plaintext blob bytes on disk.
+        let mut raw = Vec::new();
+        for sh in std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.path().is_dir()) {
+            for f in std::fs::read_dir(sh.path()).unwrap().flatten() {
+                raw.extend(std::fs::read(f.path()).unwrap());
+            }
+        }
+        assert!(!raw.windows(64).any(|w| w.iter().all(|b| *b == 1)), "blob bytes not visible on disk");
+        // A corrupt file is deleted on load.
+        let victim = std::fs::read_dir(&dir).unwrap().flatten().find(|e| e.path().is_dir()).unwrap();
+        let f = std::fs::read_dir(victim.path()).unwrap().flatten().next().unwrap().path();
+        std::fs::write(&f, b"garbage").unwrap();
+        drop(h);
+        let h = HelperStore::new(disk_limits(&dir, [7; 32]));
+        assert_eq!(h.held().0, 1);
+        assert!(!f.exists(), "corrupt file removed");
+        drop(h);
+        // Another key can't read it: everything is dropped, nothing is trusted.
+        let h = HelperStore::new(disk_limits(&dir, [8; 32]));
+        assert_eq!(h.held().0, 0);
+        drop(h);
+        // TTL: expired slots are swept from RAM and disk.
+        let mut l = disk_limits(&dir, [8; 32]);
+        l.ttl_ms = 0;
+        let h = HelperStore::new(l);
+        let _ = put(&h, 3, 3, 1, 100);
+        assert_eq!(h.sweep(), 1);
+        assert_eq!(h.held(), (0, 0));
+        // A smaller cap after a settings change trims on load.
+        let h = HelperStore::new(disk_limits(&dir, [8; 32]));
+        for i in 0..5u8 {
+            assert_eq!(put(&h, 10 + i, 20 + i, 1, 1000), PutReply::Stored);
+        }
+        drop(h);
+        let mut small = disk_limits(&dir, [8; 32]);
+        small.capacity = 2500;
+        let h = HelperStore::new(small);
+        assert_eq!(h.held().0, 2, "trimmed to the new cap");
+        drop(h);
+        // Helping turned off: the store is gone.
+        wipe_disk(&dir);
+        assert!(!dir.exists());
+    }
+
     fn signed(key: &SecretKey, topic: [u8; 32], v: u64, blob: &[u8]) -> Vec<u8> {
         key.sign(&put_message(&topic, v, blob)).to_bytes().to_vec()
     }
 
     #[test]
     fn store_rules() {
-        let h = HelperStore::new(HelperLimits { capacity: 10_000, per_topic: 6_000, max_slot: 5_000, base_pow_bits: 4, young_age: Duration::from_secs(0), young_topic_cap: 0 });
+        let h = HelperStore::new(HelperLimits { capacity: 10_000, per_topic: 6_000, max_slot: 5_000, base_pow_bits: 4, young_age: Duration::from_secs(0), young_topic_cap: 0, ..Default::default() });
         let k = SecretKey::from_bytes(&[1; 32]);
         let w = *k.public().as_bytes();
         let t = [9; 32];

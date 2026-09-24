@@ -300,6 +300,9 @@ pub async fn maintain_with_dht(
     dht: Option<&crate::dht::DhtDiscovery>,
 ) -> HelperKeeperReport {
     let mut report = HelperKeeperReport { announced: announce(hmb, mb).await, ..Default::default() };
+    if let Some(store) = hmb.p2p().helper() {
+        store.sweep(); // disk doesn't clear itself: drop slots nobody refreshed
+    }
     let due = dir.discovery_due();
     if due {
         report.discovered = dir.discover(mb).await;

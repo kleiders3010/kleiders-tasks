@@ -97,6 +97,26 @@ impl NetSettings {
         })
     }
 
+    /// [`NetSettings::helper_limits`] with the disk copy in `dir` (encrypted with `key`).
+    /// With "Help others sync" off, the disk copy is deleted right away.
+    pub fn helper_limits_with_disk(
+        &self,
+        on_wifi: bool,
+        charging: bool,
+        app_open: bool,
+        dir: &std::path::Path,
+        key: kt_engine::crypto::SymKey,
+    ) -> Option<HelperLimits> {
+        if self.help_others == HelpOthers::Off {
+            crate::helper::wipe_disk(dir);
+            return None;
+        }
+        self.helper_limits(on_wifi, charging, app_open).map(|mut l| {
+            l.disk = Some(crate::helper::DiskConfig { dir: dir.to_path_buf(), key });
+            l
+        })
+    }
+
     /// The live relay to run for strangers, if any (open access: D51). The caller still
     /// checks reachability (public IPv4 or UPnP) and provides the certificate.
     pub fn relay_config(&self) -> Option<HelperRelayConfig> {
@@ -123,5 +143,14 @@ mod tests {
         assert!(p.set_relay_for_others(true).is_err());
         assert!(p.helper_limits(true, true, false).is_some());
         assert!(p.helper_limits(false, true, true).is_none(), "phones help only on Wi-Fi");
+
+        // Turning helping off deletes the disk copy.
+        let dir = std::env::temp_dir().join(format!("kt-settings-{}", rand::random::<u32>()));
+        std::fs::create_dir_all(dir.join("ab")).unwrap();
+        let key = kt_engine::crypto::SymKey([1; 32]);
+        assert!(d.helper_limits_with_disk(true, true, true, &dir, key.clone()).unwrap().disk.is_some());
+        d.help_others = HelpOthers::Off;
+        assert!(d.helper_limits_with_disk(true, true, true, &dir, key).is_none());
+        assert!(!dir.exists());
     }
 }
