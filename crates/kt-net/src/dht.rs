@@ -15,6 +15,7 @@ use mainline::{Dht, MutableItem, SigningKey};
 pub struct DhtDiscovery {
     dht: AsyncDht,
     replica: Arc<Mutex<Replica>>,
+    cache: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -35,7 +36,33 @@ impl DhtDiscovery {
         if let Some(ip) = bind {
             b.bind_address(ip);
         }
-        Ok(DhtDiscovery { dht: b.build()?.as_async(), replica })
+        Ok(DhtDiscovery { dht: b.build()?.as_async(), replica, cache: None })
+    }
+
+    /// Like [`DhtDiscovery::new`] on the public DHT, remembering good nodes in `cache`
+    /// between sessions (used alongside the library's community bootstrap nodes, so the
+    /// DHT is reachable even if those ever disappear).
+    pub fn with_cache(replica: Arc<Mutex<Replica>>, cache: std::path::PathBuf, bind: Option<Ipv4Addr>) -> std::io::Result<DhtDiscovery> {
+        let saved: Vec<String> = std::fs::read_to_string(&cache).map(|s| s.lines().map(str::to_string).filter(|l| !l.is_empty()).take(64).collect()).unwrap_or_default();
+        let mut b = Dht::builder();
+        if !saved.is_empty() {
+            b.extra_bootstrap(&saved);
+        }
+        if let Some(ip) = bind {
+            b.bind_address(ip);
+        }
+        Ok(DhtDiscovery { dht: b.build()?.as_async(), replica, cache: Some(cache) })
+    }
+
+    /// Remember the currently known good nodes (call periodically and before shutdown).
+    pub async fn save_cache(&self) -> usize {
+        let Some(p) = &self.cache else { return 0 };
+        let nodes = self.dht.to_bootstrap().await;
+        if nodes.is_empty() {
+            return 0;
+        }
+        let _ = kt_engine::storage::write_atomic(p, nodes.join("\n").as_bytes());
+        nodes.len()
     }
 
     pub async fn bootstrapped(&self) -> bool {

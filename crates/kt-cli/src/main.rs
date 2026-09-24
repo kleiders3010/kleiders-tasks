@@ -202,14 +202,15 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
             }
             p.publish_whereabouts();
             if p2p.dht {
-                match kt_net::dht::DhtDiscovery::new(replica.clone(), None, None) {
+                match kt_net::dht::DhtDiscovery::with_cache(replica.clone(), home.join("data").join("dht_nodes.txt"), None) {
                     Ok(d) => {
                         let t = std::time::Instant::now();
                         let boot = tokio::time::timeout(Duration::from_secs(20), d.bootstrapped()).await.unwrap_or(false);
                         let pubr = d.publish().await;
                         let look = d.lookup().await;
+                        let cached = d.save_cache().await;
                         println!(
-                            "  dht: bootstrapped {boot}, published {}/{} , found {} member record(s), applied {} ({:.1} s)",
+                            "  dht: bootstrapped {boot}, published {}/{}, found {} member record(s), applied {}, {cached} nodes remembered ({:.1} s)",
                             pubr.published, pubr.published + pubr.publish_failed, look.found, look.applied, t.elapsed().as_secs_f64()
                         );
                     }
