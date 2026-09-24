@@ -125,7 +125,7 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
   - Linking = joining the personal group. A device that already has lists merges them, **shown on the same confirmation screen**.
   - The single confirmation names what you're joining: *"This will join Mark's account: Pixel 7 · Mark's PC · 12 lists (Work, Groceries…)"*. A phishing victim sees a stranger's devices and lists.
   - Link codes look different from invites and are **refused on the join path** with a plain explanation.
-  - Link codes are **single-use and valid for a few hours**.
+  - Link codes are **reusable and valid for a few hours**. Every device that links through one triggers the alert below.
   - **"New device linked · Undo"** appears on every device for a while. Undo removes the device and automatically rotates the keys of every list involved.
 - **Groups and key epochs (D5):** a group is a random 256-bit secret; the working keys live in **epochs** that rotate. Rules, validated by **every receiver** (simulated in E8: 3,000/3,000 runs after rule 4):
   1. **Strong remove:** a removed device can never be re-added.
