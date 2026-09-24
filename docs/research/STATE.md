@@ -16,15 +16,15 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] Checkpoint file, research directory
 
 ### P1: Research (multi-agent). Reports in `docs/research/R*.md`
-- [ ] R1 iroh (connectivity, Android, relays, blobs, size)
-- [ ] R2 Nostr (acceptance, addressable events, limits, retention, PoW)
-- [ ] R3 Loro (history, shallow snapshots, sizes, perf, compacted-history imports)
-- [ ] R4 Android platform (WorkManager, shortService, charging, standby buckets, widgets, local-network permission, exact alarms, Block Store, Auto Backup)
-- [ ] R5 Prior art and their failures (BitTorrent / BEP44, Hypercore / Pear / Keet, Syncthing, Anytype, Delta Chat, Briar, Magic Wormhole, Automerge-repo)
-- [ ] R6 User experience evidence (P2P / local-first complaints, task app complaints, sharing flows)
-- [ ] R7 Security design review (invite codes, Argon2 params, key epochs, sealed backups, helper trust)
-- [ ] R8 Policy and feasibility (Play policies, data safety, FGS, Drive / OneDrive OAuth, GitHub Pages)
-- [ ] Adversarial verification of each report's key findings
+- [x] R1 iroh (connectivity, Android, relays, blobs, size)
+- [x] R2 Nostr (acceptance, addressable events, limits, retention, PoW)
+- [x] R3 Loro (history, shallow snapshots, sizes, perf, compacted-history imports)
+- [x] R4 Android platform (WorkManager, shortService, charging, standby buckets, widgets, local-network permission, exact alarms, Block Store, Auto Backup)
+- [x] R5 Prior art and their failures (BitTorrent / BEP44, Hypercore / Pear / Keet, Syncthing, Anytype, Delta Chat, Briar, Magic Wormhole, Automerge-repo)
+- [x] R6 User experience evidence (P2P / local-first complaints, task app complaints, sharing flows)
+- [x] R7 Security design review (invite codes, Argon2 params, key epochs, sealed backups, helper trust)
+- [x] R8 Policy and feasibility (Play policies, data safety, FGS, Drive / OneDrive OAuth, GitHub Pages)
+- [x] Adversarial verification of each report's key findings
 - [ ] Synthesis: `docs/research/FINDINGS.md` (claim → verdict → evidence → fix)
 
 ### P2: Experiments (local). Code in `research/experiments/`, results in `docs/research/E*.md`
@@ -39,7 +39,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [x] E8 Key epochs: rotation prototype and tests
 
 ### P3: Decision list (the user decides; DO NOT edit DESIGN.md / UX-PRINCIPLES.md)
-- [ ] `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
+- [x] (draft; integrate FINDINGS.md when the synthesis agent finishes) `docs/research/DECISIONS.md`: every issue found, with evidence, a proposed fix and alternatives, and a Keep / Change / Drop choice for the user. Nothing in the design changes until the user picks. **Only list alternatives that were actually evaluated with equal rigor; if there's one serious option, say so. State confidence and what was not checked for every item.**
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
 - [x] A1 Invite-code brute force (measured rates, not estimates)
@@ -61,7 +61,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-Remaining: collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
+When the workflow's synthesis finishes (FINDINGS.md): cross-check it against DECISIONS.md (add anything missing), then write REPORT.md (P5). Remaining: collect the P1 research reports (workflow still running), then P3 DECISIONS.md and P5 REPORT.md.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
