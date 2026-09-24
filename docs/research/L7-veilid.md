@@ -317,3 +317,69 @@ Recommendation: prototype C1+C3 behind the transport-manager interface, desktop-
 - `Builder::add_custom_transport`, `address_lookup`, `external_addr`: https://docs.rs/iroh/1.2.0/iroh/endpoint/struct.Builder.html
 
 **Internal:** `DESIGN.md` §6–§8, `research/DECISIONS.md` D11–D24, D28, D29, D45, `research/REPORT.md`, `research/R1-iroh.md`.
+
+---
+
+## Independent verification
+
+Verifier pass on 2026-09-24. I used different routes from the researcher where I could: the GitLab REST API (issues, commits, trees), raw source files on `main`, the crates.io API, the GitHub API (veilist, Save, save-dweb-backend, save-rust, veilid-vc, iroh), and the veilist 0.9.2 APK's zip central directory, read with an HTTP range request. I sent no traffic to the Veilid network.
+
+### Facts re-checked and confirmed
+- **crates.io:** `veilid-core` 0.5.7 (2026-07-19), MPL-2.0, MSRV 1.89, 38,198 downloads, 2,714 recent.
+- **`veilid_config.rs` on `main`, native builds:** `remote_max_records = 128` and `remote_max_storage_space_mb = 256`. The WASM build uses **64 records and 128 MB**, so web guests (D45) keep even less. Other defaults: `set_value_count = 5`, `get_value_count = 3`, `consensus_width = 10`, watch 600,000 ms, watch limits 32 public / 8 member, `default_route_hop_count = 1`, `upnp = true`, `hole_punch_receipt_time_ms = 5000`, `max_connections_per_ip4 = 32`. Bootstrap is `bootstrap-v1.veilid.net`, signed by three Foundation keys, and `bootstrap_records` is empty by default.
+- **`dht/mod.rs`:** `MAX_SUBKEY_SIZE = 32768` and `MAX_RECORD_DATA_SIZE = 1_048_576`. **`operation_app_call.rs`:** request and answer are each capped at 32768 bytes.
+- **CHANGELOG:** 0.5.0 enabled encryption by default for all DHT operations (#300) and brought "many on-the-wire encoding changes" (#453).
+- **The block store is an empty stub.** `block_store/mod.rs` has an empty `BlockStoreInner`, and `BLOC` sits behind the `unstable-blockstore` feature. This makes the C6 REJECT stronger.
+- **Issue states from the GitLab API:** #2, #387, #392, #415, #417, #445, #482, #499 and #512 are all **open**.
+- **Commits on `main` since 2026-01-01:** 118 in total, 96 by one author, the next author 8. **Bus factor ≈ 1 confirmed.**
+- **veilist** (GPL-3.0; 0.9.2 released 2026-09-12). Phase 25 and DESIGN "keeping a record on the network" confirm the 128-record LRU explanation and the 6 h republish. Phase 24 confirms "never within 180s", the `network restart` watchdog at 42–55 s, and "the node believes it is ready and can reach nobody".
+- **APK:** the veilist 0.9.2 arm64 APK's central directory lists `lib/arm64-v8a/libveilid_flutter.so` at **11,761,776 bytes, stored uncompressed**. The researcher's 11.8 MB is confirmed.
+- **Save Android** (branch `next`): `AppConfig.isDwebEnabled = false`, and `SnowbirdService` has `foregroundServiceType="specialUse"`.
+- **save-dweb-backend:** `iroh = "0.24.0"`, `hickory-resolver = "=0.25.2"`, forked iroh crates, veilid tag v0.5.5.
+- **save-rust:** "15 retries".
+- **Save README:** "Due to the high latency of Veilid tunnels…". Confirmed.
+- **iroh 1.2.0** (2026-09-09) has an `unstable-custom-transports` feature. The docs.rs page for `add_custom_transport` says it is "not covered by semantic versioning guarantees". The iroh CHANGELOG already shows a **breaking** change to this feature gate (#4228).
+- **No terms of service.** veilid.com and veilid.org link only to a FAQ and a VeilidChat privacy policy.
+- **No public latency or throughput figures.** veilid-vc (updated 2026-09-02) is a harness only and publishes no results.
+
+### Corrections and challenges
+1. **Licence claim is wrong.** The report says MPL-2.0 is "the same class we already accepted through Loro (D29)". It isn't accepted: DECISIONS.md D29 is still an open decision between (a) amending principle 9 and (b) replacing Loro. Under principle 9 as written ("MIT, Apache or BSD only"), `veilid-core` and `veilid-tools` (both MPL-2.0 only) are **not allowed**.
+   - Adopting Veilid would force D29(a).
+   - It would also make MPL unavoidable even if Loro were later replaced.
+   - Direct dependencies I checked are permissive or dual-licensed: `keyring-manager`, `keyvaluedb*` (MPL OR MIT OR Apache), `capnp`, `maxminddb` (ISC), `webpki-roots` (CDLA-Permissive-2.0).
+2. **Retention evidence is weaker than "measured, not theoretical".**
+   - veilist's eviction is **one real-use incident with an inferred cause**. veilist itself says eviction "cannot be provoked from the harness (it needs the storage nodes to evict, which takes days and other people's traffic)". Storage nodes are ordinary user devices, so **node churn** is an equally plausible cause.
+   - The conclusion (retention needs someone to rewrite) still stands. The numbers behind "days" do not exist yet.
+   - veilist also found a Veilid bug: `make_room_for_record` counts only bytes, not the record-count limit. So the LRU path is under-exercised upstream.
+3. **Missed: Veilid already has automatic rehydration.** "Local rehydration" arrived in 0.4.5 and is transaction-aware since 0.5.4 (`storage_manager/rehydrate.rs`, `tasks/rehydrate_records.rs`). When a member **opens** a record, the node re-pushes any local subkeys that lack online consensus.
+   - So "republish" may reduce to "open the record inside a WorkManager job" rather than rewriting the data.
+   - veilist says "nothing else refreshes a record", yet its devices still read empty after coming back. Why rehydration didn't save them is unexplained.
+   - Worth testing in isolated-network experiment 2: evict, then reopen, then check reachability.
+4. **"Phones as consumers" worsens free-riding on storage, not only on relays.** The report flags relay free-riding, but its C1 recommendation (disable `DHTV` on phones) means every phone record takes about 5 remote LRU slots and gives back none. In an Android-first app, nearly all DHT capacity would come from desktops and strangers. This is an internal tension in the recommendation.
+5. **Android integration needs a JNI shim.** The report says "no Kotlin/JVM bindings, which we don't need".
+   - On Android, `veilid-core` requires `veilid_core_setup_android(env, Context)` to be called through JNI before startup (`veilid_api/android`). It holds the JavaVM and the application Context for keystore access, and pulls in `jni 0.22`.
+   - That's small, but it's an extra native entry point beside UniFFI. It also explains the ProtectedStore failures (#482).
+6. **#499 is slightly mis-summarised.** Besides UnifiedPush, FCM and APNs, it lists periodic tasks, background fetch and the SimpleX no-server approach. None is implemented and the issue is still open, so the G3 REJECT stands.
+   - Upstream is actively working in this area: a `main` commit on 2026-09-22 is titled "improve thaw speed for backgrounded veilid processes", and the Android setup code now handles "background engines".
+   - Re-check at the next release. This could shorten attach time inside job windows.
+7. **The network size can be observed.** `VeilidStateAttachment.estimated_network_size` (plus `reliable_peer_count` and `live_peer_count`) is exposed to every app. A single approved public attach, or a question to the maintainers, would give a size figure. It is still unpublished.
+8. **The dependency conflict with iroh is probably moot now.** The Save conflict was iroh 0.24 against veilid 0.5.5 over hickory. iroh 1.2.0 has no direct hickory dependency (it uses `iroh-dns` and `simple-dns`), `veilid-tools` 0.5.7 needs `hickory-resolver ^0.25.2`, and `main` drops hickory entirely. Confirm with `cargo tree -d` in experiment 1.
+9. **Principle 2 (two independent providers per role) isn't met for cold start** until `bootstrap_records` ships in a release. Today the Foundation's DNS/TXT bootstrap is the only provider. Unreleased `main` also adds direct B01T bootstrap and caching of records.
+
+### Verdict checks
+| Candidate | Researcher | Verifier | Note |
+|---|---|---|---|
+| C1 DHT slot mailbox | CONSIDER (med) | **CONSIDER, upheld (med on facts, low on fitness)** | Limits confirmed. The retention cause is inferred, not measured. Rehydration on open was missed. The licence needs D29(a). Phones-as-consumers worsens storage free-riding. |
+| C2 private routes/relays | CONSIDER (low) | **Upheld** | Still no public latency data. Relay capacity unknown. |
+| C3 discovery for iroh | CONSIDER (med) / REJECT-high for punching | **Upheld, with a different reason** | iroh 1.x NAT traversal runs **in-band inside an existing QUIC connection** (`noq` `n0_nat_traversal`; `remote_state.rs::trigger_holepunching`). So out-of-band Veilid messages can't coordinate it, whatever Veilid knows about NAT mappings. The viable route to hole punching is C4, not C3. |
+| C4 iroh over Veilid custom transport | CONSIDER-lab (low) | **Upheld, but under-credited, so raise its priority** | Source reading, untested: iroh calls `trigger_holepunching()` after **every** new connection whatever the path type, and custom paths stay open beside IP paths. Once a connection exists over Veilid, iroh would swap NAT-traversal candidates over it and punch direct IP paths itself, keeping Veilid as the relayed fallback. That covers **G2 signalling and G4 relaying without n0**. The missing piece is **QAD** (the reflexive IPv4 address, which only iroh relays provide). So direct paths come only from global IPv6, UPnP/PCP port maps, LAN and `external_addr`. IPv4-NAT-to-IPv4-NAT pairs without UPnP stay relayed over Veilid. One unverified heuristic: feed Veilid's detected public IPv4 plus iroh's bound port through `external_addr` for port-preserving NATs. **This is the most gap-covering Veilid candidate, and it can be tested entirely locally** (isolated Veilid network plus two iroh endpoints). |
+| C6 large blobs | REJECT (med) | **Upheld, confidence high** | `block_store/mod.rs` is an empty stub behind `unstable-blockstore`. The 32 KiB messages and 1 MiB records are confirmed. |
+
+### Priority suggestion (per the user's "cover what we lack or doubt")
+The gaps we most lack are G2 and G4 without n0. The best-leveraged Veilid experiment is **C4 in an isolated local network**:
+- attach time;
+- whether iroh's candidate exchange and hole punch actually run over a custom-transport path;
+- QUIC behaviour over 1-hop routes;
+- path failover when a route dies.
+
+Run it before any C1 mailbox work. C1 adds a third mailbox beside Nostr and member devices, but its retention still depends on the same "someone must wake up" property that G3 leaves unsolved.

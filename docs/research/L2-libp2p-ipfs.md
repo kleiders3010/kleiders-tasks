@@ -380,3 +380,82 @@ Explicitly **not** proposed: probing public Kubo relays, joining Amino to measur
 - qaul: https://github.com/qaul/qaul.net
 
 **Internal context:** `docs/DESIGN.md` §6–§8; `docs/research/DECISIONS.md` D11–D23; `R1-iroh.md` (C2c, C3, E3e); `R5-prior-art.md` (P13); `FINDINGS.md` (R5-13, X14, E3.6).
+
+---
+
+## Independent verification
+
+*2026-09-24, skeptical verifier. Method: I re-fetched raw sources myself instead of relying on the report's citations. Sources: Kubo `docs/config.md` (master), go-libp2p `relay/resources.go` and `relay.go`, rust-libp2p `relay/src/behaviour.rs` and the `quic`/`tls` Cargo.toml files, crates.io version API, GitHub API (issues, commits, contributors, releases), arXiv API (both Trautwein abstracts), ProbeLab `dcutr-final-report.md` and `nebula-autonat-analysis.md`, the IPFS kad-dht spec, the ipfs-docs public-utilities page, the IPFS blog (2026-08-25), iroh `main` (`socket.rs`, `remote_state.rs`, `endpoint/quic.rs`), noq code search, Berty's generated config, and the p2p-forge README. No traffic went to any relay, DHT or bootstrap node.*
+
+### Numbers confirmed exactly
+- **Kubo relay defaults:**
+  - `Swarm.RelayService.Enabled` defaults to `true`.
+  - Circuit limits: `"2m"` and `131072` bytes "in each direction".
+  - Reservations: TTL `"1h"`, 128 max, 16 circuits, `MaxReservationsPerIP` 8, `MaxReservationsPerASN` 32.
+- **go-libp2p:** `DefaultLimit` is 2 min and `1 << 17` bytes. `acl: nil` by default, and ACL checks run only when `r.acl != nil`.
+- **Trautwein et al.:** 70% ± 7.1%, 4.4 M attempts, 85k+ networks, 167 countries, TCP ≈ QUIC, independent of relay, 97.6% succeed on the first attempt. The IMC '26 version is arXiv 2604.12484, DOI 10.1145/3777912.3809138.
+- **ProbeLab DCUtR report:** port-restricted cone 82.9% (3,042/3,669), symmetric 39.7%, 8.3% of peers directly reachable, 36% never reserve a relay, `gobind` peers hold a reservation ~0.6% of the time, go↔rust interop 100%.
+- **ProbeLab Nebula analysis:** ~8,100 visible and ~3,750 dialable peers per crawl, ~84% Kubo, 2,047 Kubo peers dialable in all 84 crawls, 727 (~18%) lost week over week, ~20,500 historical average.
+- **IPFS kad-dht spec:** provider records valid 48 h, republished every 22 h, and records with other prefixes "MUST be rejected".
+- **Public-utilities policy:** "best-effort ... not intended to be part of your critical path or production infrastructure" (verbatim).
+- **IPFS blog, 2026-08-25:** "As the IP Shipyard team winds down their work" and "Rate limiting has begun ... and will be increasing" (verbatim).
+- **rust-libp2p:** `libp2p` 0.57.0 was released 2026-09-11 under MIT, following 0.56.0 on 2025-06-27. AutoRelay issue #4651 is still open (created 2023-10-15). Android issues #5672 and #6529 are open. The README lists 2 maintainers (elenaf9, jxs).
+- **libp2p-quic:** depends on `quinn` with `rustls-aws-lc-rs` plus `ring`, and `libp2p-tls` enables rustls `aws-lc-rs`.
+- **Berty:** pins its own relay/rendezvous at `51.15.25.224` in `config.yml` and the generated configs. The repo is active (last push 2026-09-17).
+- **iroh 1.2:** `update_direct_addresses` draws only on portmapper, QAD net_report (plus the `Qad4LocalPort` heuristic), local interfaces and `configured_addrs`.
+
+### Corrections and refinements
+
+1. **The 70% is a *conditional* rate, and the summary drops that qualifier.**
+   - The IMC abstract says "a conditional success rate of 70% ± 7.1% for the hole-punching stage, **given that prerequisite relay reservation and public address discovery succeed**". ProbeLab adds that the 36% readiness gap "sits upstream of Trautwein's 'conditional' framing".
+   - End-to-end success for a device is roughly P(reservation) × P(punch). For phones, the only field datum is `gobind` at ~0.6% reservation. C2's high confidence applies to the punch stage only. End-to-end phone success is **unknown, and plausibly far below 70%**, until X5 shows how quickly and reliably a foreground phone reserves.
+2. **"The pool is shrinking" is stated more strongly than the source allows.**
+   - ProbeLab writes: "We did not investigate whether this drop reflects network changes, crawler changes, or other factors. Possible interpretations include botnet remnants being evicted, real network shrinkage, or changes in how Nebula bootstraps".
+   - The dialable count also fell (about 6,560 = 20,500 × 32% historically vs ~3,750 now), so a decline is plausible, but it isn't established. §5.1 of the report says so correctly; §1 and the researcher summary should match it.
+   - Separately, Kubo itself is still shipping after the announcement (v0.43.1 on 2026-09-15). "Stewardship thinning" is fair; "Kubo abandoned" would not be.
+3. **Nobody has counted relay-capable peers.** The 2,047 always-dialable Kubo peers are an upper bound on relays. Neither ProbeLab document gives a count of peers advertising `/libp2p/circuit/relay/0.2.0/hop`, and custom fleets (e.g. `gala.games`, ~7,700 nodes) may change relay settings. The capacity estimate in C1 (2,000 × 128 slots) is therefore an upper bound, not a measurement.
+4. **rust-libp2p relay defaults are misdescribed in §2, and this matters for C9.**
+   - The rate limiters are token buckets. Per peer: bucket of 30, one token refilled every 2 min. Per IP: bucket of 60, one token refilled per minute. They are not "30 per 2 min / 60 per min".
+   - More important: `max_circuits: 16` is a **relay-wide total** in rust-libp2p (with `max_circuits_per_peer: 4`), while go/Kubo's `MaxCircuits` 16 is per peer.
+   - A rust-libp2p helper relay left at defaults could run only 16 concurrent coordination circuits in total, so C9 helpers must raise it.
+5. **The maintenance picture needs nuance.** The "15-month gap" applies only to the umbrella crate. Sub-crates got patch releases in between: relay/dcutr/tcp 0.x.1 on 2026-01-21, and libp2p-quic 0.13.1 on 2026-06-22. The repo gets commits every week (September 2026: rendezvous, gossipsub, identify, mdns fixes), but most non-bot commits come from one person (jxs). The bus-factor risk is real; "dormant" would be wrong.
+6. **AutoRelay is not strictly write-from-scratch.** `libp2p-relay-manager` 0.4.0 (2026-04-19, MIT/Apache-2.0, from dariusc93/rust-ipfs) is a WIP relay manager. It is pinned to libp2p ^0.56, has a single author and ~1k recent downloads. Use it as reference code rather than a dependency.
+
+### Verdict checks
+- **C1 public Kubo relays (CONSIDER, medium): upheld.** The permission really is only implicit. The libp2p docs line "this allows every public node in the network to serve as a relay" is intent, not a licence. Reword the pool trend (item 2) and treat capacity as an upper bound (item 3).
+- **C2 DCUtR (CONSIDER, high): upheld with split confidence.** High for the conditional punch stage, low for end-to-end on phones (item 1). The IPFS census is ~4% symmetric, and phones on carrier CGNAT likely have a much higher symmetric share. That makes the "no port prediction" caveat bite harder on phones.
+- **C3 identify (CONSIDER in-stack, REJECT for iroh; high): upheld.** iroh's `remote_state.rs` explicitly ignores `NoqPathEvent::ObservedAddr` ("Nothing to do for these events"). iroh's `QuicTransportConfig` exposes `send/receive_observed_address_reports`, but I found no public API to read a peer-reported observed address back, so even an iroh-native "peer as STUN" path isn't available today.
+- **C4 AutoNAT v2 (CONSIDER, desktops): upheld.** ~50% v2 adoption among Kubo is confirmed. I did not independently re-check the 30/min throttle.
+- **C5 Amino DHT (REJECT, medium): upheld.** The spec text is confirmed.
+- **C6 bootstrap nodes (CONSIDER, seed only; high): upheld, with one gotcha.** `/dnsaddr/bootstrap.libp2p.io` needs DNS TXT resolution. rust-libp2p's DNS on Android has an open breakage (#6529: the system DNS config is hard-coded on the websocket path). Ship the seed list as literal IP multiaddrs, or pass an explicit resolver config.
+- **C8 circuits as data relay (REJECT, medium): upheld.** The limits are confirmed in go, Kubo and rust.
+- **C9 helper desktops as libp2p relays (CONSIDER, medium): upheld, with two conditions.**
+  - Raise rust-libp2p's global `max_circuits` (item 4).
+  - Compare it head-to-head with the already-planned member-hosted **iroh-relay** (R1 E3e / FINDINGS E3.6).
+    - The iroh-relay gives QAD, coordination and unlimited own-group relaying in *one* stack.
+    - C9's real advantage is narrower than stated: it can serve *strangers* with no web PKI and no per-group custom roots. That advantage matters only if cross-group relay pooling is a goal.
+- **C10 iroh over a libp2p circuit (REJECT for now, medium): upheld, but the stated reason is incomplete.**
+  - The reason says iroh can't learn its public port "without n0's QAD or port-preserving NATs". It leaves out two sources that don't depend on n0:
+    - iroh's own **portmapper** (UPnP/PCP/NAT-PMP, `DirectAddrType::Portmapped`), which gives the true public port on many home routers;
+    - **global IPv6** interface addresses (`DirectAddrType::Local`), which need no discovery at all.
+  - So the hybrid is viable for UPnP-capable desktops and IPv6 hosts even today. It stays rejected for now because of the unstable custom-transport API and two stacks. X3 should test portmapped and IPv6 cases, not only port-preserving NATs.
+- **C11a rust-libp2p alongside iroh (CONSIDER, medium): upheld.** The dependency facts are confirmed: QUIC brings aws-lc-rs, and TCP + Noise avoids it. Maintenance is active but depends mostly on one person (item 5).
+- **C11b rust-libp2p instead of iroh (REJECT, medium): upheld.**
+
+### Missed or under-weighted paths
+1. **IPv6 direct connectivity as the cheapest G2 lever.** Many mobile carriers hand out global IPv6. iroh already advertises global IPv6 local addresses with no n0 involvement. What remains is coordination (exchanging addresses and timing), which the design's pkarr/Nostr signaling could carry. That shrinks the population that needs libp2p relays at all. It deserves a line in the gap analysis and a local namespace test next to X2.
+2. **AutoTLS / `libp2p.direct` (p2p-forge).** A publicly reachable node proving a libp2p peer ID gets a free Let's Encrypt wildcard certificate for `*.<peerid>.libp2p.direct`.
+   - In principle this removes the "needs web-PKI certificate" barrier for a helper-hosted *iroh-relay* serving strangers.
+   - It is run by Interplanetary Shipyard, which is winding down, and is single-operator, so it's no better than C6 on dependency grounds. p2p-forge is self-hostable but needs a domain.
+   - Verdict: note only (REJECT as a dependency, low confidence). It shows that C9's "no certificate" advantage could be matched by other means.
+3. **libp2p rendezvous on helper desktops (G5 while online).** rust-libp2p ships `rendezvous` (patched in September 2026, and `/rendezvous/1.0.0` made public). Berty uses exactly this pattern with its own rendezvous point. Helpers could act as rendezvous points for group peer IDs and relay addresses. This is a lighter alternative to C5 inside a libp2p stack, but it overlaps pkarr/Nostr.
+4. **rust-libp2p `upnp` behaviour** exists for helper desktops that want to become C9 relays. It duplicates iroh's portmapper, so share one mapping strategy.
+5. **Phone-side end-to-end metric.** No existing source measures time-to-reservation plus punch on Android. X5 is the deciding experiment for C1/C2 on phones and should be ranked above X1 and X2.
+
+### Bottom line
+The report's facts check out with very few errors, and no ADOPT verdict was issued, which is right. Of the three findings with the most practical weight:
+- the 70% applies only after a reservation succeeds, which is exactly where phones fail;
+- the pool-shrinkage cause is unestablished;
+- C10's rejection overlooks iroh's portmapper and IPv6.
+
+None of these flips a verdict. Taken together, they shift the G2 priority towards (a) IPv6 plus signaling, (b) member-hosted iroh-relays, then (c) a libp2p parallel stack, rather than towards public Kubo relays.

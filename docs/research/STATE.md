@@ -64,10 +64,10 @@ Prioritize layers that cover what we lack or doubt:
 - **G6** large blob transfer.
 
 Steps:
-- [ ] (running: workflow wf_6f1ff1cc-d9e) L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
-- [ ] Synthesis: `docs/research/LAYERS.md` (candidate → gaps covered → verdict → evidence)
+- [x] L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
+- [x] Synthesis: `docs/research/LAYERS.md` (candidate → gaps covered → verdict → evidence)
 - [x] Safe local experiments: E9 sizes done (E9-stack-sizes.md), E5b diurnal helper sim done (E5b-diurnal-helpers.md). Was: E9 arm64 size builds of libp2p (relay client + DCUtR + identify + kad + QUIC), str0m, webrtc-rs and veilid-core (`research/experiments/rust/e9_*`)
-- [ ] DECISIONS.md: new "Distribution layers" section (proposals only; the user decides)
+- [x] DECISIONS.md: new "Distribution layers" section (D47–D54) (proposals only; the user decides)
 
 Note: WebSearch is exhausted for this session. Agents use WebFetch on known documentation URLs, `gh search` / `gh api`, crates.io / docs.rs APIs.
 
@@ -78,7 +78,7 @@ Note: WebSearch is exhausted for this session. Agents use WebFetch on known docu
 - E4, E5, E7 done. E6 Android size builds running (crypto 0.30 MB, loro 1.74 MB, iroh 4.58 MB, nostr 1.50 MB per arm64 .so; combined pending).
 
 ## Next action
-**P6 in progress:** data distribution layers research (see P6 below). Launch or collect the layers workflow, run safe local experiments where useful, then write `docs/research/LAYERS.md` and add a "Distribution layers" section to DECISIONS.md.
+**DONE (P6 complete).** Waiting for the user's decisions (DECISIONS D5–D54). Proposed next experiments are listed in LAYERS.md §6 (a local NAT lab needs WSL2 or Linux namespaces; some need user approval). A loop firing now should stop.
 
 ## Findings log (short; details live in the reports)
 - E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md

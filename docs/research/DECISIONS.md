@@ -453,3 +453,82 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
 - **Size:** measured Rust core 7.07 MB installed / 4.33 MB compressed on arm64 with the size profile. Without the profile, R1's figures suggest ~2–3× larger (E6).
 - **Loro:** require ≥ 1.16.2; restoring a deleted tree node creates a new TreeID; moving a task between lists is a cross-document copy (R3).
 - **Nostr:** NIP-40 and NIP-09 support varies (e.g. nostr-rs-relay ignores `a` deletions); clock skew limits range from 30 s to 30 min, so a device whose clock ran fast can be locked out of its own slot (R2).
+
+---
+
+## Distribution layers (P6 research, 2026-09-24)
+
+*Full synthesis: `LAYERS.md` (gap-by-gap verdicts, proposed layered architecture, provider-independence table, prioritized experiments). Reports `L1`–`L8` each end with an independent verification. Local measurements: `E5b-diurnal-helpers.md`, `E9-stack-sizes.md`.*
+
+**Headline:**
+- **Closable within the constraints:** G5 discovery and signaling (Nostr ephemeral events + Mainline DHT + n0 DNS = 3 providers).
+- **Now has a no-server path, gated on tests on your own phone:** G3 waking phones (Web Push to Google's push endpoints).
+- **Not closable by any free third party:**
+  - G1 (a second offline mailbox with real confidence);
+  - G4 (relaying for failed hole punches).
+
+  **Both fall to our own users' devices**, which makes the helper network (D20) even more central than decided.
+
+**Corrections to things I told you earlier:**
+- **D46 (my "public STUN + Nostr coordination" idea) was partly wrong.** iroh hole-punches *inside an existing QUIC connection*, so an out-of-band "dial now" message can't drive it. Public STUN only helps for sockets we own (a WebRTC/ICE or custom-transport path). The replacement options are D49.
+- **D14 option (d), "home desktops can't be relays", was wrong.** Let's Encrypt now issues **IP-address certificates**, so a helper desktop with public IPv4 + UPnP can run a real iroh relay (the L8 finding, verified). This becomes D49(a).
+- **E5b (local simulation):** with a handful of desktops, **overlap matters more than count**. 10 desktops + phones charging overnight reach ~97% around the clock when phone and desktop windows overlap and desktops *sleep* instead of rebooting (RAM survives). A small community of 5 desktops + 50 phones reaches ~94%. Desktops alone in one time zone: 58%, zero at night.
+
+### D47. Doorbell without a server (revisits D17(b); LAYERS O1)
+- **New fact:** member devices can sign Web Push (VAPID) messages and push **directly** to a phone's FCM Web Push endpoint, obtained through Play Services **with no Firebase project and no server of ours**.
+- **Options (evaluated in L4):**
+  - (a) Build it as an optional layer behind a hidden off switch. Make it the default only if tests on your phone pass: does a high-urgency push wake a phone in deep Doze, and does Google deprioritize pushes that show no notification?
+  - (b) UnifiedPush only, for users who already have a distributor app, plus a local alarm poll.
+  - (c) No doorbell (D17a).
+- **Risks:**
+  - the registration path is **undocumented** (Play enforcement risk, not only breakage);
+  - Google sees who rings whom (must be disclosed in §9);
+  - de-Googled phones need a distributor.
+- **The phone test needs your approval:** a handful of pushes through Google to your own phone.
+
+### D48. A second offline mailbox besides Nostr (LAYERS O2)
+- Options: (a) Session storage swarms, (b) the Veilid DHT (**requires accepting MPL-2.0**), (c) chatmail relays (needs operator consent), (d) Google Drive / a published Sheet (opt-in, needs accounts, quota-capped), (e) none: rely on member devices, helpers and your own machine.
+- **No option is confident today.** The synthesis recommends running local tests (a mock mailbox interface, a local Session storage server, an isolated Veilid network) before choosing. Asking Session's foundation about third-party use would be outward contact, so your call.
+
+### D49. Internet P2P and relaying without n0 (LAYERS O3; replaces D46)
+- Options:
+  - (a) **helper-hosted iroh relays** with IP-address certificates (public-IPv4 helpers only until an iroh IPv6 bug is fixed);
+  - (b) IPv6 / UPnP direct connections plus our own signaling;
+  - (c) iroh over a custom transport (unstable API);
+  - (d) a parallel rust-libp2p stack (weak on phones: mobile peers got relay reservations 0.6% of the time);
+  - (e) HyperDHT blind relays on helpers.
+- **Recommendation (synthesis):** (a) + (b) first, both running in parallel with n0. Decide (c)–(e) after local lab tests.
+- **Not verified:** how many helpers qualify as relays; phone↔phone success on carrier NAT for any option.
+- **Sizes (E9, arm64 standalone):** libp2p 3.45 MB, str0m 2.12 MB, webrtc-rs 2.34 MB, Veilid 6.79 MB.
+
+### D50. One rule for "best-effort / testing-only" public services (LAYERS O4)
+- The same ethics and Play-policy question applies to n0 relays, IPFS/Kubo relays, public STUN (Google, Twilio), Metered Open Relay, Send instances and chatmail.
+- **Options:**
+  - (a) Use only services with written permission for any app.
+  - (b) Use best-effort services only as non-critical parallel layers, with health tracking, never counted toward principle 2.
+  - (c) Ask operators in writing first.
+
+### D51. Should default-on helpers also be public relays? (LAYERS O5, extends D20)
+- Candidate roles: iroh relay, libp2p relay, HyperDHT blind relay.
+- **Options:**
+  - (a) default-on like storage helping (maximum coverage of G4);
+  - (b) a separate opt-in "relay" level (avoids ISP terms problems, abuse complaints and firewall prompts);
+  - (c) relay only for the helper's own groups.
+- **Not verified:** how ISPs treat residential relays at this traffic level.
+
+### D52. Large content (LAYERS O6, D22)
+- Options: (a) keep postponing, (b) Drive blob store (opt-in per uploader), (c) public Send instances as overflow (about 19 operators, the software is dormant), (d) helper and member desktops only.
+
+### D53. Licensing (LAYERS O7, D29)
+- Adopting Veilid forces accepting MPL-2.0. Every other candidate can stay permissive (our own clients for Session and chatmail; a clean reimplementation of the push registration; TCP-only libp2p).
+
+### D54. Metadata wording (LAYERS O8, D23)
+- Each new layer adds an observer: Google (rings), STUN operators, DHT nodes, tracker operators, cloud providers, Tor.
+- Decide which are acceptable, and update §9 before any of them ships.
+
+### Outward actions awaiting your approval (none have been run)
+- A test of the doorbell on **your own phone** (a few pushes through Google).
+- A test on **your Google account** of Drive's behavior with public links (D48d / D52b).
+- One polite probe of Nostr ephemeral events on 3–4 public relays, and one STUN request per default STUN operator.
+- One read-only attach to the public Veilid network to see its size.
+- Asking n0 (D14), Session's foundation, chatmail operators or Send operators for permission.

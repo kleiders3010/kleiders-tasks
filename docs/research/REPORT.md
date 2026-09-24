@@ -55,3 +55,10 @@ See `DECISIONS.md` for all 45 items (`FINDINGS.md` has the full synthesis: 103 c
 - Experiments: `E1` Loro, `E2`+`A1` Argon2/GPU, `E3`+`E6` iroh and size, `E4` Nostr, `E5` helpers, `E7` invite codes, `E8` key epochs.
 - Attacks: `A2`–`A4` helpers, `A5` malicious member, `A6` fuzzing + isolation prototype, `A7`–`A8` metadata and invites.
 - Code: `research/experiments/` (Python + Rust; crash inputs in `rust/e1_loro/fuzz_out/crashes/`).
+
+## Addendum: distribution layers (P6)
+See `LAYERS.md` and DECISIONS D47–D54.
+- **Discovery / signaling:** closable with 3 providers.
+- **Waking phones:** now possible without a server of ours, via Web Push to Google's endpoint. Needs tests on your phone; relies on an undocumented registration path.
+- **A second offline mailbox, and relaying for failed hole punches:** no free third-party answer. Both fall to our own users' devices (helpers, member devices, your machine). Helper desktops can now act as real iroh relays thanks to IP-address certificates.
+- **Local simulation:** a small helper community works around the clock when desktop and phone windows overlap and desktops sleep rather than reboot.

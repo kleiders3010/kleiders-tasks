@@ -298,3 +298,125 @@ Gaps this layer was asked to cover: **G2** internet P2P connectivity without n0 
 
 **Internal**
 - `docs/DESIGN.md` §6–§8; `docs/research/DECISIONS.md` D11–D23; `docs/research/R1-iroh.md`; `docs/research/REPORT.md`
+
+---
+
+## Independent verification
+
+*2026-09-24, skeptical second pass. I used only documentation, source and registry fetches (raw GitHub, the GitHub API, the crates.io API, WebFetch) plus DNS lookups of STUN hostnames. No packets went to any STUN, TURN, Nostr or iroh server. Wherever I could, I checked primary sources rather than the researcher's quotes.*
+
+### Verdict checks
+
+| # | Candidate | Original | Result | Corrected verdict |
+|---|---|---|---|---|
+| C1 | Public STUN | ADOPT, high | **Upheld, with a caveat on permission** | ADOPT. High confidence on availability, medium on explicit permission |
+| C3 | Metered Open Relay | CONSIDER, low | **Upheld, leaning towards REJECT** | CONSIDER, low; opportunistic only |
+| C4 | ExpressTURN free | REJECT | **Upheld** | REJECT, medium-high |
+| C6 | webrtc-rs 0.21 | CONSIDER, medium | **Upheld, confidence lowered** | CONSIDER, medium-low |
+| C7 | str0m full stack | REJECT, medium | **Upheld, one reason corrected** | REJECT, medium |
+| C8 | libdatachannel / libwebrtc | REJECT | Upheld (not re-verified in depth) | REJECT |
+| C9 | `is` ICE + STUN + Nostr -> iroh custom transport | CONSIDER, medium-low | **Upheld, but the precedent is weaker than claimed** | CONSIDER, **low** |
+| C10 | Nostr ephemeral signaling | ADOPT, medium / medium-high | **Upheld, with corrections** | ADOPT, **medium** (until the X6 probe) |
+| C11 | iroh add_external_addr + STUN + Nostr | CONSIDER, medium | **Upheld; an unexamined lever makes it stronger** | CONSIDER, medium; gate on X2 plus an IPv6-share measurement |
+
+**C1, public STUN.**
+- **Confirmed:**
+  - Cloudflare's FAQ says, verbatim, "free and unlimited".
+  - always-online-stun (MIT, pushed 2026-09-24 14:50 UTC) has exactly 264 / 182 / 21 / 635 entries.
+  - `stun.syncthing.net` and `stun.services.mozilla.com` appear only in `candidates.txt`, not in the valid list.
+  - Amethyst ships Google x2 + Cloudflare.
+- **Operator diversity is real:**
+  - The 181 distinct IPv4 addresses fall into about 170 distinct /24s, and the valid hosts span 254 registrable domains.
+  - The "VoIP family" caveat is also real. There are 23 `stun.voip*` hosts, and 14 of the first 40 resolved names map to 77.72.169.210-213, one operator.
+- **Corrections:**
+  1. **Cloudflare and Twilio aren't in the always-online-stun list at all**, so the 264 count doesn't include the two operators with explicit free statements.
+  2. **Twilio's permission is weaker than stated.** The pricing page lists STUN as "Free". But Twilio's NTS docs only present `stun:global.stun.twilio.com:3478` inside a token response obtained with an account ("request a token and pass it to your RTCPeerConnection"). Nothing grants account-less third-party use. Treat Twilio like Google: de facto, not permitted.
+  3. The only operators with a **written** free statement are Cloudflare and Metered.
+- ADOPT stands, because the fallback set is large and independent. Default to Cloudflare, Google and Nextcloud, and use the rest only as health-tracked fallbacks.
+
+**C3, Open Relay.**
+- **Confirmed:** the static-auth secret `openrelayprojectsecret` at `staticauth.openrelay.metered.ca`, the T&C line "CAN AND WILL GO DOWN WITHOUT NOTICE", and no explicit prohibited-use clause (the T&C also carries an indemnification clause). Amethyst still hard-codes `openrelayproject/openrelayproject` on `openrelay.metered.ca:80/443` (fetched today).
+- **New context:**
+  - The page now makes **sign-up plus a per-account API key** the main path: "To Connect to the Open Relay TURN Server, you need to sign-up for a free account and obtain your API Key". The "20 GB / month" is tied to that account flow.
+  - The static secret is framed narrowly: "Services like Nextcloud Talk or Matrix+Synapse+Riot uses static auth", meaning an admin configuring one server.
+  - Baking that secret into a mass-distributed app goes beyond the described use, and it has no stated quota at all.
+- Keep it strictly opportunistic and off by default, and never count it as a provider. It is no stronger than low confidence.
+
+**C4, ExpressTURN.**
+- Confirmed: "limited to 1000 GB of traffic per month", static credentials, sign-up required, one location on the free tier, Premium $9/mo.
+- REJECT stands. The summary said "medium" and the body said "medium-high"; use medium-high.
+
+**C6, webrtc-rs.**
+- **Confirmed:** v0.21.0 released 2026-09-19 15:33Z; MIT/Apache-2.0; 5,152 stars, 8 open issues; #868 closed 2026-08-13 by the maintainer ("both v0.20.x and master branch have the fix... Feel free to re-open").
+- **Caveats not in the report:**
+  1. The async `webrtc` crate is "a clean... rewrite on top of a Sans-I/O core" (`rtc`). The 6.9 M downloads mostly predate that architecture, so the current code is young.
+  2. **Bus factor.** The top contributor has 818 commits; the next has 198.
+  3. The #868 recovery depends on **rebinding UDP sockets** after backgrounding, which the app has to drive.
+- Confidence lowered to medium-low. The main value is still a browser/PWA peer (D45).
+
+**C7, str0m.**
+- The SFU focus, "peer-2-peer... has received less testing" and "aarch64-linux-android: compiled yes, tested no" are all confirmed.
+- **Correction:** "no TURN" is a deliberate Sans-IO design choice, not a missing feature. The README says "We consider TURN similar to enumerating local network interfaces - it's a way of obtaining sockets", and the user adds relay candidates. The same is true of `is` (C9). The REJECT still stands on the other grounds.
+
+**C9, `is` + iroh custom transport. This is the most important correction.**
+- **Confirmed:**
+  - `is` 0.11.0 (2026-08-08, MIT OR Apache-2.0, 69,625-byte crate);
+  - Firezone's workspace pins `is = "0.11.0"` and snownet depends on `is` + `stun_codec` + `str0m-proto` + boringtun;
+  - #4544 closed 2026-09-22 09:22Z;
+  - iroh `Cargo.toml` says "Unstable: Custom transport API (may change without notice)";
+  - `remote_state.rs` has "Relay and custom paths are kept open".
+- **But the Firezone precedent doesn't carry over to our constraints:**
+  1. **Firezone's Android client runs as a `VpnService` with `foregroundServiceType="systemExempted"`** (AndroidManifest.xml). It never faces the ~10 s background socket death that our app faces.
+  2. **Firezone always has its own TURN relays.** `node.rs` calls `sample_relay()` and seeds the agent's candidates from its relay allocations, with "portal-issued credentials". Its reflexive candidates and its signaling come from Firezone's own relays and portal, not from public STUN or a public rendezvous.
+
+  So Firezone proves that the ICE agent works on Android. It does not prove relay-less, public-STUN, Nostr-signaled, backgrounded operation.
+- **Crate maturity:**
+  - The name `is` belonged to an unrelated 2019 crate (0.1-0.6). algesten's line starts at 0.7.0 on 2026-03-24, with five breaking minor releases in six months.
+  - On crates.io, str0m is its **only** reverse dependency, so the ~1.1 M downloads are str0m's.
+  - The ICE code itself is older (it was str0m's ice module), but the standalone API is new.
+- **Mechanics:**
+  - An iroh custom transport carries `CustomAddr` paths, which are separate from iroh's IP sockets.
+  - After the custom path is up, iroh's own QNT punching still runs on its IP sockets. Without n0 QAD it has only host, port-mapped and configured candidates, which is harmless but wastes probes.
+  - `trigger_holepunching` also needs a **client-side** connection ("not holepunching: no client connection"), not just any connection.
+- Confidence lowered to **low**.
+
+**C10, Nostr ephemeral signaling.**
+- **Confirmed:**
+  - Trystero's kind formula is `strToNum(topic, 10_000) + 20_000` with `defaultRedundancy = 5`.
+  - Trystero's README now reads "The default Trystero package runs on the Nostr network", and it tells developers to "Sign up for a TURN service" (no bundled TURN).
+  - NIP PRs #2301, #2461 and #363 are all **open**; #2301 and #2461 were updated today.
+- **New evidence from strfry's default `strfry.conf`** (strfry runs Damus and many others):
+  - `rejectEphemeralEventsOlderThanSeconds = 60`, so a device clock skewed by more than about a minute gets its signaling rejected.
+  - `ephemeralEventsLifetimeSeconds = 300`, so strfry **stores ephemeral events for 5 minutes**. This softens "the receiver must be subscribed right now", since a fresh REQ within about 5 minutes may still see the event on strfry relays (behavior may vary by relay). It also weakens the privacy claim that "relays don't store them".
+- Use medium, not medium-high, until the X6 probe.
+
+**C11, extend iroh.**
+- **Confirmed in v1.2.0 source:**
+  - `trigger_holepunching` returns early with "not holepunching: no connections";
+  - `Qad4LocalPort` carries the comment "Worst case it's an invalid candidate mapping";
+  - configured addresses become `DirectAddrType::Config`.
+- **Caveat:** the "Without a relay server you will not be able to holepunch" quote is from July 2024 (iroh-net era, maintainer flub), before iroh's QUIC-NAT-traversal rewrite. The current code independently supports the same conclusion, so it stands, but cite the code rather than the issue.
+- **Missed lever:** iroh 1.2 exposes `QuicTransportConfig::send_observed_address_reports` / `receive_observed_address_reports` (QUIC address discovery) on **peer** connections. The docs say: "This will aid peers in inferring their reachable address, which in most NATd networks will not be easily available to them".
+  - A reachable member (a desktop helper or an IPv6 host) could report a phone's reflexive address **for iroh's own socket**. That removes the "wrong socket" blocker without side-socket STUN.
+  - Caveat: `remote_state.rs` currently ignores `ObservedAddr` events ("Nothing to do for these events"), and whether the public API surfaces them is unverified.
+
+### Cross-cutting corrections
+
+- **Success-rate baseline.** The 70% +/- 7.1% figure (arXiv 2510.27500, confirmed) comes from libp2p/IPFS DCUtR over "85,000+ networks", a mostly non-mobile population. Don't transfer it to phone<->phone carrier CGNAT, where the rate is likely lower. There is still no independent phone-specific figure.
+- **IPv6 is the dominant unmeasured parameter.** On IPv6 there is no address translation. A phone's global address comes from interface enumeration (no STUN needed), and simultaneous open reduces to ordinary stateful-firewall punching. Both C9 and C11 get much better as the share of phone pairs with IPv6 on both ends grows. The report mentions IPv6 but never treats it as the main variable. X2 should include an IPv6 stateful-firewall case, and the beta should log address families.
+- **Other Rust ICE agents** (not evaluated in the report):
+  - `webrtc-ice` 0.17.2: async, MIT/Apache, 6.4 M downloads, with built-in interface enumeration, mDNS and TURN relay candidates;
+  - `rice-proto` / `librice` 0.4.3 plus `turn-client-proto` 0.7.2: Sans-IO ICE and TURN, MIT OR Apache-2.0, low adoption (about 2.8k and 32k downloads).
+
+  Both are alternatives to `is` if its API churn becomes a problem.
+- **Internal inconsistencies to fix in the report:** ExpressTURN confidence (medium vs medium-high) and Nostr confidence (medium vs medium-high) differ between the summary and the body.
+
+### Bottom line
+
+The dimension's overall conclusion survives. Public STUN plus Nostr can take n0 out of discovery and coordination, nothing free and embeddable solves G4, and WebRTC doesn't raise punch success.
+
+Two things change:
+- The Firezone evidence for C9 is weaker than presented: foreground VPN service, its own relays, its own signaling.
+- C11's prospects hinge on two things the report under-weights: the IPv6 share of phone pairs, and QUIC observed-address reports from reachable members.
+
+Prioritize X2 with IPv6 and observed-address variants before any code on C9.

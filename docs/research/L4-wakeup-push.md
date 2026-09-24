@@ -316,3 +316,62 @@ All use only the user's own devices and accounts. Each sends at most a few dozen
 - web.dev Web Push protocol (Urgency, TTL, Topic, 4096 bytes): https://web.dev/articles/push-notifications-web-push-protocol
 - Precedents: DAVx5 Push on by default https://github.com/bitfireAT/davx5-ose/issues/2151 and its `libs.versions.toml` (`unifiedpush-fcm = "3.1.0"`); WebDAV-Push spec https://github.com/bitfireAT/webdav-push ; Charm issue (why non-VAPID senders need a gateway) https://github.com/CloudHub-Social/Charm/issues/48 ; GitHub code search for `embedded-fcm-distributor` (Nextcloud Talk, Fedilab, SchildiChat Next, 0xchat, YakiHonne)
 - crates.io: https://crates.io/crates/web-push-native , https://crates.io/crates/web-push , https://crates.io/crates/ece , https://crates.io/crates/unifiedpush
+
+---
+
+## Independent verification
+
+*Skeptical second pass, 2026-09-24. Re-checked from primary sources where possible: Codeberg API and raw source for the library, Maven Central metadata and POM, GitHub code search on adopters' build files, the Chromium source (nwjs mirror), microG source, the live Google Play policy page, the Google APIs Terms, Firebase and Android docs, crates.io API and the ntfy tiers JSON. Nothing was installed and no push message was sent.*
+
+### Verdict checks
+
+| Candidate | Original | Verdict after check | Why |
+|---|---|---|---|
+| C1 Web Push (RFC 8030/8291/8292) as the wire protocol | ADOPT, high | **Upheld** | Library `Module.md`: FCM "can handle webpush requests out of the box, but they require a VAPID authorization". The mar-v-in gist says sending is a "Regular WebPush server request". `web-push-native` 0.5.0 (2026-07-26, MIT OR Apache-2.0, 93,617 recent downloads) confirmed on crates.io. C1 is only worth anything with an endpoint source (C2 or C3). |
+| C2 FCM Web Push via Play Services (embedded distributor) | ADOPT (optional), medium | **Downgrade: CONSIDER, becomes ADOPT only if E1 and E2 pass. Confidence low-medium.** | The mechanism is real (source read). The *risk* is understated, and the *benefit* is unmeasured. Details below. |
+| C3 UnifiedPush connector + user-chosen distributor | CONSIDER, high | **Upheld** | UX guide confirmed. One small fix: the connector is at **3.3.5** (Maven, 2026-08-22), not 3.3.4. DAVx5 already uses 3.3.5. |
+| C4 ntfy + ntfy.sh | CONSIDER (user choice), high | **Upheld** | Live `/v1/tiers`: free tier `basis: ip`, `messages: 250`, `messages_expiry_duration: 43200`. ntfy-android `up/BroadcastReceiver.kt` line 85: `instant = true, // No Firebase, always instant!` (last commit 2026-07-09). Nuance: ntfy can switch `up*` topics to **subscriber-based** rate limiting (`visitor-subscriber-rate-limiting`, off by default). If ntfy.sh turns it on, the cap counts against the receiving phone, not the sender's IP. It makes no difference for a doorbell. |
+| C5 Sunup + Mozilla autopush | CONSIDER (user choice), medium | **Upheld** | README: default `https://push.services.mozilla.com`, and the user must "grant background usage without restrictions permission". Issue #15 (Play Store) is still open (2025-02-27). Issue #62 (privacy policy, "apparently hosted by Google") is closed. autopush-rs #1090 (IPv6) is still open. Latest release 1.3.3, 2026-09-08. |
+| C9 Developer Firebase project + static VAPID key | REJECT, low | **Upheld** | Nothing found that documents Web Push to native `firebase-messaging` tokens. The design objection (a shared private key in the APK) stands on its own. |
+| C10b While-idle alarm polling | CONSIDER, low | **Upheld, confidence raised to low-medium** | AlarmManager text confirmed verbatim: "approximately 10 seconds", "about every minute", "such as 15 minutes", "significant battery blame". **New:** Android's power-details page says apps on the temporary allowlist get "Unrestricted network access (unless device is in data saver mode)". So network access in the window is documented. E6 is still needed for the Android 15+ background-network restriction and for OEM behavior. |
+| C6, C7, C8, C10a (high-confidence REJECTs) | REJECT, high | **Upheld** | No viable path was missed. C8: even a least-privilege FCM-sender service account can send arbitrary notifications to every token in the project. C10a: the exemption table and Play policy are as stated. |
+
+### Why C2 should be downgraded (evidence the report missed or understated)
+
+1. **The main risk is Play-policy enforcement, not only breakage.** Google Play's Device and Network Abuse policy lists as a violation: "Apps that access or use a service or API in a manner that violates its terms of service." The Google APIs Terms (§**2.c**, "Permitted Access"; the report cites §3.c) require access "by the means described in the documentation". Together these give Google a documented route to act against the *app* on Play, and not just to stop the path working. So the report's "likely outcome is that it stops working, not that the app gets banned" has no evidence behind it. Two things mitigate this:
+   - the registration IPC is the same one Google's own open-source `firebase-messaging` uses (`GmsRpc.java`, cited in the library's comments);
+   - DAVx5 and Fedilab ship it on Play today.
+
+   Still, it is only undocumented, and nothing sanctions it.
+2. **Adoption on Play is thinner than listed.** Checked in the build files:
+   - DAVx5 includes `unifiedpush-fcm = "3.1.0"` in `core` for every flavor. That's real Play evidence.
+   - Fedilab uses `playstoreImplementation(...embedded-fcm-distributor:3.0.0)`. Also real.
+   - **Nextcloud Talk's Play flavor uses `firebase-messaging:25.1.2`.** The embedded distributor is only in its `generic` flavor. A large vendor chose *not* to ship this path on Play.
+   - **0xchat uses the older `foss-embedded-fcm-distributor:1.0.0`**, not the gateway-free 3.x VAPID path, so it's no evidence for C2.
+   - SchildiChat Next pins 3.0.0.
+3. **The license is ambiguous, not simply LGPL-2.1.** The repo `LICENSE` is LGPL-2.1, but the published Maven POM for 3.1.0 declares "The Apache License, Version 2.0". Ask the maintainer to clarify before linking, or re-implement cleanly (still feasible).
+4. **Google is preparing a different web-push endpoint path.** Chromium's `push_messaging_constants.cc` has both `https://fcm.googleapis.com/fcm/send/` and `https://fcm.googleapis.com/wp/`, switched by the feature flag `kPushMessagingGcmEndpointWebpushPath` (off by default in the mirror checked). The library hardcodes `/fcm/send/%s`. Treat endpoints as opaque: allow-list the host (`fcm.googleapis.com`), never a path, and expect the endpoint shape to change.
+5. **The benefit is unproven.** Firebase's priority page documents `Urgency: high` only for web push, and nothing for native `wp:` registrations. The Android power page says high-priority FCM is downgraded if an app "consistently" sends messages that don't result in a notification. Two cases the report didn't cover:
+   - (a) **Users who deny `POST_NOTIFICATIONS` (Android 13+) can never produce user-facing notifications.** For them, rings will be downgraded to normal priority, which is no better than WorkManager in Doze.
+   - (b) The library sends firebase-style ACKs (`supports_message_handled`, `RPC_ACK`), but how GMS decides "resulted in a notification" for `wp:` registrations is unknown.
+6. **Library health.** It has one maintainer. Codeberg shows 3 stars, 1 issue and releases 3.0.0 (2025-01-31), 3.1.0-rc1 (2026-01-27) and 3.1.0 (2026-06-23). It is small and easy to audit, so this is acceptable for an optional layer. The code (`C2mRequests.kt`, `FirebaseReceiver.kt`, `Constants.kt`) matches the report's description.
+
+### Important things the report missed
+
+- **Data Saver breaks the follow-up sync.** Temporary-allowlist network access is granted "unless device is in data saver mode". On metered networks with Data Saver on, a ring can arrive but the sync job can't fetch. Detect this with `ConnectivityManager.getRestrictBackgroundStatus()` and show it in diagnostics.
+- **microG phones may be covered too.** microG's `McsService.java` builds and delivers `rawData` extras, the same field the library reads, so C2 plausibly works on de-Googled phones with microG. microG issue #357 ("Web push notifications support", 2017) is still open, so this is **unverified**. Add microG to E5.
+- **FCM registration lifetime.** Firebase: registrations inactive for 270 days are "expired" and garbage-collected; "stale" after one month without connecting. Senders must drop endpoints on 404/400, and receivers must republish their endpoint after every sync.
+- **A policy-clean alternative for Chrome users (low value, noted for completeness).** A web page that subscribes via Chrome's documented `PushManager` gets a sanctioned FCM Web Push endpoint, and the same sender (C1) can ring it. It must show a notification (`userVisibleOnly`) and wakes Chrome's service worker, not our app. It also needs a hosted origin, and it's clunky. It's only a fallback if Google ever blocks C2.
+- The UX guide's line "should not be used by default if the user has another distributor installed" means C2 is the default only on phones with **no** UnifiedPush distributor. Make it explicit in the design.
+
+### Net effect on D17
+
+The report's conclusion still holds: option (b) no longer needs developer infrastructure. It should come with three caveats:
+- Play-policy exposure exists and is documented.
+- The wake benefit is unmeasured until E1 and E2 run.
+- Users who deny notifications or turn on Data Saver get little or nothing from it.
+
+Recommended order:
+1. Build the generic C1 sender and C3 connector support. These are policy-clean.
+2. Run E1, E2 and E5 (with microG) on a test APK.
+3. Ship C2 only behind an off-switch in settings, with a privacy disclosure.
