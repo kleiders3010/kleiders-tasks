@@ -96,7 +96,7 @@ No real alternative was found for these (platform facts or single fixes). Detail
 
 ## Later (not needed for launch)
 - **Free hosting for operator-manifest select entries** (D56): Cloudflare Workers/Durable Objects (e.g. a small Nostr relay or mailbox; no UDP, so no iroh relay), Oracle Cloud Always Free VM (iroh relay + helper + Nostr relay), Google Cloud e2-micro. **Not evaluated yet.** Evaluate when extra guaranteed capacity is wanted.
-- **Optional bonuses re-eligible under the clarified C2** (rejected earlier only for being developer-run): a doorbell worker (backup to D47's no-server path); Cloudflare Realtime TURN free tier (developer key; bills above 1,000 GB/month) for failed hole punches. Evaluate later as manifest entries.
+- **Optional bonuses re-eligible under the clarified C2** (rejected earlier only for being developer-run): a doorbell worker (only if ever reconsidered: D47 decided no doorbell); Cloudflare Realtime TURN free tier (developer key; bills above 1,000 GB/month) for failed hole punches. Evaluate later as manifest entries.
 
 ## 7. Outward actions awaiting approval (none run)
 - A Drive test on your Google account (D48d / D52b).
