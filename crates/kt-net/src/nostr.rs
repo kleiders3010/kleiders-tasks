@@ -361,6 +361,8 @@ pub struct NostrMailbox {
 
 impl NostrMailbox {
     pub fn new(relay_urls: &[&str], policy: NostrPolicy) -> NostrMailbox {
+        // TLS for wss:// relays: the same crypto provider iroh uses (no second one in the app).
+        let _ = rustls::crypto::ring::default_provider().install_default();
         NostrMailbox {
             relays: relay_urls.iter().map(|u| RelayConn::new(u, policy.clone())).collect(),
             policy,
