@@ -148,3 +148,56 @@ async fn non_members_are_refused() {
     let out = tokio::time::timeout(Duration::from_secs(5), res).await;
     assert!(!matches!(out, Ok(Ok(()))), "outsider must get nothing");
 }
+
+async fn dev_with(r: Replica, relay: &str, cfg: P2pConfig) -> Dev {
+    let policy = NostrPolicy { budget: RateBudget { per_minute: 600.0, burst: 50 }, ..NostrPolicy::default() };
+    let mb = Arc::new(NostrMailbox::new(&[relay], policy));
+    let s = Syncer::new(Arc::new(Mutex::new(r)), vec![mb as Arc<dyn Mailbox>]);
+    let p = P2p::start(s.clone(), cfg).await.unwrap();
+    Dev { s, p }
+}
+
+/// Wait until the endpoint is connected to its home relay, then publish its address.
+async fn online(d: &Dev) {
+    let _ = tokio::time::timeout(Duration::from_secs(10), d.p.endpoint().online()).await;
+    d.p.publish_whereabouts();
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn devices_without_direct_paths_sync_through_a_helper_relay() {
+    use kt_net::helper_relay::{HelperRelay, HelperRelayConfig};
+    let helper = HelperRelay::start(HelperRelayConfig::default()).await.unwrap();
+    let url = helper.url().unwrap();
+    let nostr = TestRelay::start(None).await.unwrap();
+    let (mut ra, mut rb) = (replica("ra"), replica("rb"));
+    let (g, d) = group(&mut ra, &mut [&mut rb]);
+    let cfg = P2pConfig { relays: vec![url.clone()], relay_only: true, ..Default::default() };
+    let a = dev_with(ra, &nostr.url(), cfg.clone()).await;
+    let b = dev_with(rb, &nostr.url(), cfg).await;
+    online(&a).await;
+    online(&b).await;
+    assert!(a.p.where_data().ips.is_empty() && !a.p.where_data().relays.is_empty(), "relay only: {:?}", a.p.where_data());
+    for _ in 0..2 {
+        a.s.sync_once().await;
+        b.s.sync_once().await;
+    }
+    nostr.set_knobs(RelayKnobs { offline: true, ..Default::default() });
+    set(&a, &g, &d, "t1", "via helper relay");
+    let rep = a.p.sync_round().await;
+    assert_eq!(rep.peers_reached, 1, "{rep:?}");
+    assert!(value(&b, &g, &d).contains("via helper relay"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn token_gated_helper_relay_refuses_others() {
+    use kt_net::helper_relay::{HelperRelay, HelperRelayConfig};
+    let helper = HelperRelay::start(HelperRelayConfig { tokens: Some(["group-secret".to_string()].into()), ..Default::default() }).await.unwrap();
+    let url = helper.url().unwrap();
+    let nostr = TestRelay::start(None).await.unwrap();
+    let good = dev_with(replica("tg"), &nostr.url(), P2pConfig { relays: vec![url.clone()], relay_only: true, relay_token: Some("group-secret".into()), ..Default::default() }).await;
+    let bad = dev_with(replica("tb"), &nostr.url(), P2pConfig { relays: vec![url], relay_only: true, relay_token: Some("wrong".into()), ..Default::default() }).await;
+    let ok = tokio::time::timeout(Duration::from_secs(10), good.p.endpoint().online()).await.is_ok();
+    let refused = tokio::time::timeout(Duration::from_secs(5), bad.p.endpoint().online()).await.is_err();
+    assert!(ok, "token holder gets online through the helper relay");
+    assert!(refused, "a wrong token never gets a home relay");
+}

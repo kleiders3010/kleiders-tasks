@@ -15,6 +15,7 @@ base64.workspace = true
 http.workspace = true
 rustls.workspace = true
 iroh.workspace = true
+iroh-relay.workspace = true
 rand.workspace = true
 hex.workspace = true
 thiserror.workspace = true

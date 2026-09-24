@@ -46,6 +46,10 @@ pub struct P2pConfig {
     pub bind: Option<SocketAddr>,
     /// Ask the router for a port mapping (UPnP / NAT-PMP / PCP).
     pub portmap: bool,
+    /// Token presented to the custom relays (group-token access on helper relays).
+    pub relay_token: Option<String>,
+    /// No direct IP paths at all, only relays (tests, USB tunnels).
+    pub relay_only: bool,
 }
 
 /// What a device publishes to its groups as whereabouts.
@@ -163,7 +167,11 @@ impl P2p {
             let mut cfgs = Vec::new();
             for r in &cfg.relays {
                 let u: RelayUrl = r.parse().map_err(|e| format!("bad relay url {r}: {e}"))?;
-                cfgs.push(u);
+                let mut c = iroh::RelayConfig::new(u, None);
+                if let Some(t) = &cfg.relay_token {
+                    c = c.with_auth_token(t);
+                }
+                cfgs.push(Arc::new(c));
             }
             // An empty custom map (not Disabled) so relays can be added at runtime (E10).
             RelayMode::Custom(RelayMap::from_iter(cfgs))
@@ -172,7 +180,9 @@ impl P2p {
         if !cfg.portmap {
             b = b.portmapper_config(PortmapperConfig::Disabled);
         }
-        if let Some(a) = cfg.bind {
+        if cfg.relay_only {
+            b = b.clear_ip_transports();
+        } else if let Some(a) = cfg.bind {
             b = b.clear_ip_transports().bind_addr(a).map_err(|e| e.to_string())?;
         }
         let ep = b.bind().await.map_err(|e| e.to_string())?;

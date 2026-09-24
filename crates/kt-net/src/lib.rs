@@ -4,6 +4,7 @@
 //! moves them: a capability-based [`mailbox::Mailbox`] interface, the Nostr backend, and the
 //! [`sync::Syncer`] that drives a replica against mailboxes.
 
+pub mod helper_relay;
 pub mod mailbox;
 pub mod nostr;
 pub mod p2p;

@@ -33,6 +33,7 @@ base64 = "0.22"
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
 http = "1"
 iroh = "=1.2.0"
+iroh-relay = { version = "=1.2.0", features = ["server"] }
 
 [profile.release]
 opt-level = "z"
