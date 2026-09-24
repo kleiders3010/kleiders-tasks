@@ -1,0 +1,16 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:35823","[::]:47371"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:35823"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.26:29933","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":417.4,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:29933","10.6.0.2:35823"],"relays":[],"t":417.4}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:29933","10.6.0.2:35823"],"relays":["https://7.7.7.10/"],"t":417.5}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":417.6}
+{"ev":"online","ms":542.118372,"t":542.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":542.2}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:29933","10.6.0.2:35823"],"relays":["https://7.7.7.10/"],"t":3542.8}
+{"ev":"dial_start","peer":{"customs":[],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:52931","7.7.7.29:53400","10.9.0.2:53400"],"relays":["https://7.7.7.10/"]},"t":3594.3}
+{"ev":"connected","ms":42.727857,"paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:52931)","rtt_ms":41.435569,"sel":true}],"t":3637.0}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:52931)","rtt_ms":41.435569,"sel":true}],"since_ms":42.823153000000005,"t":3637.1}
+{"ev":"ttfb","ms":93.477293,"t":3687.7}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:52931)","rtt_ms":41.697971,"sel":true},{"id":"PathId(1)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.384479,"sel":false}],"since_ms":460.77553900000004,"t":4055.0}
+{"alive_after":true,"connect_ms":42.727857,"connected":true,"direct":true,"direct_ms":42.727857,"ev":"summary","final_selected":{"relay":false,"remote":"Ip(7.7.7.29:52931)","rtt_ms":41.693070999999996},"first_path_direct":true,"mbps":null,"n_paths":2,"t":9730.5,"ttfb_ms":93.477293}

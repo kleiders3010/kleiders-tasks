@@ -1,0 +1,9 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:47711","[::]:58062"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.9.0.2:47711"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:38494","10.9.0.2:47711"],"relays":[],"t":53.0}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:38494","10.9.0.2:47711"],"relays":[],"t":3000.9}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:42179)","rtt_ms":41.737665,"sel":true}],"remote_addr":"Ip(7.7.7.30:42179)","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3066.3}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:42179)","rtt_ms":41.737665,"sel":true}],"since_ms":42.879554999999996,"t":3066.4}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:42179)","rtt_ms":41.866018999999994,"sel":true}],"since_ms":205.227748,"t":3228.8}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.30:42179)","rtt_ms":41.706931000000004,"sel":true}],"since_ms":5215.711291,"t":8239.2}

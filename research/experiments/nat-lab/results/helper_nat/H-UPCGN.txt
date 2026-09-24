@@ -1,0 +1,5 @@
+=== H-UPCGN (nl-c-upcgn, lan 10.11.0.2, public 7.7.7.31)
+-- UPnP mappings
+-- ACME IP certificate for 7.7.7.31
+Error: API error: Get "http://7.7.7.31:80/.well-known/acme-challenge/Asd6HhPyhFJcWZdALqUaMQW1SGtPeRfqiaLdNco5BYs": context deadline exceeded (Client.Timeout exceeded while awaiting headers) (urn:ietf:
+RESULT H-UPCGN: no certificate -> cannot serve as a public relay

@@ -1,0 +1,28 @@
+{"ev":"bound","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","sockets":["0.0.0.0:57424","[::]:42755"],"t":0.0}
+{"customs":[],"ev":"addr","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["10.7.0.2:57424","[2001:db8:7::2]:42755"],"relays":[],"t":0.3}
+{"ev":"relay_status","relays":[],"t":0.4}
+{"captive":null,"ev":"netreport","global_v4":null,"global_v6":null,"preferred_relay":"https://[2001:db8::11]:8443/","t":250.7,"udp_v4":false,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["10.7.0.2:57424","[2001:db8:7::2]:42755"],"relays":["https://[2001:db8::11]:8443/"],"t":250.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":251.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":251.5}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":263.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":264.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":286.6}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":286.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":328.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":328.6}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":417.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":417.3}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":732.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":733.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":1370.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":1370.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":2131.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":2131.6}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":4494.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":4494.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://[2001:db8::11]:8443/"}],"t":9238.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Invalid TLS servername","url":"https://[2001:db8::11]:8443/"}],"t":9238.5}
+{"ev":"online_timeout","t":12001.9}
+{"customs":[],"ev":"published","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["10.7.0.2:57424","[2001:db8:7::2]:42755"],"relays":["https://[2001:db8::11]:8443/"],"t":13003.6}
+{"ev":"closing","t":14004.9}

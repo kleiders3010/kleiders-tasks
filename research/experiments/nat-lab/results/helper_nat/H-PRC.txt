@@ -1,0 +1,6 @@
+=== H-PRC (nl-c-prc2, lan 10.4.0.2, public 7.7.7.24)
+-- UPnP mappings
+No IGD UPnP Device found on the network !
+-- ACME IP certificate for 7.7.7.24
+Error: API error: Get "http://7.7.7.24:80/.well-known/acme-challenge/0pTsxRdfi7Jut0AcKNfNH6uE5TIxc5TUYWRF7lX7_YQ": context deadline exceeded (Client.Timeout exceeded while awaiting headers) (urn:ietf:
+RESULT H-PRC: no certificate -> cannot serve as a public relay

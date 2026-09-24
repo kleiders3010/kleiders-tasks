@@ -1,0 +1,39 @@
+{"ev":"relay_ready","http":"7.7.7.11:9080","https":"7.7.7.11:9443","pid":25691,"quic":"7.7.7.11:7844","t":0.0}
+{"allowed":true,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":370.2}
+[2m2026-09-24T19:36:42.089128Z[0m [33m WARN[0m [2miroh_relay::server::client[0m[2m:[0m actor errored Stream terminated, exiting
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2140.1}
+[2m2026-09-24T19:36:42.354560Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2157.6}
+[2m2026-09-24T19:36:42.372113Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2191.7}
+[2m2026-09-24T19:36:42.406190Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2253.0}
+[2m2026-09-24T19:36:42.467492Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2406.4}
+[2m2026-09-24T19:36:42.620823Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":2658.0}
+[2m2026-09-24T19:36:42.872516Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":3260.1}
+[2m2026-09-24T19:36:43.474519Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":4066.2}
+[2m2026-09-24T19:36:44.280640Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":6230.9}
+[2m2026-09-24T19:36:46.445321Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":7670.4}
+[2m2026-09-24T19:36:47.884829Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":7686.8}
+[2m2026-09-24T19:36:47.901228Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":7714.1}
+[2m2026-09-24T19:36:47.928597Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":7793.5}
+[2m2026-09-24T19:36:48.007959Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":7877.8}
+[2m2026-09-24T19:36:48.092242Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":8086.2}
+[2m2026-09-24T19:36:48.300654Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":8712.1}
+[2m2026-09-24T19:36:48.926599Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":9385.9}
+[2m2026-09-24T19:36:51.514920Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)
+{"allowed":false,"endpoint":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ev":"relay_access","t":11781.6}
+[2m2026-09-24T19:36:53.910600Z[0m [33m WARN[0m [2miroh_relay::server::http_server[0m[2m:[0m error accepting upgraded connection: The relay denied our authentication (bad group token)

@@ -1,0 +1,27 @@
+{"ev":"bound","id":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","sockets":["0.0.0.0:38344","[::]:49710"],"t":0.0}
+{"customs":[],"ev":"addr","id":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ips":["10.3.0.2:38344"],"relays":[],"t":0.3}
+{"ev":"relay_status","relays":[],"t":0.3}
+{"customs":[],"ev":"addr","id":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ips":["7.7.7.23:38344","10.3.0.2:38344"],"relays":[],"t":245.8}
+{"customs":[],"ev":"addr","id":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ips":["7.7.7.23:38344","10.3.0.2:38344"],"relays":["https://7.7.7.11:9443/"],"t":246.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":246.0}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.23:38344","global_v6":null,"preferred_relay":"https://7.7.7.11:9443/","t":245.8,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":247.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":262.7}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":263.6}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":290.0}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":291.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":369.4}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":370.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":453.7}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":454.6}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":662.2}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":663.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":1288.1}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":1289.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":1961.9}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":1962.8}
+{"ev":"online_timeout","t":4001.8}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:9443/"}],"t":4357.5}
+{"ev":"relay_status","relays":[{"auth_denied":"bad group token","connected":false,"err":"Failed to connect to relay server: unable to connect: The relay denied our authentication (bad group token)","url":"https://7.7.7.11:9443/"}],"t":4358.4}
+{"customs":[],"ev":"published","id":"fa4834147f6e690c3693eff61336046403cd8ae2a14f31b3c407358569239565","ips":["7.7.7.23:38344","10.3.0.2:38344"],"relays":["https://7.7.7.11:9443/"],"t":4503.8}
+{"ev":"closing","t":5505.0}

@@ -1,0 +1,10 @@
+{"ev":"bound","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","sockets":["0.0.0.0:59194","[::]:39768"],"t":0.0}
+{"customs":[],"ev":"addr","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["10.7.0.2:59194","[2001:db8:7::2]:39768"],"relays":[],"t":0.3}
+{"ev":"relay_status","relays":[],"t":0.3}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.27:2427","global_v6":null,"preferred_relay":"https://7.7.7.11:8443/","t":248.0,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["7.7.7.27:2427","10.7.0.2:59194","[2001:db8:7::2]:39768"],"relays":["https://7.7.7.11:8443/"],"t":248.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.11:8443/"}],"t":248.1}
+{"ev":"online","ms":250.085599,"t":250.3}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.11:8443/"}],"t":250.4}
+{"customs":[],"ev":"published","id":"ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c","ips":["7.7.7.27:2427","10.7.0.2:59194","[2001:db8:7::2]:39768"],"relays":["https://7.7.7.11:8443/"],"t":2251.4}
+{"ev":"closing","t":3252.7}

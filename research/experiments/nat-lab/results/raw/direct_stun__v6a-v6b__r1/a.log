@@ -1,0 +1,14 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:56947","[::]:54664"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.7.0.2:56947","[2001:db8:7::2]:54664"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"ev":"stun_side","local_port":60149,"mapped":["7.7.7.27:52943","7.7.7.27:12593"],"port_preserved":false,"public_ip":"7.7.7.27","t":82.2,"varies_by_dest":true}
+{"addr":"7.7.7.27:56947","ev":"stun_predicted","t":82.2}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:56947","10.7.0.2:56947","[2001:db8:7::2]:54664"],"relays":[],"t":82.3}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:56947","10.7.0.2:56947","[2001:db8:7::2]:54664"],"relays":[],"t":3083.8}
+{"ev":"dial_start","peer":{"customs":[],"id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:36165","10.8.0.2:36165","[2001:db8:8::2]:53556"],"relays":[]},"t":3598.7}
+{"ev":"connected","ms":84.14578300000001,"paths":[{"id":"PathId(0)","relay":false,"remote":"Ip([2001:db8:8::2]:53556)","rtt_ms":82.954286,"sel":true}],"t":3682.9}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip([2001:db8:8::2]:53556)","rtt_ms":82.954286,"sel":true}],"since_ms":84.220662,"t":3682.9}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip([2001:db8:8::2]:53556)","rtt_ms":82.69337,"sel":true}],"remote_addr":"Ip([2001:db8:8::2]:53556)","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3724.8}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip([2001:db8:8::2]:53556)","rtt_ms":82.69337,"sel":true}],"since_ms":83.726966,"t":3724.9}
+{"ev":"ttfb","ms":182.453041,"t":3781.2}
+{"alive_after":true,"connect_ms":84.14578300000001,"connected":true,"direct":true,"direct_ms":84.14578300000001,"ev":"summary","final_selected":{"relay":false,"remote":"Ip([2001:db8:8::2]:53556)","rtt_ms":82.883467},"first_path_direct":true,"mbps":null,"n_paths":1,"t":9864.1,"ttfb_ms":182.453041}

@@ -1,0 +1,13 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:48811","[::]:33374"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.8.0.2:48811","[2001:db8:8::2]:33374"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"ev":"stun_side","local_port":42280,"mapped":["7.7.7.28:50544","7.7.7.28:55753"],"port_preserved":false,"public_ip":"7.7.7.28","t":163.0,"varies_by_dest":true}
+{"addr":"7.7.7.28:48811","ev":"stun_predicted","t":163.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:48811","10.8.0.2:48811","[2001:db8:8::2]:33374"],"relays":[],"t":163.1}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.28:48811","10.8.0.2:48811","[2001:db8:8::2]:33374"],"relays":[],"t":3164.0}
+{"ev":"dial_start","peer":{"customs":["4b4c_8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c"],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.27:51034","10.7.0.2:51034","[2001:db8:7::2]:45358"],"relays":[]},"t":3215.4}
+{"ev":"connected","ms":83.77518500000001,"paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.694714,"sel":true}],"t":3299.2}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.694714,"sel":true}],"since_ms":83.870706,"t":3299.3}
+{"ev":"ttfb","ms":174.886702,"t":3390.3}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.952663,"sel":true},{"id":"PathId(1)","relay":false,"remote":"Ip([2001:db8:7::2]:45358)","rtt_ms":81.957484,"sel":false}],"since_ms":338.86676900000003,"t":3554.3}
+{"alive_after":true,"connect_ms":83.77518500000001,"connected":true,"direct":false,"direct_ms":null,"ev":"summary","final_selected":{"relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":83.045979},"first_path_direct":false,"mbps":null,"n_paths":2,"t":9473.2,"ttfb_ms":174.886702}

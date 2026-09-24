@@ -1,0 +1,9 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:40281","[::]:51919"],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:40281"],"relays":[],"t":0.0}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:40281"],"relays":[],"t":3001.4}
+{"ev":"dial_start","peer":{"customs":["4b4c_8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c"],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.11.0.2:47789"],"relays":[]},"t":3001.5}
+{"ev":"connected","ms":83.510131,"paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.207544,"sel":true}],"t":3085.1}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.207544,"sel":true}],"since_ms":83.600617,"t":3085.2}
+{"ev":"ttfb","ms":175.68271,"t":3177.2}
+{"alive_after":true,"connect_ms":83.510131,"connected":true,"direct":false,"direct_ms":null,"ev":"summary","final_selected":{"relay":false,"remote":"Custom(CustomAddr { id: 19276, data: [8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c] })","rtt_ms":82.657027},"first_path_direct":false,"mbps":null,"n_paths":1,"t":9261.0,"ttfb_ms":175.68271}

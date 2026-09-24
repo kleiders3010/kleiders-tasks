@@ -1,0 +1,16 @@
+{"ev":"bound","id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","sockets":["0.0.0.0:46372","[::]:59463"],"t":0.0}
+{"customs":[],"ev":"addr","id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","ips":["10.6.0.2:46372"],"relays":[],"t":0.4}
+{"ev":"relay_status","relays":[],"t":0.5}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.26:51758","global_v6":null,"preferred_relay":"https://7.7.7.30/","t":408.4,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","ips":["7.7.7.26:51758","10.6.0.2:46372"],"relays":[],"t":408.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":408.7}
+{"customs":[],"ev":"addr","id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","ips":["7.7.7.26:51758","10.6.0.2:46372"],"relays":["https://7.7.7.30/"],"t":409.5}
+{"ev":"online","ms":534.352382,"t":534.8}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.30/"}],"t":534.8}
+{"customs":[],"ev":"published","id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","ips":["7.7.7.26:51758","10.6.0.2:46372"],"relays":["https://7.7.7.30/"],"t":2536.0}
+{"ev":"dial_start","peer":{"customs":[],"id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["7.7.7.25:24746","10.5.0.2:45153"],"relays":["https://7.7.7.30/"]},"t":2587.9}
+{"ev":"connected","ms":87.941429,"paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":86.583847,"sel":true}],"t":2675.8}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":86.583847,"sel":true}],"since_ms":88.24589900000001,"t":2676.1}
+{"ev":"ttfb","ms":186.593818,"t":2774.4}
+{"alive_after":true,"connect_ms":87.941429,"connected":true,"direct":false,"direct_ms":null,"ev":"summary","final_selected":{"relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":84.88942800000001},"first_path_direct":false,"mbps":null,"n_paths":1,"t":6858.0,"ttfb_ms":186.593818}
+{"ev":"closing","t":6858.3}

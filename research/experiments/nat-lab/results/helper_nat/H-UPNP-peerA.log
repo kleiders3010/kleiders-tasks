@@ -1,0 +1,37 @@
+{"ev":"bound","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","sockets":["0.0.0.0:45153","[::]:51825"],"t":0.0}
+{"customs":[],"ev":"addr","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["10.5.0.2:45153"],"relays":[],"t":0.4}
+{"ev":"relay_status","relays":[],"t":0.5}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.25:24746","global_v6":null,"preferred_relay":"https://7.7.7.30/","t":418.1,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["7.7.7.25:24746","10.5.0.2:45153"],"relays":[],"t":418.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":418.4}
+{"customs":[],"ev":"addr","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["7.7.7.25:24746","10.5.0.2:45153"],"relays":["https://7.7.7.30/"],"t":418.8}
+{"ev":"online","ms":543.688306,"t":544.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.30/"}],"t":544.1}
+{"customs":[],"ev":"published","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["7.7.7.25:24746","10.5.0.2:45153"],"relays":["https://7.7.7.30/"],"t":2546.0}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":85.224569,"sel":true}],"remote_addr":"Relay { url: RelayUrl(\"https://7.7.7.30/\"), endpoint_id: PublicKey(4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8) }","remote_id":"4ed32f63bf35f0eeefcb25f28a2e1fbdc873ae2835671b0c9460f5f12e4556a8","t":2717.6}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":85.224569,"sel":true}],"since_ms":86.47474,"t":2717.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":6966.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7007.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":7026.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7067.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":7102.5}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7143.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":7220.7}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7261.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":7394.1}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7434.7}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":7611.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":7652.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":8287.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":8328.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":9011.8}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":9052.3}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":11064.0}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":11104.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":13792.9}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":13833.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.30/"}],"t":21054.4}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":"Failed to connect to relay server: unable to connect: Connection refused (os error 111)","url":"https://7.7.7.30/"}],"t":21094.9}
+{"captive":null,"ev":"netreport","global_v4":null,"global_v6":null,"preferred_relay":null,"t":23575.3,"udp_v4":false,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"43046bfe4092b3e94994eada15dcc20d8aaa07b658fd3954eb8e0efb8bdca5de","ips":["10.5.0.2:45153"],"relays":["https://7.7.7.30/"],"t":23575.5}
+{"ev":"closing","t":27547.7}

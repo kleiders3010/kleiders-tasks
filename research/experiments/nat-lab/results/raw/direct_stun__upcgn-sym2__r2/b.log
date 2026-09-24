@@ -1,0 +1,9 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:38401","[::]:60125"],"t":0.0}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:38401"],"relays":[],"t":0.1}
+{"ev":"stun_side","local_port":60958,"mapped":["7.7.7.26:10840","7.7.7.26:28715"],"port_preserved":false,"public_ip":"7.7.7.26","t":82.0,"varies_by_dest":true}
+{"addr":"7.7.7.26:38401","ev":"stun_predicted","t":82.1}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:38401","10.6.0.2:38401"],"relays":[],"t":82.2}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:38401","10.6.0.2:38401"],"relays":[],"t":3082.4}
+{"ev":"dial_start","peer":{"customs":[],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.31:60810","10.11.0.2:60810"],"relays":[]},"t":3597.6}
+{"connected":false,"err":"timeout","ev":"summary","ms":10002,"t":13599.6}

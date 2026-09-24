@@ -1,0 +1,14 @@
+{"ev":"bound","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","sockets":["0.0.0.0:39926","[::]:39081"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["10.6.0.2:39926"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"ev":"stun_side","local_port":49333,"mapped":["7.7.7.26:48904","7.7.7.26:55798"],"port_preserved":false,"public_ip":"7.7.7.26","t":81.6,"varies_by_dest":true}
+{"addr":"7.7.7.26:39926","ev":"stun_predicted","t":81.6}
+{"customs":[],"ev":"addr","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:39926","10.6.0.2:39926"],"relays":[],"t":81.7}
+{"customs":[],"ev":"published","id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","ips":["7.7.7.26:39926","10.6.0.2:39926"],"relays":[],"t":3083.1}
+{"ev":"dial_start","peer":{"customs":[],"id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.29:56889","7.7.7.29:61438","10.9.0.2:56889"],"relays":[]},"t":3596.8}
+{"ev":"connected","ms":63.616521,"paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:61438)","rtt_ms":62.232893,"sel":true}],"t":3660.4}
+{"ev":"paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:61438)","rtt_ms":62.232893,"sel":true}],"since_ms":63.705529,"t":3660.5}
+{"ev":"ttfb","ms":113.984532,"t":3710.8}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:61438)","rtt_ms":42.457390999999994,"sel":true}],"remote_addr":"Ip(7.7.7.29:61438)","remote_id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","t":4662.1}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":false,"remote":"Ip(7.7.7.29:61438)","rtt_ms":42.457390999999994,"sel":true}],"since_ms":43.622969999999995,"t":4662.1}
+{"alive_after":true,"connect_ms":63.616521,"connected":true,"direct":true,"direct_ms":63.616521,"ev":"summary","final_selected":{"relay":false,"remote":"Ip(7.7.7.29:61438)","rtt_ms":48.505079},"first_path_direct":true,"mbps":null,"n_paths":1,"t":9756.8,"ttfb_ms":113.984532}

@@ -1,0 +1,13 @@
+{"ev":"bound","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","sockets":["0.0.0.0:55488","[::]:33469"],"t":0.0}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["10.1.0.2:55488"],"relays":[],"t":0.1}
+{"ev":"relay_status","relays":[],"t":0.1}
+{"captive":false,"ev":"netreport","global_v4":"7.7.7.21:55488","global_v6":null,"preferred_relay":"https://7.7.7.10/","t":417.1,"udp_v4":true,"udp_v6":false,"varies_v4":null}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.21:55488","10.1.0.2:55488"],"relays":[],"t":417.1}
+{"customs":[],"ev":"addr","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.21:55488","10.1.0.2:55488"],"relays":["https://7.7.7.10/"],"t":417.2}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":false,"err":null,"url":"https://7.7.7.10/"}],"t":417.3}
+{"ev":"online","ms":542.222777,"t":542.3}
+{"ev":"relay_status","relays":[{"auth_denied":null,"connected":true,"err":null,"url":"https://7.7.7.10/"}],"t":542.3}
+{"customs":[],"ev":"published","id":"8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c","ips":["7.7.7.21:55488","10.1.0.2:55488"],"relays":["https://7.7.7.10/"],"t":3543.6}
+{"ev":"incoming","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.362021,"sel":true}],"remote_addr":"Relay { url: RelayUrl(\"https://7.7.7.10/\"), endpoint_id: PublicKey(8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394) }","remote_id":"8139770ea87d175f56a35466c34c7ecccb8d8a91b4ee37a25df60f5b8fc9b394","t":3720.2}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.362021,"sel":true}],"since_ms":84.460675,"t":3720.2}
+{"ev":"in_paths","paths":[{"id":"PathId(0)","relay":true,"remote":"Relay(https://7.7.7.10/)","rtt_ms":83.402039,"sel":false},{"id":"PathId(1)","relay":false,"remote":"Ip(7.7.7.26:1257)","rtt_ms":41.179607,"sel":true}],"since_ms":238.54318999999998,"t":3874.3}

@@ -12,6 +12,14 @@ Split in two:
 
 **D51. Should default-on helpers also relay *live* connections for strangers?** *(storage helping is already decided: on)*
 - *User direction: relay capability must exist; a developer-run select relay (your PC or a free server) is the early guarantee. Final choice waits for the D49 lab data on how many helpers are reachable.*
+- **D49 lab data (E10), now in:**
+  - **Some pairs can only ever connect through a relay:** 5 of the 13 NAT pairs tested, including phone↔phone on carrier NAT. So without n0, *someone's* relay is required for those users to connect live. Offline sync still works through mailboxes (Nostr, helpers) either way.
+  - **Who can be a relay:** only a device with a public IPv4 address or a UPnP router (the certificate check must reach it). Phones and carrier-NAT homes can't. So relaying falls on a minority of desktops.
+  - **Cost per relaying desktop:**
+    - about 48 MB of memory and under 1% of one core with 100 clients and 50 relayed connections;
+    - bulk data costs about 25 core-seconds per GB, so a per-relay bandwidth cap is needed (it doesn't change the choice).
+  - **Access can be limited to a group token**, but the relay's address-discovery answers anyone who asks. That reveals little: that a relay exists, not who uses it.
+  - Not measured: real ISP reactions and the real share of desktops with public IPv4 or UPnP.
 - (a) Default-on, like storage helping: maximum coverage.
 - (b) A separate opt-in relay level.
 - (c) Own groups only.
@@ -28,8 +36,8 @@ Split in two:
 
 | Item | Plan | Data needed | Status |
 |---|---|---|---|
-| **D49** Internet P2P and relaying without n0 | Network lab in WSL2 (Ubuntu is available): helper-hosted iroh relays with IP certificates; IPv6 / router-mapped direct; custom-transport variants | NAT lab matrix (LAYERS §6, P1–P2) | Next |
-| **Select relay hosting** (D56 bonus, prioritized by user) | Evaluate free hosting for a developer-run relay: Oracle Cloud Always Free VM, Google Cloud e2-micro (real iroh relay), Cloudflare Workers + Durable Objects (WebSocket-only relaying, no address discovery: feasibility) | Terms, limits and resource needs, informed by the D49 lab | **Queued right after D49** |
+| **D49** Internet P2P and relaying without n0 | **Settled with data (E10):** build **(a) helper-hosted iroh relays** first and **(b) direct paths through our own signaling** alongside. **Don't build (c)**, the custom first path: it adds no direct coverage beyond (a)+(b) and depends on an unstable iroh API. | 13 NAT pairs × 3 runs, with 20 ms per hop | **Done.** (a) connected 13/13 pairs (39/39 runs), 8 direct and 5 relayed. (b) alone reached 8/13 at best, and only with IPv6, UPnP, a port-preserving NAT *and* both sides dialing at once; one-sided dialing got 3/13. Constraints for the build: helper relays need **IPv4 URLs** (iroh's bracketed-IPv6 URL bug is confirmed); a relay added at runtime works only if the endpoint started with an empty custom relay map; getting an IP certificate took ~1 s (local Let's Encrypt test CA). Untested for lack of time: libp2p and HyperDHT's randomized port punching (the only candidate for getting some of the 5 relay-only pairs direct). Confidence: high on iroh's behavior, medium on real networks. |
+| **Select relay hosting** (D56 bonus, prioritized by user) | Evaluate free hosting for a developer-run relay: Oracle Cloud Always Free VM, Google Cloud e2-micro (real iroh relay), Cloudflare Workers + Durable Objects (WebSocket-only relaying, no address discovery: feasibility) | Terms, limits and resource needs. From the D49 lab: an iroh relay needs ~48 MB RAM, a public IPv4 address and UDP (so Cloudflare Workers can't host a full one) | **Next** |
 | **D48** Second offline mailbox | Mock mailbox interface, then local Session storage server and isolated Veilid network | LAYERS §6 P3 | After D49 |
 | **D25** History checkpoints | Lean (b): full history in a window + small snapshots stored separately | Measure with Loro after document epochs exist | Engine phase |
 | **D47 add-on** "More often" setting | Battery cost of idle-alarm checks | Emulator + real phone | Engine phase |

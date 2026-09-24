@@ -1,0 +1,15 @@
+=== H-UPNP (nl-c-upnp2, lan 10.10.0.2, public 7.7.7.30)
+-- UPnP mappings
+Found valid IGD : http://10.10.0.1:5000/ctl/IPConn
+ExternalIPAddress = 7.7.7.30
+external 7.7.7.30:80 TCP is redirected to internal 10.10.0.2:80 (duration=604800)
+external 7.7.7.30:443 TCP is redirected to internal 10.10.0.2:443 (duration=604800)
+external 7.7.7.30:7842 UDP is redirected to internal 10.10.0.2:7842 (duration=604800)
+-- ACME IP certificate for 7.7.7.30
+{"ev":"http01_request","from":"7.7.7.5:58548","hit":true,"path":"/.well-known/acme-challenge/5mS5gPPgTY-pXFe2gJLfNm_N7p4B2GBw9KWsTudFha4","t":999.9}
+{"ev":"http01_request","from":"7.7.7.5:58562","hit":true,"path":"/.well-known/acme-challenge/5mS5gPPgTY-pXFe2gJLfNm_N7p4B2GBw9KWsTudFha4","t":999.9}
+{"ev":"http01_request","from":"7.7.7.5:58550","hit":true,"path":"/.well-known/acme-challenge/5mS5gPPgTY-pXFe2gJLfNm_N7p4B2GBw9KWsTudFha4","t":1000.0}
+{"chain_pems":2,"ev":"acme_issued","ms":1976.06423,"profile":"shortlived","t":1976.1}
+-- client A: {"ev":"online","ms":543.688306,"t":544.0}
+-- client A QAD: {"captive":null,"ev":"netreport","global_v4":null,"global_v6":null,"preferred_relay":null,"t":23575.3,"udp_v4":false,"udp_v6":false,"varies_v4":null}
+-- client B summary: {"alive_after":true,"connect_ms":87.941429,"connected":true,"direct":false,"direct_ms":null,"ev":"summary","final_selected":{"relay":true,"remote":"Relay(https://7.7.7.30/)","rtt_ms":84.88942800000001},"first_path_direct":false,"mbps":null,"n_paths":1,"t":6858.0,"ttfb_ms":186.593818}
