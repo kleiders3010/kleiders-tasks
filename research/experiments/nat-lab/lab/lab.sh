@@ -6,7 +6,7 @@
 #   lab.sh down    delete all nl-* namespaces
 #   lab.sh status  list namespaces and addresses
 #
-# Topology (all "public" hosts share one bridge in nl-inet; 10 ms one-way delay per WAN link):
+# Topology (all "public" hosts share one bridge in nl-inet; optional delay via "lab.sh delay MS"):
 #
 #                      nl-inet  (bridge br0 $PUB4.1/24, 2001:db8::1/64, routes LAN /64s)
 #        ______________________|____________________________________________
@@ -24,7 +24,7 @@
 #   upnp  prc + miniupnpd (UPnP IGD + NAT-PMP/PCP)
 #   upcgn prc + miniupnpd home router BEHIND a symmetric CGN (nl-r-cgn, 100.64.11.0/24)
 set -u
-DELAY=${DELAY:-10ms}
+
 # "Public" IPv4 prefix of the isolated lab. Not a documentation range on purpose: miniupnpd
 # (like real routers) refuses to port-map when its WAN address is reserved/private.
 PUB4=${PUB4:-7.7.7}
@@ -50,9 +50,6 @@ attach() {
   ip -n nl-inet link add "$host" type veth peer name wan netns "$ns"
   nsx nl-inet ip link set "$host" master br0 up
   nsx "$ns" ip link set wan up
-  # WSL2's kernel has no sch_netem, so link delay is only applied where available.
-  nsx nl-inet tc qdisc add dev "$host" root netem delay $DELAY 2>/dev/null
-  nsx "$ns" tc qdisc add dev wan root netem delay $DELAY 2>/dev/null
   for o in $v4s; do nsx "$ns" ip addr add $PUB4.$o/24 dev wan; done
   nsx "$ns" ip route add default via $PUB4.1
   if [ -n "$v6" ]; then
@@ -197,6 +194,10 @@ up() {
   nsx nl-inet ip addr add $PUB4.1/24 dev br0
   nsx nl-inet ip -6 addr add 2001:db8::1/64 dev br0 nodad
   nsx nl-inet sysctl -qw net.ipv4.conf.all.send_redirects=0 net.ipv4.conf.br0.send_redirects=0
+  # core port for the delaying userspace switch (unused while the kernel bridge is active)
+  nsx nl-inet ip link add p-core type veth peer name core0
+  nsx nl-inet ip link set core0 master br0 up
+  nsx nl-inet ip link set p-core up
 
   for h in "ca:5:5" "stun:6 7:6" "h1:10:10" "h2:11:11" "load:12:12"; do
     IFS=: read n o v6 <<<"$h"; mkns nl-$n; attach nl-$n "$o" "$v6"
@@ -234,7 +235,34 @@ up() {
     nft_router $r $i $typ
     case $typ in upnp|upcgn) start_miniupnpd $r $i;; esac
   done
+  # guard: the root namespace (WSL VM uplink) must be untouched
+  ip link show eth0 2>/dev/null | grep -q "state UP" || echo "WARNING: root-namespace eth0 is not UP"
   echo "lab up"
+}
+
+# WAN latency: the kernel bridge is swapped for a userspace delaying switch (natlab wanemu).
+# Each frame crossing the core is delayed MS: host<->host RTT = 2*MS, relayed RTT = 4*MS.
+delay_on() {
+  local ms=${1:-20}; delay_off
+  local ports=""
+  for p in $(nsx nl-inet ls /sys/class/net | grep "^p-"); do
+    ports="$ports --if $p"
+    [ "$p" = p-core ] && continue
+    nsx nl-inet ip link set $p nomaster
+    nsx nl-inet ethtool -K $p gro off gso off tso off tx off rx off >/dev/null 2>&1
+    nsx nl-${p#p-} ethtool -K wan gro off gso off tso off tx off rx off tx-udp-segmentation off >/dev/null 2>&1
+  done
+  nsx nl-inet ethtool -K p-core gro off gso off tso off tx off rx off >/dev/null 2>&1
+  nsx nl-inet ethtool -K core0 gro off gso off tso off tx off rx off >/dev/null 2>&1
+  setsid nohup ip netns exec nl-inet natlab wanemu --ms $ms $ports > $RUN/wanemu.log 2>&1 &
+  sleep 0.5; cat $RUN/wanemu.log
+}
+delay_off() {
+  pkill -f "natlab wanemu" 2>/dev/null; sleep 0.2
+  for p in $(nsx nl-inet ls /sys/class/net | grep "^p-" | grep -v "^p-core$"); do
+    nsx nl-inet ip link set $p master br0
+  done
+  true
 }
 
 status() {
@@ -245,5 +273,6 @@ status() {
 
 case "${1:-}" in
   up) up;; down) down;; status) status;;
-  *) echo "usage: $0 up|down|status"; exit 1;;
+  delay) delay_on "${2:-20}";; nodelay) delay_off;;
+  *) echo "usage: $0 up|down|status|delay [ms]|nodelay"; exit 1;;
 esac

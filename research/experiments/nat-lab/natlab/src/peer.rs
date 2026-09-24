@@ -12,6 +12,7 @@
 //!   --stun ip:port (x2)     side-socket STUN probe before publishing
 //!   --stun-predict          add_external_addr(stun public ip : iroh's bound v4 port)
 //!   --relay-only            clear_ip_transports (relay-only endpoint)
+//!   --ct-relay ip:port      option (c): add the TCP blind-relay custom transport (ct.rs)
 //! Flow options:
 //!   --settle MS             wait before publishing our address (default 3000)
 //!   --out FILE              publish our EndpointAddr (JSON) = "our own signaling"
@@ -41,7 +42,12 @@ pub fn relay_cfg(url: &RelayUrl, qp: u16) -> Arc<RelayConfig> {
 pub async fn build_endpoint(a: &Args) -> anyhow::Result<Endpoint> {
     let seed: u8 = a.or("seed", 1);
     let sk = SecretKey::from_bytes(&[seed; 32]);
+    let me = sk.public();
     let mut b = Endpoint::builder(presets::Minimal).secret_key(sk).alpns(vec![ALPN.to_vec()]);
+    if let Some(ct) = a.get("ct-relay") {
+        // option (c): custom transport as an extra (first) path
+        b = b.add_custom_transport(crate::ct::TcpRelayTransport::connect(ct.parse()?, me).await?);
+    }
     let relays = a.all("relay");
     let qp: u16 = a.or("relay-quic-port", 7842);
     if !relays.is_empty() {
@@ -80,14 +86,16 @@ pub async fn build_endpoint(a: &Args) -> anyhow::Result<Endpoint> {
 pub fn addr_json(a: &EndpointAddr) -> Value {
     let mut relays = Vec::new();
     let mut ips = Vec::new();
+    let mut customs = Vec::new();
     for t in a.addrs.iter() {
         match t {
             TransportAddr::Relay(u) => relays.push(u.to_string()),
             TransportAddr::Ip(s) => ips.push(s.to_string()),
+            TransportAddr::Custom(c) => customs.push(c.to_string()),
             _ => {}
         }
     }
-    json!({"id": a.id.to_string(), "relays": relays, "ips": ips})
+    json!({"id": a.id.to_string(), "relays": relays, "ips": ips, "customs": customs})
 }
 
 pub fn parse_addr(v: &Value) -> anyhow::Result<EndpointAddr> {
@@ -98,6 +106,9 @@ pub fn parse_addr(v: &Value) -> anyhow::Result<EndpointAddr> {
     }
     for i in v["ips"].as_array().into_iter().flatten() {
         addrs.push(TransportAddr::Ip(i.as_str().unwrap_or_default().parse()?));
+    }
+    for c in v["customs"].as_array().into_iter().flatten() {
+        addrs.push(TransportAddr::Custom(c.as_str().unwrap_or_default().parse()?));
     }
     Ok(EndpointAddr::from_parts(id, addrs))
 }
@@ -298,6 +309,7 @@ fn filter_peer(mut addr: EndpointAddr, a: &Args) -> EndpointAddr {
     addr.addrs.retain(|t| match t {
         TransportAddr::Relay(_) => !no_relay,
         TransportAddr::Ip(s) => !no_ips && (fam == 0 || (fam == 4 && s.is_ipv4()) || (fam == 6 && s.is_ipv6())),
+        TransportAddr::Custom(_) => !a.flag("no-peer-custom"),
         _ => true,
     });
     for extra in a.all("peer-extra-ip") {

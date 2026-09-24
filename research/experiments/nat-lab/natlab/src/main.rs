@@ -9,12 +9,14 @@
 //!   peer      one iroh endpoint: publish address, accept and/or dial, observe paths
 //!   relaymgmt insert_relay / remove_relay at runtime
 //!   load      many relay-only endpoints for relay RAM/CPU/throughput measurements
-//!   ctpeer    iroh over a custom transport (unstable API) as the first path
+//!   ctrelay   blind TCP datagram forwarder = first path for iroh custom transport (option c)
+//!   wanemu    userspace delaying L2 switch for the lab core (WSL2 has no netem)
 //!
 //! Never talks to n0 infrastructure: relays are Disabled or a custom map, no address lookup.
 mod acme;
 mod args;
 mod ct;
+mod delay;
 mod load;
 mod peer;
 mod relay;
@@ -39,7 +41,8 @@ async fn main() -> anyhow::Result<()> {
         "peer" => peer::run(&a).await,
         "relaymgmt" => peer::relaymgmt(&a).await,
         "load" => load::run(&a).await,
-        "ctpeer" => ct::run(&a).await,
+        "ctrelay" => ct::run(&a).await,
+        "wanemu" => delay::run(&a),
         other => anyhow::bail!("unknown subcommand {other:?}"),
     }
 }
