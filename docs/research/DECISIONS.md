@@ -22,10 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D33. The same person on two unlinked devices showing up as two members**
-- Proposal: an automatic "Is this your other device?" suggestion.
-- Private nicknames stay dropped.
-
 **D52. Images and large attachments**
 - Product question: postpone for now, or offer an opt-in Google Drive store for people who want it?
 - The technical options (iroh-blobs, Send instances, helpers) go to Part B once the product answer is known.

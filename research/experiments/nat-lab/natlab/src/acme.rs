@@ -3,7 +3,7 @@
 //! `acme`: instant-acme against a local Pebble, `Identifier::Ip`, `shortlived` profile, http-01
 //! served by a throwaway HTTP responder on <ip>:<http-port> (port 80 only during validation).
 //!   --dir https://<pebble>:14000/dir --root <pebble API CA pem> --ip <ip> [--http-port 80]
-//!   [--profile shortlived] --out-cert <pem> --out-key <pem>
+//!   [--profile shortlived] [--http-bind 0.0.0.0] --out-cert <pem> --out-key <pem>
 //! `selfsign`: CA + IP-SAN leaf (fallback that the task allows).
 //!   --ip <ip> [--ip <ip2>] --out-dir <dir>
 use crate::{args::Args, util::*};
@@ -30,7 +30,12 @@ pub async fn run(a: &Args) -> anyhow::Result<()> {
     // http-01 responder: token -> key authorization
     let tokens: Arc<Mutex<HashMap<String, String>>> = Default::default();
     let mut listeners = Vec::new();
-    for ip in &ips {
+    // --http-bind: where the http-01 responder listens (e.g. 0.0.0.0 behind a UPnP-mapped router)
+    let binds: Vec<IpAddr> = match a.get("http-bind") {
+        Some(b) => vec![b.parse()?],
+        None => ips.clone(),
+    };
+    for ip in &binds {
         let l = tokio::net::TcpListener::bind(SocketAddr::new(*ip, http_port)).await?;
         let tokens = tokens.clone();
         listeners.push(tokio::spawn(async move {

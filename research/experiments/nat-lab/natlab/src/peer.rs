@@ -54,7 +54,11 @@ pub async fn build_endpoint(a: &Args) -> anyhow::Result<Endpoint> {
         let mut cfgs = Vec::new();
         for r in &relays {
             let u: RelayUrl = r.parse()?;
-            cfgs.push(relay_cfg(&u, qp));
+            let mut c = relay_cfg(&u, qp);
+            if let Some(t) = a.get("relay-token") {
+                c = Arc::new(c.as_ref().clone().with_auth_token(t));
+            }
+            cfgs.push(c);
         }
         b = b.relay_mode(RelayMode::Custom(RelayMap::from_iter(cfgs)));
     } else if a.flag("empty-relay-map") {
@@ -161,7 +165,8 @@ pub fn spawn_watchers(ep: &Endpoint) {
             let st: Vec<Value> = v
                 .iter()
                 .map(|r| json!({"url": r.url().to_string(), "connected": r.is_connected(),
-                              "err": r.last_error().map(|e| format!("{e:#}"))}))
+                              "err": r.last_error().map(|e| format!("{e:#}")),
+                              "auth_denied": r.auth_denied_reason().map(|s| s.to_string())}))
                 .collect();
             ev("relay_status", json!({"relays": st}));
         }
