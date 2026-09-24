@@ -1,6 +1,6 @@
 # Research findings: design review of Kleiders Tasks
 
-> **Note (2026-09-24):** this synthesis was written by a research agent before some user decisions. The package name is now `com.jurisgames.tasks` (not com.kleiders.tasks), and Flathub isn't pursued. **`DECISIONS.md` is the authoritative list for the user's choices**; §6 below is input, not applied.
+> **Note (2026-09-24):** this synthesis was written by a research agent before some user decisions. The package name is now `com.jurisgames.tasks` (not com.kleiders.tasks), and Flathub isn't pursued. **`DECIDED.md` holds the user's decisions and `DECISIONS.md` the pending ones**; §6 below is input, not applied.
 
 
 *Synthesis of research dimensions R1–R8, each checked by an independent verification pass, plus the local experiments and attacks already run (E1–E8, A1–A8). Date: 2026-09-24. Subject: [DESIGN.md](../DESIGN.md) (draft of the same date).*
