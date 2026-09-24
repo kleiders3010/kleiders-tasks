@@ -8,7 +8,7 @@
 #
 # Topology (all "public" hosts share one bridge in nl-inet; 10 ms one-way delay per WAN link):
 #
-#                      nl-inet  (bridge br0 203.0.113.1/24, 2001:db8::1/64, routes LAN /64s)
+#                      nl-inet  (bridge br0 $PUB4.1/24, 2001:db8::1/64, routes LAN /64s)
 #        ______________________|____________________________________________
 #       |       |       |       |       |                                    |
 #     nl-ca  nl-stun  nl-h1   nl-h2  nl-load                     nl-r-<name> x N (WAN .20+i)
@@ -25,6 +25,9 @@
 #   upcgn prc + miniupnpd home router BEHIND a symmetric CGN (nl-r-cgn, 100.64.11.0/24)
 set -u
 DELAY=${DELAY:-10ms}
+# "Public" IPv4 prefix of the isolated lab. Not a documentation range on purpose: miniupnpd
+# (like real routers) refuses to port-map when its WAN address is reserved/private.
+PUB4=${PUB4:-7.7.7}
 LAB=$(cd "$(dirname "$0")" && pwd)
 RUN=/run/natlab; mkdir -p $RUN
 
@@ -50,8 +53,8 @@ attach() {
   # WSL2's kernel has no sch_netem, so link delay is only applied where available.
   nsx nl-inet tc qdisc add dev "$host" root netem delay $DELAY 2>/dev/null
   nsx "$ns" tc qdisc add dev wan root netem delay $DELAY 2>/dev/null
-  for o in $v4s; do nsx "$ns" ip addr add 203.0.113.$o/24 dev wan; done
-  nsx "$ns" ip route add default via 203.0.113.1
+  for o in $v4s; do nsx "$ns" ip addr add $PUB4.$o/24 dev wan; done
+  nsx "$ns" ip route add default via $PUB4.1
   if [ -n "$v6" ]; then
     nsx "$ns" ip -6 addr add 2001:db8::$v6/64 dev wan nodad
     nsx "$ns" ip -6 route add default via 2001:db8::1
@@ -160,7 +163,7 @@ uuid=00000000-0000-4000-8000-0000000000$(printf %02d $i)
 allow 1-65535 10.$i.0.0/24 1-65535
 deny 0-65535 0.0.0.0/0 0-65535
 EOF
-  nsx $r miniupnpd -f $RUN/miniupnpd-$i.conf -P $RUN/miniupnpd-$i.pid -d > $RUN/miniupnpd-$i.log 2>&1 &
+  setsid nohup ip netns exec $r miniupnpd -f $RUN/miniupnpd-$i.conf -P $RUN/miniupnpd-$i.pid -d > $RUN/miniupnpd-$i.log 2>&1 &
 }
 
 down() {
@@ -177,7 +180,7 @@ up() {
   nsx nl-inet sysctl -qw net.ipv4.ip_forward=1 net.ipv6.conf.all.forwarding=1
   nsx nl-inet ip link add br0 type bridge
   nsx nl-inet ip link set br0 up
-  nsx nl-inet ip addr add 203.0.113.1/24 dev br0
+  nsx nl-inet ip addr add $PUB4.1/24 dev br0
   nsx nl-inet ip -6 addr add 2001:db8::1/64 dev br0 nodad
   nsx nl-inet sysctl -qw net.ipv4.conf.all.send_redirects=0 net.ipv4.conf.br0.send_redirects=0
 

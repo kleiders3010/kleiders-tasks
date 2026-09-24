@@ -22,12 +22,6 @@ Split in two:
   - desktops show a firewall prompt.
 - How ISPs react at this traffic level is **not verified**.
 
-**D6. Device linking against phishing** *(agreed: link QR only accepted from "Your devices", a full-screen warning, "new device linked" alerts)*
-- **Convenience vs safety:**
-  - require the devices to be near each other (same Wi-Fi / Bluetooth) by default, which the synthesis recommends,
-  - or keep that in reserve (my lean).
-- **Never silently merge a device that already has lists?** This touches your earlier "linking merges your lists".
-
 **D23 + D54. Privacy: what observers are acceptable?**
 - Relays and DHT nodes can tell which groups one device belongs to (via IP and timing). Content is never visible.
 - **Technical option for the network identity:** a separate identity per group. Its battery cost goes to Part B for measurement.
