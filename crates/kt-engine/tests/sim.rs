@@ -7,7 +7,7 @@ use std::time::Duration;
 use kt_engine::envelope::{Envelope, Inner, MessageKind};
 use kt_engine::replica::{Event, Message, Replica};
 use kt_engine::sandbox::SandboxConfig;
-use loro::{ExportMode, LoroDoc};
+use loro::ExportMode;
 use rand::{rngs::StdRng, Rng, SeedableRng};
 
 fn sandbox() -> SandboxConfig {

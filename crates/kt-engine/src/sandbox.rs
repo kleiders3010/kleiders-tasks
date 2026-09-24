@@ -9,7 +9,7 @@
 //! The quarantine journal records "importing X from Y" before any import into the live
 //! document; if the app dies mid-import, X is quarantined on next start and never retried.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -30,8 +30,11 @@ pub struct SandboxConfig {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Verdict {
-    /// The update imported cleanly; these PeerIDs advanced.
-    Ok { advanced_peers: BTreeSet<u64> },
+    /// The update imported cleanly. Per PeerID, the counter range `[start, end)` of the ops
+    /// it contained that the copy didn't have (applied, or pending on missing
+    /// dependencies). Empty: nothing new. The host never parses untrusted blobs itself; it
+    /// decides from this report.
+    Ok { ranges: BTreeMap<u64, (i32, i32)> },
     /// Loro returned an error (malformed or not applicable). Safe to drop.
     Rejected(String),
     /// The worker crashed, aborted or hung: a poison pill. Must be quarantined.
@@ -77,8 +80,21 @@ pub fn validate(cfg: &SandboxConfig, snapshot: &[u8], update: &[u8]) -> Result<V
 
 fn parse_worker_output(out: &str) -> Verdict {
     if let Some(rest) = out.strip_prefix("OK") {
-        let advanced_peers = rest.split(',').filter_map(|s| s.trim().parse::<u64>().ok()).collect();
-        Verdict::Ok { advanced_peers }
+        let mut ranges = BTreeMap::new();
+        for item in rest.split(',').map(str::trim).filter(|x| !x.is_empty()) {
+            let parsed = item.split_once(':').and_then(|(p, r)| {
+                let (a, b) = r.split_once('-')?;
+                Some((p.parse::<u64>().ok()?, a.parse::<i32>().ok()?, b.parse::<i32>().ok()?))
+            });
+            match parsed {
+                Some((p, a, b)) => {
+                    let e = ranges.entry(p).or_insert((a, b));
+                    *e = (e.0.min(a), e.1.max(b));
+                }
+                None => return Verdict::Crashed(format!("unexpected worker output: {:.80}", out)),
+            }
+        }
+        Verdict::Ok { ranges }
     } else if let Some(rest) = out.strip_prefix("ERR") {
         Verdict::Rejected(rest.trim().to_string())
     } else {
@@ -118,12 +134,11 @@ pub fn worker_main() -> ! {
             let _ = doc.export(ExportMode::Snapshot);
             // Peers whose ops the update contains: applied now or parked as pending
             // (waiting for dependencies). Both must be the sender's own PeerID.
-            let mut peers: BTreeSet<u64> = status.success.iter().map(|(p, _)| *p).collect();
+            let mut items: Vec<String> = status.success.iter().map(|(p, (a, b))| format!("{p}:{a}-{b}")).collect();
             if let Some(pending) = &status.pending {
-                peers.extend(pending.iter().map(|(p, _)| *p));
+                items.extend(pending.iter().map(|(p, (a, b))| format!("{p}:{a}-{b}")));
             }
-            let peers: Vec<String> = peers.iter().map(|p| p.to_string()).collect();
-            print!("OK {}", peers.join(","));
+            print!("OK {}", items.join(","));
         }
         Err(e) => print!("ERR {e}"),
     }
@@ -206,10 +221,11 @@ mod tests {
     #[test]
     fn parse_outputs() {
         assert_eq!(
-            parse_worker_output("OK 5,7"),
-            Verdict::Ok { advanced_peers: [5u64, 7].into_iter().collect() }
+            parse_worker_output("OK 5:0-3,7:2-9,5:3-4"),
+            Verdict::Ok { ranges: [(5u64, (0, 4)), (7, (2, 9))].into_iter().collect() }
         );
-        assert_eq!(parse_worker_output("OK "), Verdict::Ok { advanced_peers: BTreeSet::new() });
+        assert_eq!(parse_worker_output("OK "), Verdict::Ok { ranges: BTreeMap::new() });
+        assert!(matches!(parse_worker_output("OK 5,7"), Verdict::Crashed(_)));
         assert!(matches!(parse_worker_output("ERR nope"), Verdict::Rejected(_)));
         assert!(matches!(parse_worker_output(""), Verdict::Crashed(_)));
     }

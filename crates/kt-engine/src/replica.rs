@@ -122,6 +122,9 @@ pub struct Replica {
     /// Groups we're allowed to learn about (created, joined or invited to).
     accepted_groups: BTreeSet<GroupId>,
     parked: Vec<Vec<u8>>,
+    /// Hashes of payloads already validated and imported (skip re-running the sandbox on
+    /// resent slots). Bounded; forgetting only costs a re-validation.
+    imported: std::collections::HashSet<[u8; 32]>,
     events: Vec<Event>,
     semantics: Option<Box<dyn DocSemantics>>,
 }
@@ -142,6 +145,7 @@ impl Replica {
             groups: BTreeMap::new(),
             accepted_groups: BTreeSet::new(),
             parked: Vec::new(),
+            imported: std::collections::HashSet::new(),
             events: newly.into_iter().map(|(_, a)| Event::Quarantined { author: DeviceId(a) }).collect(),
             semantics: None,
         };
@@ -460,6 +464,13 @@ impl Replica {
         }
     }
 
+    fn remember_imported(&mut self, h: [u8; 32]) {
+        if self.imported.len() >= 100_000 {
+            self.imported.clear();
+        }
+        self.imported.insert(h);
+    }
+
     fn find_group_of_epoch(&self, epoch: &EpochId) -> Option<GroupId> {
         self.groups.iter().find(|(_, s)| s.epochs.record(epoch).is_some() || s.keys.contains_key(epoch)).map(|(g, _)| *g)
     }
@@ -496,20 +507,6 @@ impl Replica {
         if inner.kind == MessageKind::DocEpochProposal {
             return self.handle_proposal(g, env.sender, inner, bytes, persist);
         }
-        // D5 rule 5: a removed device's ops beyond its cutoff are rejected.
-        if let Some(cutoffs) = state.epochs.cutoffs_for(&env.sender) {
-            let end = LoroDoc::decode_import_blob_meta(&inner.payload, true)
-                .map_err(|e| Error::Loro(e.to_string()))?
-                .partial_end_vv
-                .get(&inner.peer)
-                .copied()
-                .unwrap_or(0);
-            let limit = cutoffs.get(&inner.doc).copied().unwrap_or(0);
-            if end > limit {
-                self.events.push(Event::Rejected { reason: "ops from a removed device beyond its cutoff".into() });
-                return Err(Error::Rejected("removed device's late ops".into()));
-            }
-        }
         self.ensure_doc(&g, &inner.doc)?;
         let cur_gen = self.groups[&g].docs[&inner.doc].generation;
         if inner.generation < cur_gen {
@@ -523,16 +520,10 @@ impl Replica {
             }
             return Ok(());
         }
-        // Already have all these ops (mailboxes resend whole slots): skip the sandbox.
-        {
-            let meta = LoroDoc::decode_import_blob_meta(&inner.payload, true).map_err(|e| Error::Loro(e.to_string()))?;
-            let end = meta.partial_end_vv.get(&inner.peer).copied().unwrap_or(0);
-            let have = self.groups[&g].docs[&inner.doc].doc.oplog_vv().get(&inner.peer).copied().unwrap_or(0);
-            if end <= have {
-                return Ok(());
-            }
-        }
         let payload_hash = crypto::hash("kt/payload/v1", &inner.payload);
+        if self.imported.contains(&payload_hash) {
+            return Ok(()); // exact duplicate (mailboxes resend slots)
+        }
         if self.quarantine.is_quarantined(&payload_hash) {
             return Err(Error::Rejected("quarantined update".into()));
         }
@@ -544,10 +535,22 @@ impl Replica {
         let verdict = sandbox::validate(&self.sandbox, &snapshot, &inner.payload);
         self.quarantine.end()?;
         match verdict? {
-            Verdict::Ok { advanced_peers } => {
-                if advanced_peers.iter().any(|p| *p != inner.peer) {
+            Verdict::Ok { ranges } => {
+                if ranges.keys().any(|p| *p != inner.peer) {
                     self.events.push(Event::Rejected { reason: "update contains another device's ops (impersonation)".into() });
                     return Err(Error::Rejected("impersonation".into()));
+                }
+                // D5 rule 5: a removed device's ops beyond its cutoff are rejected.
+                if let Some(cutoffs) = self.groups[&g].epochs.cutoffs_for(&env.sender) {
+                    let end = ranges.get(&inner.peer).map(|r| r.1).unwrap_or(0);
+                    if end > cutoffs.get(&inner.doc).copied().unwrap_or(0) {
+                        self.events.push(Event::Rejected { reason: "ops from a removed device beyond its cutoff".into() });
+                        return Err(Error::Rejected("removed device's late ops".into()));
+                    }
+                }
+                if ranges.is_empty() {
+                    self.remember_imported(payload_hash);
+                    return Ok(()); // nothing new
                 }
             }
             Verdict::Rejected(reason) => {
@@ -568,6 +571,7 @@ impl Replica {
         res.map_err(|e| Error::Loro(e.to_string()))?;
         ds.imported_since_snapshot += 1;
         let snapshot_due = ds.imported_since_snapshot >= SNAPSHOT_EVERY;
+        self.remember_imported(payload_hash);
         if persist {
             storage::append_record(&self.layout.doc_updates(&g, &inner.doc), bytes)?;
         }
@@ -663,7 +667,7 @@ impl Replica {
         // The snapshot is untrusted: validate it in the sandbox (a fresh doc authored by the sender).
         let verdict = sandbox::validate(&self.sandbox, &[], &proposal.snapshot)?;
         match verdict {
-            Verdict::Ok { advanced_peers } if advanced_peers.iter().all(|p| *p == inner.peer) => {}
+            Verdict::Ok { ranges } if ranges.keys().all(|p| *p == inner.peer) => {}
             Verdict::Crashed(r) => {
                 let h = crypto::hash("kt/payload/v1", &proposal.snapshot);
                 self.quarantine.add(h, sender.0)?;
