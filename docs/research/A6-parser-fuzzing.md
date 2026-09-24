@@ -37,6 +37,22 @@ Also: author signatures on updates (R7) let the breaker name *who* sent a poison
 
 **Recommendation:** 1 + 2, with 3 if you agree to file publicly.
 
+## Prototype of option 1 (measured)
+Code: `research/experiments/rust/e1_loro/src/bin/a6_isolate.rs`. The parent sends (live snapshot + untrusted update) to a disposable child process. The child imports, forces materialization (some Loro bugs panic only on first read) and reports which PeerIDs advanced.
+
+| Case | Child result | Parent |
+|---|---|---|
+| Honest update from peer 2 | OK, advanced {2} | accepts |
+| Update sent by peer 3 that advances peer 1 (impersonation) | OK, advanced {1} | **rejects** (advanced peer ≠ sender) |
+| Poison pill vs live (non-empty) doc | OK, advanced {} | harmless |
+| Poison pill vs empty doc | **child crashed** (abort) | **parent alive** |
+| Overhead (1.5k-task doc, 53 KB snapshot) | ~18 ms per validation on desktop (Windows process spawn dominates) | |
+
+**Learned:**
+- **Crashes are state-dependent.** The same bytes crash an empty doc and not a populated one. Validation must run against a copy of the *actual* live document; a fresh doc isn't enough.
+- One mechanism covers both A6 (crashes) and A5 (impersonation).
+- **Not verified on Android:** there, the child would be a service in its own `android:process`, kept warm during a sync session. Spawn cost and memory there are unmeasured.
+
 ## Not yet done
 - A longer fuzz campaign with coverage guidance (cargo-fuzz / libFuzzer) after crash handling exists.
 - Fuzzing our own message formats (they don't exist yet; this must be part of the engine's CI).

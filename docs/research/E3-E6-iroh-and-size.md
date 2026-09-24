@@ -18,7 +18,7 @@ Adding the Kotlin/Compose UI (~5–8 MB estimated), UniFFI glue and iroh-blobs g
 
 **Verdict: the size targets hold with room to spare** (≤20 MB download / ≤40 MB installed / 50 MB ceiling). iroh is the biggest single piece (~65% of the native code).
 
-**Reconciling with R1:** R1 measured the published `libiroh_ffi.so` (iroh 1.1) at 14.0 MB for arm64 and projected ~18–28 MB for the whole core. That artifact is a general-purpose FFI build without our size profile. Our measured build of the same functionality with `opt-level="z"` + LTO + strip is **4.6 MB** for iroh. **The size profile is load-bearing:** without it, the 40 MB installed target would be at risk, as R1 warns. Also from R1: the published iroh-ffi AAR ships 4 KB-aligned `.so` files that fail Play's 16 KB page-size rule. Our own NDK build must be linked with 16 KB alignment (to verify: `-Wl,-z,max-page-size=16384`, default in NDK r28+).
+**Reconciling with R1:** R1 measured the published `libiroh_ffi.so` (iroh 1.1) at 14.0 MB for arm64 and projected ~18–28 MB for the whole core. That artifact is a general-purpose FFI build without our size profile. Our measured build of the same functionality with `opt-level="z"` + LTO + strip is **4.6 MB** for iroh. **The size profile is load-bearing:** without it, the 40 MB installed target would be at risk, as R1 warns. Also from R1: the published iroh-ffi AAR ships 4 KB-aligned `.so` files that fail Play's 16 KB page-size rule. **Verified:** our own NDK 29 build is 16 KB-aligned by default (`llvm-readelf -l`: all LOAD segments `Align 0x4000`). Building iroh ourselves avoids that problem.
 
 ## E3: iroh connectivity (desktop, two endpoints on one machine)
 | Scenario | Result |
