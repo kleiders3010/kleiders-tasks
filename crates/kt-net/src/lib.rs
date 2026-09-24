@@ -6,6 +6,7 @@
 
 pub mod helper_relay;
 pub mod mailbox;
+pub mod manifest;
 pub mod nostr;
 pub mod p2p;
 pub mod slotstore;

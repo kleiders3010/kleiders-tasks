@@ -2275,6 +2275,7 @@ dependencies = [
  "nostr",
  "postcard",
  "rand 0.8.5",
+ "reqwest",
  "rustls",
  "serde",
  "thiserror 2.0.17",
