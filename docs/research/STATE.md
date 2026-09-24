@@ -27,9 +27,9 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [ ] Synthesis: `docs/research/FINDINGS.md` (claim → verdict → evidence → fix)
 
 ### P2: Experiments (local). Code in `research/experiments/`, results in `docs/research/E*.md`
-- [ ] E0 Toolchain: Android NDK, cargo-ndk, Rust Android targets
-- [ ] E1 Loro: history growth for realistic workloads, shallow snapshots, importing updates that depend on trimmed history, large-list performance
-- [ ] E2 Argon2id: timing across parameters on this PC; attacker GPU rate (hashcat benchmark if available)
+- [x] E0 Toolchain: Android NDK, cargo-ndk, Rust Android targets
+- [x] E1 Loro: history growth for realistic workloads, shallow snapshots, importing updates that depend on trimmed history, large-list performance
+- [x] E2 Argon2id: timing across parameters on this PC; attacker GPU rate (hashcat benchmark if available)
 - [ ] E3 iroh: two local endpoints, local relay, connection paths, binary size impact
 - [ ] E4 Nostr: local relay (addressable replacement, size limits, rates) + polite acceptance probe of candidate public relays
 - [ ] E5 Helper network simulation: churn, replication factor, availability, reputation, eclipse
@@ -41,7 +41,7 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 - [ ] Apply confirmed fixes to `docs/DESIGN.md` (+ UX-PRINCIPLES.md), each citing its evidence
 
 ### P4: Attacks on our own system (local only). Results in `docs/research/A*.md`
-- [ ] A1 Invite-code brute force (measured rates, not estimates)
+- [x] A1 Invite-code brute force (measured rates, not estimates)
 - [ ] A2 Rollback / withholding by helpers
 - [ ] A3 Junk flooding of helpers (fake groups)
 - [ ] A4 Eclipse / fake-helper positioning
@@ -55,10 +55,11 @@ Goal: prove or disprove every claim in `docs/DESIGN.md` through research, experi
 
 ## Current state
 - P1 research workflow launched (2026-09-24).
-- E0 toolchain install in progress.
+- E0 done (Rust 1.98.1, NDK 29.0.14206865, cargo-ndk 4.1.2, hashcat 7.1.2). E1, E2, A1 done.
 
 ## Next action
 Collect the P1 reports when the workflow finishes, then continue with P2 experiments.
 
 ## Findings log (short; details live in the reports)
-- (none yet)
+- E2/A1: RTX 3080 = 783 guesses/s at m=64MiB t=3 (4,018 at 19MiB, 81 at 256MiB). The 6-word estimate held. See E2-A1-argon2.md
+- E1: 5 years of daily shared-list use = 0.35 MB, so size claims held. NEW: deleted items stay in Loro state forever; trash purge needs "document epochs" (re-create from live state). CRITICAL NEW: PeerID reuse (restore, two instances) silently diverges docs. Must regenerate the PeerID on restore, keep it out of backups, run the desktop as a single instance. See E1-loro.md
