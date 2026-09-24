@@ -64,9 +64,9 @@ Prioritize layers that cover what we lack or doubt:
 - **G6** large blob transfer.
 
 Steps:
-- [ ] L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
+- [ ] (running: workflow wf_6f1ff1cc-d9e) L1–L8 research workflow (8 dimensions + independent verification). Reports: `docs/research/L*.md`
 - [ ] Synthesis: `docs/research/LAYERS.md` (candidate → gaps covered → verdict → evidence)
-- [ ] Safe local experiments for the top candidates (no load on public infrastructure)
+- [ ] Safe local experiments for the top candidates (no load on public infrastructure). In progress: E9 arm64 size builds of libp2p (relay client + DCUtR + identify + kad + QUIC), str0m, webrtc-rs and veilid-core (`research/experiments/rust/e9_*`)
 - [ ] DECISIONS.md: new "Distribution layers" section (proposals only; the user decides)
 
 Note: WebSearch is exhausted for this session. Agents use WebFetch on known documentation URLs, `gh search` / `gh api`, crates.io / docs.rs APIs.
