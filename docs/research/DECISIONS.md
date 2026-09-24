@@ -351,7 +351,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - Play auto-registers ~99% of apps, **including your existing games** (check for any it missed).
   - Package names with few installs are registered first-come-first-served, so **reserving `com.kleiders.tasks` early** protects it.
 
-### D38. Package name vs domain (answered: kleiders.com is not yours; you own jurisgames.com)
+### D38. Package name vs domain: ✅ DECIDED: `com.jurisgames.tasks` (2026-09-24)
 - **Evidence:** R8. kleiders.com serves an unrelated AI fashion-design company. `com.kleiders` is your Play package prefix (your games), not a domain you control.
 - **Play doesn't require package names to match a domain.** The mismatch matters only for:
   - Flathub (app ID must be a controlled domain; likely moot per D40);
@@ -364,7 +364,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   Either is free to choose **now**; it becomes permanent at first upload. Desktop IDs can use jurisgames regardless.
 - **Either way:** use **jurisgames.com** for invite links and App Links (they work with any package name). That also removes the `github.io` host-takeover concern in D7/D41.
 
-### D39. Windows: unsigned installers get blocked; the Microsoft Store is free
+### D39. Windows: unsigned installers get blocked; the Microsoft Store is free *(your stated priority: GitHub Releases for PC / Linux / APK; this item stays open for when the Windows release happens)*
 - **Evidence:** R8 (verifier upheld and strengthened).
   - Unsigned MSI → strong SmartScreen block.
   - Signing costs $120–300/yr and still warns at first.
@@ -373,7 +373,7 @@ Evidence files live in this folder: `R*` = research reports (each with an indepe
   - MSIX virtualizes `%APPDATA%` and deletes it on uninstall.
 - **Proposal:** the Store as the primary Windows channel. Pick an MSIX packaging tool (**not evaluated yet**).
 
-### D40. Flathub bans AI-generated manifests and scrutinizes AI-generated code
+### D40. Flathub bans AI-generated manifests and scrutinizes AI-generated code: ✅ DECIDED: Flathub not pursued (2026-09-24)
 - **Evidence:** R8. "Manifests must not contain AI-generated or AI-assisted content"; AI-generated code must be disclosed and may be rejected. This project is AI-assisted.
 - **Implication:** Flathub is likely closed to us. Linux via AppImage and .deb/.rpm on our own releases. Flatpak outside Flathub is possible but loses discoverability.
 

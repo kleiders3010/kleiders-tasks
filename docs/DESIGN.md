@@ -1,6 +1,6 @@
 # Technical Design Principles
 
-*Working name: Tasklist. Android package: `com.kleiders.tasks` (permanent once published). Status: draft, 2026-09-24. Covers architecture and technical principles only, not UX or features.*
+*Working name: Tasklist. Android package: `com.jurisgames.tasks` (permanent once published; the domain jurisgames.com is owned by the developer). Status: draft, 2026-09-24. Covers architecture and technical principles only, not UX or features.*
 
 ## 1. Mission and hard constraints
 
@@ -34,7 +34,7 @@ Hard constraints. Every design decision must satisfy all of them:
    - **The notice can't be abused.** Messages carry only a version *number*, never text or links. The notice text is built into the app, and **Update** opens only our own hard-coded store listing or release page. It appears only after the app confirms a newer version really exists (Play In-App Updates API on Android, GitHub Releases on desktop). So a fake high version number from a malicious member shows nothing.
    - **Required (security) updates are never triggered by peer data.** They come only from Play's in-app update priority, or from a release manifest signed with our developer key, whose public key is built into the app.
    - **All incoming data is untrusted, even from members:** size limits, strict validation, rejection without crashing, and fuzz testing of every parser.
-   - Desktop update checks use GitHub Releases (static, free), plus Flatpak / winget where installed through them. Android updates come through Play.
+   - Desktop update checks use GitHub Releases (static, free), plus winget where installed through it. Android updates come through Play.
    - **Sole exception:** a flaw in the cryptography itself may force retiring an old format. It's announced ahead through the update notice.
 9. **Permissive dependencies only.** MIT, Apache or BSD. No GPL, so the decision about open-sourcing (§14) stays free either way.
 10. **Defaults over settings.** Pick the right behavior instead of asking. A setting exists only if a normal user would plausibly want something different. Engineering knobs belong in a hidden diagnostics screen, never in settings. Problems are raised when they're detected (e.g. background sync being blocked), not pre-emptively through options.
@@ -359,7 +359,7 @@ Data is lost only if a user had no Android backup, no other devices in any group
 |---|---|---|
 | Android | Gradle, Rust via cargo-ndk. `minSdk` 26 (Android 8.0), `targetSdk` 36, then 37 as Play requires | Google Play (existing developer account), GitHub Releases APK; F-Droid later (`foss` flavor, below) |
 | Windows | Compose Desktop + jpackage | MSI / MSIX, winget, GitHub Releases |
-| Linux | Compose Desktop + jpackage | AppImage, Flatpak (Flathub), .deb / .rpm |
+| Linux | Compose Desktop + jpackage | AppImage, .deb / .rpm on GitHub Releases (Flathub not pursued) |
 
 - **Features on older Android versions:**
   | Feature | Needs | Fallback |
