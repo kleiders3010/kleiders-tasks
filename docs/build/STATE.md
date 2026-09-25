@@ -65,7 +65,8 @@
 - [x] Invites survive an offline inviter: copies for every remaining day published ahead to helpers/Nostr; test: B joins 3 days later while A is offline (Nostr dead), accepted when A returns, B's waiting edit arrives
 - [x] Helper disk copy (decided 2026-09-24): encrypted per-slot files, reload checks, 14-day TTL sweep, caps, corrupt files deleted, wiped when helping is off (`HelperLimits::disk`, `NetSettings::helper_limits_with_disk`)
 - [x] Forks don't stall sync (deterministic safe branch for sealing; merge-duty cascade) and automatic compaction at acknowledged versions (D26), `replica/compaction.rs`
-- [ ] CLI `invite` / `join` commands; link and QR wrappers (app)
+- [x] CLI `kt invite` / `kt join-code`; **public-network invite run** (PC ↔ tablet over public Nostr, relay discovery active): tablet with only the words found the invite in 6.9 s, was let in, edits both ways (`docs/research/E12-public-invite-run.md`)
+- [ ] Link and QR wrappers; device-linking confirmation screen (app, M4)
 - [x] Device linking, engine side: link codes (separate derivation domain + record kind), refused on the join path with a plain explanation, reusable until expiry, `DeviceJoined { via_link }` event for the "New device linked · Undo" alert
 - [ ] Device linking, app side: confirmation screen contents (account's devices and lists), merging the new device's own lists, Undo = remove + rotate
 
@@ -81,7 +82,7 @@
 - [ ] Notifications from merged state
 
 ## Current state
-- **M2 in progress (2026-09-24).** 91 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
+- **M2 in progress (2026-09-24).** 92 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
 - Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
 - Found and fixed in M2:
   - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
