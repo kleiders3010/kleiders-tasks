@@ -48,7 +48,7 @@ class DesktopLinkTest {
         val desk = node("desk", "Alex's PC")
         desk.createList(null, "Desk notes")
         val words = phone.linkCode().link // pasted as a link (the words work the same)
-        check(words.startsWith("https://jurisgames.com/link#")) { words }
+        check(words.startsWith("https://apps.jurisgames.com/link#")) { words }
         phone.syncNow() // the link record goes out
 
         rule.setContent { TasksApp(desk) }

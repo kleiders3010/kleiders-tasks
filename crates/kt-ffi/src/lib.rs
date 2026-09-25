@@ -144,6 +144,14 @@ fn help_name(h: kt_net::settings::HelpOthers) -> &'static str {
     }
 }
 
+/// A newer version is out (from the static update manifest).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct UpdateItem {
+    pub version_name: String,
+    /// Our own store listing or release page, nothing else.
+    pub link: String,
+}
+
 /// What a restore did.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RestoreInfo {
@@ -716,6 +724,23 @@ impl KtNode {
         self.device_state.lock().expect("lock").0 = on_wifi;
         self.device_state.lock().expect("lock").1 = charging;
         self.apply_helping();
+    }
+
+    /// Is there a newer version than `current_version_code`? `channel`: "play", "apk",
+    /// "windows" or "linux" (which link the notice opens). Reads the static manifest
+    /// (apps.jurisgames.com, then GitHub).
+    pub fn check_update(&self, current_version_code: u64, channel: String) -> Option<UpdateItem> {
+        use kt_net::update::{check, Channel, MANIFEST_URLS};
+        let ch = match channel.as_str() {
+            "play" => Channel::Play,
+            "apk" => Channel::Apk,
+            "windows" => Channel::Windows,
+            "linux" => Channel::Linux,
+            _ => return None,
+        };
+        self.rt
+            .block_on(check(&MANIFEST_URLS, "tasks", current_version_code, ch))
+            .map(|u| UpdateItem { version_name: u.version_name, link: u.link })
     }
 
     /// The user is looking: nothing so far needs a notification.

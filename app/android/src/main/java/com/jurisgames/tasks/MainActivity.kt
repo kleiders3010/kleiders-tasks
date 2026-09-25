@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
             }
             TasksApp(node, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
+            }, update = update.value, onUpdate = { link ->
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
             }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
                 // Markdown through the share sheet (Obsidian, notes apps, email).
                 val send = Intent(Intent.ACTION_SEND).setType("text/markdown")
@@ -53,6 +55,22 @@ class MainActivity : ComponentActivity() {
                     .putExtra(Intent.EXTRA_TEXT, node.exportMarkdown(l.id))
                 startActivity(Intent.createChooser(send, "Export ${l.name}"))
             })
+        }
+    }
+
+    /** A newer version, if the daily check found one. */
+    private val update = mutableStateOf<com.jurisgames.tasks.core.UpdateItem?>(null)
+
+    /** At most once a day, off the main thread. */
+    private fun checkForUpdate() {
+        val prefs = getSharedPreferences("update", MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("checked", 0) < 24 * 3600_000L) return
+        val current = packageManager.getPackageInfo(packageName, 0).longVersionCode.toULong()
+        lifecycleScope.launch(Dispatchers.IO) {
+            val found = app.node.checkUpdate(current, Store.UPDATE_CHANNEL)
+            prefs.edit().putLong("checked", now).apply()
+            update.value = found
         }
     }
 
@@ -70,6 +88,7 @@ class MainActivity : ComponentActivity() {
         app.reportDeviceState()
         app.node.startLive() // app open: live on every layer
         askForNotificationsWhenShared()
+        checkForUpdate()
     }
 
     /** Asked the first time it's relevant: once this device is in a shared group (§12). */

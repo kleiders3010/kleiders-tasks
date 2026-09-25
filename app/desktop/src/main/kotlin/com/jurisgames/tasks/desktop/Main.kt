@@ -70,6 +70,9 @@ private object TrayIcon : Painter() {
  * computer). Closing the window keeps it syncing; Quit ends it. Started at login with
  * `--background`, it opens straight into the tray.
  */
+/** This build's version code (the update manifest compares against it). */
+const val VERSION_CODE = 1uL
+
 fun main(args: Array<String>) {
     val background = Autostart.BACKGROUND_ARG in args
     val first = openNode()
@@ -78,6 +81,11 @@ fun main(args: Array<String>) {
     application {
         var node by remember { mutableStateOf(first) }
         var visible by remember { mutableStateOf(!background) }
+        var update by remember { mutableStateOf<com.jurisgames.tasks.core.UpdateItem?>(null) }
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
+            update = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { node.checkUpdate(VERSION_CODE, channel) }
+        }
         Tray(
             icon = TrayIcon,
             tooltip = "Tasks",
@@ -93,7 +101,9 @@ fun main(args: Array<String>) {
         Window(onCloseRequest = {
             if (node.settings().syncInBackground) visible = false else { node.stopLive(); node.syncNow(); exitApplication() }
         }, visible = visible, title = "Tasks") {
-            TasksApp(node, onSettings = { Autostart.apply(it.startWithComputer ?: true) }, onShare = { link ->
+            TasksApp(node, update = update, onUpdate = { link ->
+                runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(link)) }
+            }, onSettings = { Autostart.apply(it.startWithComputer ?: true) }, onShare = { link ->
                 // Desktop: onto the clipboard, ready to paste into any chat.
                 java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(link), null)
             }, onRestore = {

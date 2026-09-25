@@ -68,7 +68,7 @@
 - [x] CLI `kt invite` / `kt join-code`; **public-network invite run** (PC ↔ tablet over public Nostr, relay discovery active): tablet with only the words found the invite in 6.9 s, was let in, edits both ways (`docs/research/E12-public-invite-run.md`)
 - [x] Device-linking confirmation screen ("This will join Alex's account: Pixel 7 · 1 list (Groceries). The list on this device will be added to it.")
 - [x] Link and QR wrappers (`kt-net` `share_url` / `parse_shared`, `qr_matrix` via the `qrcode` crate, MIT/Apache): `https://jurisgames.com/join#words` for invites, `/link#words` for device links, `~addresses` of the sharing device for a direct connection; join and link accept words or links; QR in the invite and link dialogs; Share link (Android share sheet, desktop clipboard); Android opens these links into the right dialog. Tests: `kt-net/tests/share_links.rs`, desktop tests
-- [ ] jurisgames.com: the join page and `/.well-known/assetlinks.json` (needs hosting; until then Android asks which app opens the link)
+- [x] Public site `kleiders3010/jurisgames` on GitHub Pages at **apps.jurisgames.com** (2026-09-25; jurisgames.com itself stays on Hostinger): `/join` and `/link` pages (the code stays in the fragment), `update.json`, `.well-known/assetlinks.json` with the release key (SHA-256 `1F:1B:…:7C:5E`), verified by Google's Digital Asset Links API. The app's links, Android link handling and update URLs point there
 - [x] QR scanning and store flavors (`play` / `foss`): play uses Google's code scanner (no camera permission), foss its own CameraX screen with ZXing 3.5.4 (camera asked only when scanning); "Scan QR code" in the join and link dialogs. Tests: `QrDecodeTest` (foss decoder reads our own QR from a synthetic frame); play flavor passes the smoke, backup, notification and widget tests. Downloads with R8: play 10.3 MB, foss 10.6 MB (arm64)
 - [ ] Scanning with a real camera (not possible headless; needs a device in hand)
 - [x] Device linking, engine side: link codes (separate derivation domain + record kind), refused on the join path with a plain explanation, reusable until expiry, `DeviceJoined { via_link }` event for the "New device linked · Undo" alert
@@ -88,7 +88,8 @@
 - [x] Desktop tray and autostart: closing the window keeps it syncing in the tray (Open / Sync now / Quit); "Start with computer" registers the packaged app (Windows `Run` key, Linux XDG autostart), never a development JVM, starting with `--background`. Test: `DesktopAutostartTest`
 - [ ] Widget verified on a real home screen (needs a launcher; content is tested)
 - [x] Settings screen (`SettingsDialog`, `KtNode.settings / set_settings`, stored per device): sync in the background (Android: the worker stops syncing; desktop: closing the window quits instead of going to the tray), notify me, help others sync (phones: Wi-Fi and charging / Wi-Fi while open / off; desktops: on / off; off wipes the disk copy), relay for others and start with computer (desktop only, not shown on phones). Helping now follows the phone's Wi-Fi, charging and app-open state live (`P2p::set_helping`); before, a phone node helped as if always on Wi-Fi and charging. Tests: `DesktopSettingsTest` (desktop and phone platforms), `kt-net` settings unit tests
-- [ ] Check for updates (Android; Play In-App Updates / GitHub Releases manifest)
+- [x] Update checks (`kt-net/src/update.rs`, `KtNode.check_update`): the static manifest from apps.jurisgames.com, falling back to raw.githubusercontent.com; size-capped, strict parse, links only to our Play listing or release page; Android checks at most daily (play: Play listing, foss: releases), desktop at start. Tests: parsing rules, fallback with a dead first source, live check of the published manifest (`--ignored`)
+- [ ] Play In-App Updates API (play flavor) instead of opening the listing
 - [x] App size measured: libkt_ffi.so (arm64) 14.6 MB installed / 7.2 MB compressed after gating the relay server out of phone builds and compiling out dependency logging. Breakdown: 7.3 MB code, 2.2 MB rodata, 3 MB unwind tables (required by `panic = "unwind"`, D3). Within the ≤ 20 MB download / ≤ 40 MB installed targets
 - [x] Release AAB measured (2026-09-25, bundletool 1.18.3, R8 on): **10.1 MB download** on an arm64 phone (SDK 34) and on the SM-T290 profile (SDK 30); the AAB holds both ABIs (22 MB). The R8 build verified on the emulator: starts in 1.7 s, auto-restored a backup, sync round through the bridge, no crashes (JNA/UniFFI keep rules in `app/android/proguard-rules.pro`)
 
@@ -110,7 +111,8 @@
 - Release builds with R8: play 10.3 MB, foss 10.6 MB download, verified running (bundletool 1.18.3 in `~/tools`). Gradle tasks are now per flavor (`assemblePlayDebug`, `bundlePlayRelease`, ...).
 
 ## Next action
-1. M4 remainder: update checks (need the hosted manifest), Block Store (play flavor).
+1. Block Store (play flavor; needs a decision on sealing backups with a Block Store key, and a device with Play Services).
+2. Parser hardening/fuzzing (DESIGN §9), n0 DNS option (M2).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).

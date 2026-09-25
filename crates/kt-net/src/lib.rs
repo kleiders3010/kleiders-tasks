@@ -21,3 +21,4 @@ pub mod settings;
 pub mod slotstore;
 pub mod sync;
 pub mod testrelay;
+pub mod update;

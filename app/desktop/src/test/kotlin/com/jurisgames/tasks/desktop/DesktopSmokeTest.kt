@@ -42,7 +42,7 @@ class DesktopSmokeTest {
         val family = node.groups().first { it.name == "Family" }
         val invite = node.invite(family.id, 30u)
         check(invite.words.size == 8)
-        check(invite.link.startsWith("https://jurisgames.com/join#" + invite.words.joinToString("-"))) { invite.link }
+        check(invite.link.startsWith("https://apps.jurisgames.com/join#" + invite.words.joinToString("-"))) { invite.link }
         check(com.jurisgames.tasks.core.qrMatrix(invite.link).size >= 21u)
     }
 }

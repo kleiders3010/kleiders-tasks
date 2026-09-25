@@ -53,6 +53,8 @@ fun TasksApp(
     openedCode: String? = null,
     onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)? = null,
     onScan: ((onResult: (String) -> Unit) -> Unit)? = null,
+    update: com.jurisgames.tasks.core.UpdateItem? = null,
+    onUpdate: ((String) -> Unit)? = null,
 ) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
@@ -69,6 +71,12 @@ fun TasksApp(
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
+                if (update != null && onUpdate != null) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Version ${update.versionName} is available", modifier = Modifier.weight(1f).testTag("update"))
+                        TextButton(onClick = { onUpdate(update.link) }, modifier = Modifier.testTag("updateGo")) { Text("Update") }
+                    }
+                }
                 ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onScan, onChanged = { version++ }, onOpen = { open = it })
             } else {
                 TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })

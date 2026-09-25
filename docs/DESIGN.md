@@ -144,7 +144,7 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
 - **Solo lists are groups with one member**: one code path.
 - **Invites: one mechanism, three wrappers (D7, D8, D55):**
   - An invite is **one 8-word code** from a **curated EFF short word list** (unpleasant words and first names removed). Every word is identified by its **first 3 letters** (autocomplete), and no single typo turns a word into another valid one. ~81+ bits.
-  - The **link** (`jurisgames.com/join#words…`) and the **QR** carry the same code. The link/QR may also carry the inviter's current device addresses for a direct connection. The fragment never reaches a server.
+  - The **link** (`apps.jurisgames.com/join#words…`) and the **QR** carry the same code. The link/QR may also carry the inviter's current device addresses for a direct connection. The fragment never reaches a server.
   - Derivation: **Argon2id (m = 64 MiB, t = 3, p = 1 floor, versioned)** over the code, with a **date-based salt**, gives the lookup key and the encryption key. An attacker can only test guesses against invites from the same day (measured attacker rate: 783 guesses/s per RTX 3080, A1).
   - The invite record (~0.5 KB: current epoch key, group name, inviter name and addresses) is published and fetched through **every layer at once**:
     1. the inviter's device directly (via discovery records);
@@ -247,7 +247,7 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
 ## 7b. Operator manifest (optional developer capacity, D56)
 
 - An **optional, signed file** listing only the **developer's own special hosting** ("select" capacity) with priority weights: the developer's devices, any future servers or free-tier VMs, developer-run iroh relays, helpers, or Nostr relays. It is **not** a maintenance channel for public relays (those are self-sustaining, §7): if the developer and all their tools disappear, nothing degrades except these bonuses.
-- **Ships with a baseline copy.** Updates are fetched from several sources (jurisgames.com, a public GitHub repo, a Nostr event, the DHT), so no single host matters.
+- **Ships with a baseline copy.** Updates are fetched from several sources (apps.jurisgames.com, a public GitHub repo, a Nostr event, the DHT), so no single host matters.
 - **Verified with a separate offline signing key.** A compromised website or GitHub account can't forge it.
 - **Hard rules:** it can only *add* candidates, never disable P2P, Nostr or helpers. Select nodes run the normal helper protocol (ciphertext only, same reliability checks). The last good copy is kept if all sources fail.
 - Diagnostics and the privacy text disclose developer-operated nodes.
@@ -329,7 +329,7 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
 | iOS | – | **Not supported** (D45) |
 
 - **Signing:** one app-signing key (`com.jurisgames.tasks`, RSA 4096, valid to 2054) for both Play (Play App Signing, "use my own key") and GitHub APKs, so installs from either source update each other. Backed up to a private repo (encrypted); password in Credential Manager and the developer's password manager.
-- **Public repo** (separate from the private code repo) for the join page on jurisgames.com, releases, the static update manifest and the operator manifest (D41). Update checks read the static manifest, not the rate-limited GitHub API.
+- **Public repo** `kleiders3010/jurisgames` (separate from the private code repo), served by GitHub Pages at **apps.jurisgames.com** (jurisgames.com itself is a separate site): the join page, releases, the static update manifest (`/update.json`) and the operator manifest (D41). Update checks read the static manifest, not the rate-limited GitHub API: apps.jurisgames.com first, then the same file on `raw.githubusercontent.com` if that fails.
 - **Older Android versions:** Material You → theme colors below 12; E2E backup → sealed below 9 or without a lock.
 - **Permissions beyond the defaults** (explained first, asked only when needed):
 

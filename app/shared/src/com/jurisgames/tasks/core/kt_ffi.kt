@@ -703,6 +703,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_add_task(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_check_update(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_complete_word(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_create_group(
@@ -821,6 +823,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_constructor_ktnode_open_restoring(`identityDir`: RustBuffer.ByValue,`dataDir`: RustBuffer.ByValue,`workerPath`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
     external fun uniffi_kt_ffi_fn_method_ktnode_add_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,`parentId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_check_update(`ptr`: Long,`currentVersionCode`: Long,`channel`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_complete_word(`ptr`: Long,`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1026,6 +1030,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_add_task() and 0xFFFF) != 41622) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_check_update() and 0xFFFF) != 51672) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_complete_word() and 0xFFFF) != 43952) {
@@ -1897,6 +1904,13 @@ public interface KtNodeInterface {
     fun `addTask`(`listId`: kotlin.String, `title`: kotlin.String, `parentId`: kotlin.String?): kotlin.String
     
     /**
+     * Is there a newer version than `current_version_code`? `channel`: "play", "apk",
+     * "windows" or "linux" (which link the notice opens). Reads the static manifest
+     * (apps.jurisgames.com, then GitHub).
+     */
+    fun `checkUpdate`(`currentVersionCode`: kotlin.ULong, `channel`: kotlin.String): UpdateItem?
+    
+    /**
      * Autocomplete one word of a code (3+ letters): the full word, if unique.
      */
     fun `completeWord`(`prefix`: kotlin.String): kotlin.String?
@@ -2170,6 +2184,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         FfiConverterString.lower(`listId`),
         FfiConverterString.lower(`title`),
         FfiConverterOptionalString.lower(`parentId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Is there a newer version than `current_version_code`? `channel`: "play", "apk",
+     * "windows" or "linux" (which link the notice opens). Reads the static manifest
+     * (apps.jurisgames.com, then GitHub).
+     */override fun `checkUpdate`(`currentVersionCode`: kotlin.ULong, `channel`: kotlin.String): UpdateItem? {
+            return FfiConverterOptionalTypeUpdateItem.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_check_update(
+        it,
+        
+        FfiConverterULong.lower(`currentVersionCode`),
+        FfiConverterString.lower(`channel`),_status)
 }
     }
     )
@@ -3688,6 +3722,50 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
 
 
 
+/**
+ * A newer version is out (from the static update manifest).
+ */
+data class UpdateItem (
+    var `versionName`: kotlin.String
+    , 
+    /**
+     * Our own store listing or release page, nothing else.
+     */
+    var `link`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUpdateItem: FfiConverterRustBuffer<UpdateItem> {
+    override fun read(buf: ByteBuffer): UpdateItem {
+        return UpdateItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UpdateItem) = (
+            FfiConverterString.allocationSize(value.`versionName`) +
+            FfiConverterString.allocationSize(value.`link`)
+    )
+
+    override fun write(value: UpdateItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`versionName`, buf)
+            FfiConverterString.write(value.`link`, buf)
+    }
+}
+
+
+
 
 
 sealed class KtException: kotlin.Exception() {
@@ -3874,6 +3952,38 @@ public object FfiConverterOptionalTypeRestoreInfo: FfiConverterRustBuffer<Restor
         } else {
             buf.put(1)
             FfiConverterTypeRestoreInfo.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeUpdateItem: FfiConverterRustBuffer<UpdateItem?> {
+    override fun read(buf: ByteBuffer): UpdateItem? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeUpdateItem.read(buf)
+    }
+
+    override fun allocationSize(value: UpdateItem?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeUpdateItem.allocationSize(value)
+        }
+    }
+
+    override fun write(value: UpdateItem?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeUpdateItem.write(value, buf)
         }
     }
 }

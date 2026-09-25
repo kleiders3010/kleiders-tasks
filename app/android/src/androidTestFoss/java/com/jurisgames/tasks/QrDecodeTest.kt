@@ -10,7 +10,7 @@ import org.junit.runner.RunWith
 class QrDecodeTest {
     @Test
     fun readsOurOwnQr() {
-        val link = "https://jurisgames.com/join#" + List(8) { "word" }.joinToString("-")
+        val link = "https://apps.jurisgames.com/join#" + List(8) { "word" }.joinToString("-")
         val m = qrMatrix(link)
         val n = m.size.toInt()
         val scale = 8
