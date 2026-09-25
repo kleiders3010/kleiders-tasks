@@ -594,6 +594,34 @@ impl Net {
     }
 }
 
+/// Local edits go to the mailboxes once they pause this long...
+const WRITE_PAUSE: Duration = Duration::from_secs(2);
+/// ...but no more often than this (relays rate-limit, and a long note is many edits).
+const WRITE_GAP: Duration = Duration::from_secs(10);
+
+/// Whether local edits (last one at `changed_at`) should be written to the mailboxes now.
+fn write_due(changed_at: Option<std::time::Instant>, last_write: std::time::Instant, now: std::time::Instant) -> bool {
+    changed_at.is_some_and(|t| now.duration_since(t) >= WRITE_PAUSE) && now.duration_since(last_write) >= WRITE_GAP
+}
+
+#[cfg(test)]
+mod write_timing {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn edits_are_written_after_a_pause_but_not_too_often() {
+        let t0 = Instant::now();
+        let s = |secs: u64| t0 + Duration::from_secs(secs);
+        let long_ago = t0;
+        assert!(!write_due(None, long_ago, s(100)), "nothing changed");
+        assert!(!write_due(Some(s(100)), long_ago, s(101)), "still typing");
+        assert!(write_due(Some(s(100)), long_ago, s(102)), "paused 2 s: write");
+        assert!(!write_due(Some(s(103)), s(102), s(106)), "just wrote: wait for the gap");
+        assert!(write_due(Some(s(103)), s(102), s(112)), "gap over: write");
+    }
+}
+
 /// How often devices look for a newer operator manifest.
 const MANIFEST_EVERY: Duration = Duration::from_secs(24 * 3600);
 
@@ -1461,11 +1489,27 @@ impl KtNode {
         let mut stop = rx;
         let task = self.rt.spawn(async move {
             let mut last_round = std::time::Instant::now() - Duration::from_secs(3600);
+            let mut seen = me.app.with(|r| r.local_changes());
+            let (mut changed_at, mut last_write) = (None, std::time::Instant::now() - WRITE_GAP);
             loop {
                 if last_round.elapsed() > Duration::from_secs(45) {
                     me.round().await;
                     me.first_round.store(true, std::sync::atomic::Ordering::Relaxed);
                     last_round = std::time::Instant::now();
+                    last_write = last_round;
+                    changed_at = None;
+                }
+                // Writes don't wait for the round: once edits pause, the mailboxes get them
+                // (a write that never lands is how a change gets lost; reads can wait).
+                let now_changes = me.app.with(|r| r.local_changes());
+                if now_changes != seen {
+                    seen = now_changes;
+                    changed_at = Some(std::time::Instant::now());
+                }
+                if write_due(changed_at, last_write, std::time::Instant::now()) {
+                    me.net.syncer.write_round().await;
+                    last_write = std::time::Instant::now();
+                    changed_at = None;
                 }
                 let changed = me.app.with(|r| r.take_events()).iter().any(|e| {
                     matches!(e, Event::Imported { .. } | Event::DeviceJoined { .. } | Event::DocEpochSwitched { .. } | Event::EpochAccepted { .. })
