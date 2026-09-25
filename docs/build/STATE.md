@@ -89,7 +89,7 @@
 - [x] Settings screen (`SettingsDialog`, `KtNode.settings / set_settings`, stored per device): sync in the background (Android: the worker stops syncing; desktop: closing the window quits instead of going to the tray), notify me, help others sync (phones: Wi-Fi and charging / Wi-Fi while open / off; desktops: on / off; off wipes the disk copy), relay for others and start with computer (desktop only, not shown on phones). Helping now follows the phone's Wi-Fi, charging and app-open state live (`P2p::set_helping`); before, a phone node helped as if always on Wi-Fi and charging. Tests: `DesktopSettingsTest` (desktop and phone platforms), `kt-net` settings unit tests
 - [ ] Check for updates (Android; Play In-App Updates / GitHub Releases manifest)
 - [x] App size measured: libkt_ffi.so (arm64) 14.6 MB installed / 7.2 MB compressed after gating the relay server out of phone builds and compiling out dependency logging. Breakdown: 7.3 MB code, 2.2 MB rodata, 3 MB unwind tables (required by `panic = "unwind"`, D3). Within the ≤ 20 MB download / ≤ 40 MB installed targets
-- [ ] Measure the release AAB download size per device
+- [x] Release AAB measured (2026-09-25, bundletool 1.18.3, R8 on): **10.1 MB download** on an arm64 phone (SDK 34) and on the SM-T290 profile (SDK 30); the AAB holds both ABIs (22 MB). The R8 build verified on the emulator: starts in 1.7 s, auto-restored a backup, sync round through the bridge, no crashes (JNA/UniFFI keep rules in `app/android/proguard-rules.pro`)
 
 ### M5: Lifecycle and backup
 - [x] Backups, engine side (`replica/backup.rs`): sealed file (random key inside), groups with records, keys, snapshots and a recovery invite per shared group; restore = fresh identity, snapshots validated in the sandbox, recovery join posted; waiting joins carried into later backups
@@ -106,11 +106,10 @@
 
 ## Current state
 - **M4/M5 nearly done (2026-09-25).** Done since M4 started: backups and restore, exports, device linking (app side, with handovers and Undo), notifications (changes and joins), widget, tray and autostart, share links and QR, settings. Rust suite, desktop UI tests (smoke, link, restore, settings, autostart) and emulator tests (smoke, backup round trip, notifications, widget) green.
-- A release build type with R8 exists (`app/android/proguard-rules.pro` keeps JNA and the UniFFI bindings) but hasn't been built or measured yet; bundletool 1.18.3 is in `~/tools`.
+- Release build with R8: 10.1 MB download, verified running (bundletool 1.18.3 in `~/tools`).
 
 ## Next action
-1. Build the release AAB, check the R8 build still runs (JNA/UniFFI keep rules) on the emulator, measure download size per device with bundletool.
-2. M4 remainder: QR scanning (play/foss flavors), update checks (need the hosted manifest).
+1. M4 remainder: QR scanning (play/foss flavors), update checks (need the hosted manifest).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
