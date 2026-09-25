@@ -418,6 +418,9 @@ impl KtNode {
         if let Some((h, dir)) = &net.helpers {
             kt_net::helper_dir::maintain_with_dht(&net.syncer, h, &net.nostr, dir, net.dht.as_deref()).await;
         }
+        if let (Some(d), Some(p)) = (&net.dht, &net.p2p) {
+            p.set_dht_entry(d.entry_point().await); // members bootstrap through each other
+        }
         if let Some(d) = &net.dht {
             d.publish().await;
             d.lookup().await;

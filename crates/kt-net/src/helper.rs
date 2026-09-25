@@ -73,7 +73,7 @@ impl HelperRef {
     }
 
     pub fn to_addr(&self) -> Option<EndpointAddr> {
-        crate::p2p::WhereData { endpoint: self.endpoint, relays: self.relays.clone(), ips: self.ips.clone() }.to_addr()
+        crate::p2p::WhereData { endpoint: self.endpoint, relays: self.relays.clone(), ips: self.ips.clone(), dht: None }.to_addr()
     }
 }
 

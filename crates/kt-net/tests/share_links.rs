@@ -27,7 +27,7 @@ fn links_round_trip() {
 
     // With the sharing device's addresses.
     let key = iroh::SecretKey::from_bytes(&[7u8; 32]);
-    let w = WhereData { endpoint: *key.public().as_bytes(), relays: vec!["https://relay.example/".into()], ips: vec!["192.0.2.7:4444".parse().unwrap()] };
+    let w = WhereData { endpoint: *key.public().as_bytes(), relays: vec!["https://relay.example/".into()], ips: vec!["192.0.2.7:4444".parse().unwrap()], dht: None };
     let url = share_url(&code, CodeKind::Invite, Some(&w));
     let s = parse_shared(&url).unwrap();
     assert!(s.direct.is_some(), "{url}");

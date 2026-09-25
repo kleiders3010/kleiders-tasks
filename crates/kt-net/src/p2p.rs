@@ -67,6 +67,10 @@ pub struct WhereData {
     pub endpoint: [u8; 32],
     pub relays: Vec<String>,
     pub ips: Vec<SocketAddr>,
+    /// This device's Mainline DHT node, when publicly reachable: members bootstrap into
+    /// the DHT through each other if the public bootstrap nodes ever disappear.
+    #[serde(default)]
+    pub dht: Option<SocketAddr>,
 }
 
 impl WhereData {
@@ -170,6 +174,8 @@ pub struct P2p {
     pins: crate::relay_tls::Pins,
     /// The relay this device runs for others, when reachable (announced with it).
     own_relay: Mutex<Option<String>>,
+    /// Our DHT node, when publicly reachable (shared with members in whereabouts).
+    dht_entry: Mutex<Option<SocketAddr>>,
     /// Helper relays this endpoint currently uses (URL -> key).
     used_relays: Mutex<HashMap<String, [u8; 32]>>,
     /// Helping right now (a phone helps only on Wi-Fi, and by default while charging or
@@ -233,6 +239,7 @@ impl P2p {
             helper,
             pins,
             own_relay: Mutex::new(None),
+            dht_entry: Mutex::new(None),
             used_relays: Mutex::new(HashMap::new()),
             helping: std::sync::atomic::AtomicBool::new(true),
             invites: Mutex::new(HashMap::new()),
@@ -257,7 +264,7 @@ impl P2p {
                 _ => {}
             }
         }
-        WhereData { endpoint: *self.ep.id().as_bytes(), relays, ips }
+        WhereData { endpoint: *self.ep.id().as_bytes(), relays, ips, dht: *self.dht_entry.lock().expect("lock") }
     }
 
     /// Put our current address into our slots (members learn it on their next read).
@@ -395,6 +402,11 @@ impl P2p {
         let n = now.len();
         *self.used_relays.lock().expect("lock") = now;
         n
+    }
+
+    /// Our DHT node's reachable address (`DhtDiscovery::entry_point`), shared with members.
+    pub fn set_dht_entry(&self, addr: Option<SocketAddr>) {
+        *self.dht_entry.lock().expect("lock") = addr;
     }
 
     /// The relay this device runs for others (set by the relay runner; `None` = not relaying).
@@ -593,7 +605,7 @@ mod fuzz_tests {
     #[test]
     fn frames_and_addresses() {
         let slot = || WireSlot { topic: [1; 32], writer: [2; 32], version: 3, blob: b"sealed".to_vec() };
-        let w = WhereData { endpoint: *iroh::SecretKey::from_bytes(&[5; 32]).public().as_bytes(), relays: vec!["https://relay.example/".into()], ips: vec!["192.0.2.9:7".parse().unwrap()] };
+        let w = WhereData { endpoint: *iroh::SecretKey::from_bytes(&[5; 32]).public().as_bytes(), relays: vec!["https://relay.example/".into()], ips: vec!["192.0.2.9:7".parse().unwrap()], dht: Some("192.0.2.9:6881".parse().unwrap()) };
         let seeds = vec![
             postcard::to_stdvec(&Hello { topics: vec![[1; 32]], have: vec![([1; 32], [2; 32], 3)], proof: Some(b"proof".to_vec()), join: None }).unwrap(),
             postcard::to_stdvec(&Reply { slots: vec![slot()], have: vec![] }).unwrap(),

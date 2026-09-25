@@ -13,6 +13,8 @@ use mainline::async_dht::AsyncDht;
 use mainline::{Dht, MutableItem, SigningKey};
 
 pub struct DhtDiscovery {
+    /// Loopback test node: its local address counts as reachable.
+    loopback: bool,
     dht: AsyncDht,
     replica: Arc<Mutex<Replica>>,
     cache: Option<std::path::PathBuf>,
@@ -35,8 +37,12 @@ impl DhtDiscovery {
         }
         if let Some(ip) = bind {
             b.bind_address(ip);
+            if ip.is_loopback() {
+                b.server_mode(); // a loopback test network: answer queries like a public node
+            }
         }
-        Ok(DhtDiscovery { dht: b.build()?.as_async(), replica, cache: None })
+        let loopback = bind.is_some_and(|ip| ip.is_loopback());
+        Ok(DhtDiscovery { loopback, dht: b.build()?.as_async(), replica, cache: None })
     }
 
     /// Like [`DhtDiscovery::new`] on the public DHT, remembering good nodes in `cache`
@@ -51,13 +57,46 @@ impl DhtDiscovery {
         if let Some(ip) = bind {
             b.bind_address(ip);
         }
-        Ok(DhtDiscovery { dht: b.build()?.as_async(), replica, cache: Some(cache) })
+        Ok(DhtDiscovery { loopback: false, dht: b.build()?.as_async(), replica, cache: Some(cache) })
     }
 
-    /// Remember the currently known good nodes (call periodically and before shutdown).
+    /// Our node's address if others can reach it (Mainline confirmed it's not firewalled),
+    /// to share with our groups' devices as a bootstrap entry point.
+    pub async fn entry_point(&self) -> Option<std::net::SocketAddr> {
+        let info = self.dht.info().await;
+        if self.loopback {
+            return Some(std::net::SocketAddr::V4(info.local_addr()));
+        }
+        info.public_address().filter(|_| !info.firewalled()).map(std::net::SocketAddr::V4)
+    }
+
+    /// Our groups' devices that are DHT entry points (from their whereabouts).
+    pub fn member_entry_points(&self) -> Vec<String> {
+        let r = self.replica.lock().expect("replica lock");
+        let mut out: Vec<String> = r
+            .groups()
+            .iter()
+            .flat_map(|g| r.member_whereabouts(g))
+            .filter_map(|w| postcard::from_bytes::<crate::p2p::WhereData>(&w.data).ok()?.dht)
+            .map(|a| a.to_string())
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// Remember good nodes for the next start (call periodically and before shutdown):
+    /// our groups' devices first, then what the DHT currently knows. With these, the DHT
+    /// stays reachable even if the community bootstrap nodes disappear.
     pub async fn save_cache(&self) -> usize {
         let Some(p) = &self.cache else { return 0 };
-        let nodes = self.dht.to_bootstrap().await;
+        let mut nodes = self.member_entry_points();
+        for n in self.dht.to_bootstrap().await {
+            if !nodes.contains(&n) {
+                nodes.push(n);
+            }
+        }
+        nodes.truncate(64);
         if nodes.is_empty() {
             return 0;
         }

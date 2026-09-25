@@ -99,3 +99,39 @@ async fn helpers_are_found_on_the_dht_with_no_nostr_and_no_known_helper() {
     let r = kt_net::helper_dir::maintain_with_dht(&s, &hmb, &mb, &dir, Some(&d)).await;
     assert!(r.discovered >= 3 && dir.candidates().len() == 3, "{r:?}");
 }
+
+/// Members as DHT entry points: A's node is reachable and shared in its whereabouts; B
+/// joins the DHT through A alone (none of the usual bootstrap nodes) and finds A's
+/// records there. So the DHT layer survives the community bootstrap nodes disappearing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn members_bootstrap_the_dht_through_each_other() {
+    let testnet = Testnet::builder(10).build().unwrap();
+    let (mut ra, mut rb) = (replica("ea"), replica("eb"));
+    let g = ra.create_group().unwrap();
+    ra.add_member(&g, rb.device_public()).unwrap();
+    rb.accept_group(g);
+    for m in ra.export_group(&g).unwrap() {
+        let _ = rb.receive(&m);
+    }
+    let ra = Arc::new(Mutex::new(ra));
+    let da = DhtDiscovery::new(ra.clone(), Some(testnet.bootstrap.clone()), Some(Ipv4Addr::LOCALHOST)).unwrap();
+    assert!(da.bootstrapped().await);
+    let entry = da.entry_point().await.expect("A's node is reachable");
+    // A's whereabouts (with its DHT node) reach B the usual way.
+    let w = kt_net::p2p::WhereData { endpoint: [9; 32], relays: vec![], ips: vec![], dht: Some(entry) };
+    let rec = {
+        let mut r = ra.lock().unwrap();
+        r.set_whereabouts(Some(postcard::to_stdvec(&w).unwrap()));
+        r.own_whereabouts_record(&g).unwrap()
+    };
+    rb.accept_whereabouts_record(&rec).unwrap();
+    assert_eq!(da.publish().await.published, 1);
+
+    let rb = Arc::new(Mutex::new(rb));
+    let only_a = DhtDiscovery::new(rb.clone(), Some(vec![entry.to_string()]), Some(Ipv4Addr::LOCALHOST)).unwrap();
+    assert_eq!(only_a.member_entry_points(), vec![entry.to_string()], "B knows A as an entry point");
+    assert!(only_a.bootstrapped().await, "joined the DHT through a member");
+    let rep = only_a.lookup().await;
+    assert_eq!(rep.found, 1, "found A's record through the DHT: {rep:?}");
+}
+
