@@ -18,6 +18,23 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.jurisgames.tasks.desktop.MainKt"
+        nativeDistributions {
+            targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
+            packageName = "Tasks"
+            packageVersion = "0.1.0"
+            vendor = "Juris Games"
+            description = "Shared task lists, no accounts, no servers"
+            // JNA needs sun.misc.Unsafe; the rest is Compose's default runtime.
+            modules("jdk.unsupported", "java.naming")
+            // scripts/package-desktop.sh puts kt_ffi and the import worker here, per OS.
+            appResourcesRootDir.set(layout.buildDirectory.dir("native"))
+            windows {
+                menuGroup = "Tasks"
+                perUserInstall = true
+                shortcut = true
+                upgradeUuid = "6f1d2a4e-8b3c-4f5a-9e7d-2c1b0a9f8e71"
+            }
+        }
     }
 }
 

@@ -74,6 +74,11 @@ private object TrayIcon : Painter() {
 const val VERSION_CODE = 1uL
 
 fun main(args: Array<String>) {
+    // Packaged app: the Rust library and the import worker ship in its resources folder.
+    System.getProperty("compose.application.resources.dir")?.let { res ->
+        if (System.getProperty("jna.library.path") == null) System.setProperty("jna.library.path", res)
+        if (System.getProperty("kt.bin") == null) System.setProperty("kt.bin", res)
+    }
     val background = Autostart.BACKGROUND_ARG in args
     val first = openNode()
     Autostart.apply(enabled = first.settings().startWithComputer ?: true) // "Start with computer" (on by default)
