@@ -67,6 +67,8 @@
 - [x] Cloud mailbox (`cloud/mailbox-worker`, `kt-net/src/cloud.rs`): Cloudflare Worker + SQLite Durable Objects, helper rules, always written, reads by revision and helper health; tested against the local simulator (`KT_CLOUD_URL=http://127.0.0.1:8787 cargo test -p kt-net --test cloud_mailbox`)
 - [x] Cloud mailbox deployed at https://mailbox.jurisgames.com (2026-09-25, `npm run deploy` in `cloud/mailbox-worker`, the owner's Cloudflare account); live test `KT_CLOUD_URL=https://mailbox.jurisgames.com cargo test -p kt-net --test cloud_mailbox` passes
 - [x] **Real-phone crash found and fixed:** HTTPS clients used rustls-platform-verifier, which needs JNI setup on Android (the emulator never got that far: no network). All HTTPS now goes through `kt_net::http::client` (bundled WebPKI roots); update checks can no longer crash the app
+- [x] Battery measurement tooling (D47, D23): hidden "More often" alarm mode and measurement-only extra iroh endpoints, switched over adb (`MeasureReceiver`, DUMP-protected); `scripts/battery-measure.sh` with `--pair` (two copies of the app measured in the same run); `measure` build type for side-by-side copies (`-PmeasureId=.m20 -PmeasureLabel="Tasks M20"`). Emulator finding: Doze allows 7 allow-while-idle alarms per hour, so "More often" must stay at ≥ 9 min between checks
+- [ ] Per-group identity cost: paired run M20 (20 endpoints) vs M1 on the owner's phone, started 2026-09-25 20:36 (`target/battery/20260925-2035-endpoints-20`)
 - [x] Write quorum: a layer counts as written only when 2 copies landed (or all tried); otherwise retried every 10 minutes
 
 ### M3: Sharing

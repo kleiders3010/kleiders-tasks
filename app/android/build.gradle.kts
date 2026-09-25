@@ -17,6 +17,7 @@ android {
         versionCode = 1
         versionName = "0.1.0-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
         // The Rust core is built for these only (scripts/build-android-libs.sh); JNA's
         // libraries for other ABIs would be dead weight.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
@@ -35,6 +36,16 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // Battery measurement copies (scripts/battery-measure.sh --pair): the release build
+        // under another package and label, installed next to the real app. E.g.
+        // ./gradlew :android:assembleFossMeasure -PmeasureId=.m20 -PmeasureLabel="Tasks M20"
+        create("measure") {
+            initWith(getByName("release"))
+            applicationIdSuffix = (project.findProperty("measureId") as String?) ?: ".measure"
+            manifestPlaceholders["appLabel"] = (project.findProperty("measureLabel") as String?) ?: "Tasks (measure)"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
     // Native libraries stay as files: the import sandbox worker is executed from there.

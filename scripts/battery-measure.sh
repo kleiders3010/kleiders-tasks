@@ -36,7 +36,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ADB=~/AppData/Local/Android/Sdk/platform-tools/adb.exe
-PKG=com.jurisgames.tasks
+PKG=${KT_PKG:-com.jurisgames.tasks}
+# --pair PKG:SCENARIO measures a second copy of the app in the same run (same reset, same
+# conditions), e.g. the measure build under .m20 against the one under .m1.
+PAIR_PKG=""
+PAIR_SCENARIO=""
 S=${1:?serial}
 SCENARIO=${2:?scenario}
 DURATION=${3:?duration}
@@ -51,21 +55,26 @@ while [ $# -gt 0 ]; do
     --keep) KEEP=1; shift ;;
     --force-idle) FORCE_IDLE=1; shift ;;
     --collect) COLLECT_ONLY=${2:?run dir}; shift 2 ;;
+    --pair) PAIR_PKG=${2%%:*}; PAIR_SCENARIO=${2#*:}; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
 
-# Scenario -> (minutes between checks, endpoints)
-MINUTES=0
-ENDPOINTS=1
-for part in ${SCENARIO//+/ }; do
-  case "$part" in
-    baseline) ;;
-    more-often) MINUTES=$INTERVAL ;;
-    endpoints-[0-9]*) ENDPOINTS=${part#endpoints-} ;;
-    *) echo "unknown scenario part: $part" >&2; exit 2 ;;
-  esac
-done
+# Scenario -> "minutes-between-checks endpoints"
+parse_scenario() {
+  local m=0 e=1 part
+  for part in ${1//+/ }; do
+    case "$part" in
+      baseline) ;;
+      more-often) m=$INTERVAL ;;
+      endpoints-[0-9]*) e=${part#endpoints-} ;;
+      *) echo "unknown scenario part: $part" >&2; exit 2 ;;
+    esac
+  done
+  echo "$m $e"
+}
+read -r MINUTES ENDPOINTS <<<"$(parse_scenario "$SCENARIO")"
+[ -n "$PAIR_PKG" ] && read -r PAIR_MINUTES PAIR_ENDPOINTS <<<"$(parse_scenario "$PAIR_SCENARIO")"
 
 case "$DURATION" in
   *h) SECS=$(( ${DURATION%h} * 3600 )) ;;
@@ -122,11 +131,15 @@ wait_for_phone() {
   done
 }
 
-measure() { # measure MINUTES ENDPOINTS -> the app's status line
-  local out
-  out=$(a shell am broadcast --include-stopped-packages -n "$PKG/.MeasureReceiver" -a "$PKG.MEASURE" ${1:+--ei more_often_min "$1" --ei endpoints "$2"} | tr -d '\r')
+measure_pkg() { # measure_pkg PKG MINUTES ENDPOINTS -> that app's status line
+  local out pkg=$1
+  shift
+  # The receiver's class and action keep their names in every copy of the app.
+  out=$(a shell am broadcast --include-stopped-packages -n "$pkg/com.jurisgames.tasks.MeasureReceiver" -a com.jurisgames.tasks.MEASURE ${1:+--ei more_often_min "$1" --ei endpoints "$2"} | tr -d '\r')
   printf '%s\n' "$out" | sed -n 's/.*data="\(.*\)".*/\1/p'
 }
+measure() { measure_pkg "$PKG" "$@"; }
+uid_of() { a shell pm list packages -U "$1" | tr -d '\r' | awk -v p="package:$1" '$1==p {sub("uid:", "", $2); print $2}'; }
 
 on_power() { # prints the power sources that are on, if any
   a shell dumpsys battery | tr -d '\r' | awk -F': ' '/ powered: true/ {sub(/^ +/, "", $1); print $1}'
@@ -144,6 +157,14 @@ collect() {
   measure "" "" >"$dir/status-end.txt"
   date -u +%Y-%m-%dT%H:%M:%SZ >"$dir/end-utc.txt"
   report "$dir"
+  if [ -f "$dir/pair/pkg.txt" ]; then
+    local p
+    p=$(cat "$dir/pair/pkg.txt")
+    cp "$dir/checkin.txt" "$dir/battery-end.txt" "$dir/end-utc.txt" "$dir/pair/"
+    a shell am get-standby-bucket "$p" | tr -d '\r' >"$dir/pair/standby-bucket.txt" || true
+    measure_pkg "$p" "" "" >"$dir/pair/status-end.txt"
+    report "$dir/pair"
+  fi
 }
 
 # One CSV row from the checkin dump (fields: AOSP BatteryStats.dumpCheckinLocked).
@@ -193,14 +214,19 @@ if [ -n "$COLLECT_ONLY" ]; then
   wait_for_phone 600
   collect "$RUN"
   [ $KEEP = 1 ] || say "scenario off: $(measure 0 1)"
+  [ $KEEP = 1 ] || [ ! -f "$RUN/pair/pkg.txt" ] || say "pair off: $(measure_pkg "$(cat "$RUN/pair/pkg.txt")" 0 1)"
   exit 0
 fi
 
 # --- Start ------------------------------------------------------------------------------
 online || reconnect || { echo "device $S not connected" >&2; exit 1; }
 SERIALNO=$(a shell getprop ro.serialno | tr -d '\r')
-UID_=$(a shell pm list packages -U "$PKG" | tr -d '\r' | awk -v p="package:$PKG" '$1==p {sub("uid:", "", $2); print $2}')
+UID_=$(uid_of "$PKG")
 [ -n "$UID_" ] || { echo "$PKG not installed on $S" >&2; exit 1; }
+if [ -n "$PAIR_PKG" ]; then
+  PAIR_UID=$(uid_of "$PAIR_PKG")
+  [ -n "$PAIR_UID" ] || { echo "$PAIR_PKG not installed on $S" >&2; exit 1; }
+fi
 RUN=target/battery/$(date +%Y%m%d-%H%M)-$SCENARIO
 mkdir -p "$RUN"
 echo "$SCENARIO" >"$RUN/scenario.txt"
@@ -211,6 +237,16 @@ a shell getprop ro.product.model | tr -d '\r' | tr ',' ' ' >"$RUN/model.txt"
 a shell getprop ro.build.version.sdk | tr -d '\r' >"$RUN/sdk.txt"
 say "$SCENARIO on $(cat "$RUN/model.txt") (uid $UID_), $DURATION unplugged; raw data in $RUN"
 
+if [ -n "$PAIR_PKG" ]; then
+  mkdir -p "$RUN/pair"
+  echo "$PAIR_PKG" >"$RUN/pair/pkg.txt"
+  echo "$PAIR_SCENARIO ($PAIR_PKG)" >"$RUN/pair/scenario.txt"
+  echo "$PAIR_UID" >"$RUN/pair/uid.txt"
+  for f in serial.txt serialno.txt model.txt sdk.txt; do cp "$RUN/$f" "$RUN/pair/"; done
+  pstatus=$(measure_pkg "$PAIR_PKG" "$PAIR_MINUTES" "$PAIR_ENDPOINTS")
+  say "pair set: $pstatus"
+  case "$pstatus" in *"more_often_min=$PAIR_MINUTES endpoints=$PAIR_ENDPOINTS"*) ;; *) echo "the pair app didn't take its scenario" >&2; exit 1 ;; esac
+fi
 status=$(measure "$MINUTES" "$ENDPOINTS")
 say "scenario set: $status"
 case "$status" in *"more_often_min=$MINUTES endpoints=$ENDPOINTS"*) ;; *) echo "the app didn't take the scenario" >&2; exit 1 ;; esac
@@ -235,6 +271,7 @@ a shell dumpsys batterystats --reset >/dev/null
 date -u +%Y-%m-%dT%H:%M:%SZ >"$RUN/start-utc.txt"
 a shell dumpsys battery | tr -d '\r' | awk -F': ' '/^ *level:/ {print $2; exit}' >"$RUN/battery-start.txt"
 say "batterystats reset at $(cat "$RUN/battery-start.txt")% battery"
+[ -d "$RUN/pair" ] && cp "$RUN/start-utc.txt" "$RUN/battery-start.txt" "$RUN/pair/"
 
 if [ $EMU = 1 ]; then
   [ $FORCE_IDLE = 1 ] && a shell cmd deviceidle force-idle >/dev/null && say "emulator forced into Doze"
@@ -269,3 +306,4 @@ if [ $EMU = 1 ]; then
   a shell dumpsys battery reset >/dev/null
 fi
 [ $KEEP = 1 ] || say "scenario off: $(measure 0 1)"
+[ $KEEP = 1 ] || [ -z "$PAIR_PKG" ] || say "pair off: $(measure_pkg "$PAIR_PKG" 0 1)"
