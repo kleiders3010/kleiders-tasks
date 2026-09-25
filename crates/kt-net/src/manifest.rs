@@ -132,7 +132,7 @@ impl Manifest {
     /// Fetch from HTTPS sources; every source is tried, failures are ignored.
     pub async fn fetch_http(&self, urls: &[&str]) -> usize {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build() else { return 0 };
+        let Some(client) = crate::http::client(std::time::Duration::from_secs(20)) else { return 0 };
         let mut accepted = 0;
         for u in urls {
             let Ok(resp) = client.get(*u).send().await else { continue };

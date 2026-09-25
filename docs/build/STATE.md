@@ -63,7 +63,8 @@
 - [x] Operator key (2026-09-25): Ed25519, sealed with a random password (Argon2id + XChaCha20) by `kt-operator` (`kt-cli/src/operator.rs`); password in Credential Manager (`jurisgames-operator-key`) and the owner's password manager; sealed key backed up in the private `jurisgames-signing-backup` repo; public key in `manifest::OPERATOR_PUBLIC_KEY`
 - [ ] Operator manifest in the apps: ship the baseline, fetch from apps.jurisgames.com / the public repo / Nostr
 - [x] Cloud mailbox (`cloud/mailbox-worker`, `kt-net/src/cloud.rs`): Cloudflare Worker + SQLite Durable Objects, helper rules, always written, reads by revision and helper health; tested against the local simulator (`KT_CLOUD_URL=http://127.0.0.1:8787 cargo test -p kt-net --test cloud_mailbox`)
-- [ ] Cloud mailbox deployed at mailbox.jurisgames.com (needs `npx wrangler login` by the owner, then `npm run deploy` in `cloud/mailbox-worker`)
+- [x] Cloud mailbox deployed at https://mailbox.jurisgames.com (2026-09-25, `npm run deploy` in `cloud/mailbox-worker`, the owner's Cloudflare account); live test `KT_CLOUD_URL=https://mailbox.jurisgames.com cargo test -p kt-net --test cloud_mailbox` passes
+- [x] **Real-phone crash found and fixed:** HTTPS clients used rustls-platform-verifier, which needs JNI setup on Android (the emulator never got that far: no network). All HTTPS now goes through `kt_net::http::client` (bundled WebPKI roots); update checks can no longer crash the app
 - [x] Write quorum: a layer counts as written only when 2 copies landed (or all tried); otherwise retried every 10 minutes
 
 ### M3: Sharing

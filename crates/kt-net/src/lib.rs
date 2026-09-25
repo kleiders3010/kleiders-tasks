@@ -9,6 +9,7 @@ pub mod blossom;
 pub mod cloud;
 pub mod dht;
 pub mod helper;
+pub mod http;
 pub mod health;
 pub mod helper_dir;
 #[cfg(feature = "relay-server")]

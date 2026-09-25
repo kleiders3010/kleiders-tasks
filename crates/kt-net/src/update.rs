@@ -91,7 +91,7 @@ pub fn parse(bytes: &[u8], app: &str, current: u64, channel: Channel) -> Option<
 /// Check `urls` in order; the first manifest that reads wins (a newer version or not).
 pub async fn check(urls: &[&str], app: &str, current: u64, channel: Channel) -> Option<Update> {
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build().ok()?;
+    let client = crate::http::client(std::time::Duration::from_secs(15))?;
     for u in urls {
         let Ok(resp) = client.get(*u).send().await else { continue };
         if !resp.status().is_success() || resp.content_length().is_some_and(|l| l as usize > MAX_BYTES) {

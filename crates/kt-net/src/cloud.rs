@@ -112,7 +112,7 @@ pub struct CloudMailbox {
 impl CloudMailbox {
     pub fn new(base: &str, mode: CloudMode) -> Option<CloudMailbox> {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(30)).build().ok()?;
+        let client = crate::http::client(Duration::from_secs(30))?;
         Some(CloudMailbox { base: base.trim_end_matches('/').to_string(), client, mode: Mutex::new(mode), helpers: Mutex::new(None), rounds: AtomicU64::new(0), cache: Mutex::new(HashMap::new()) })
     }
 

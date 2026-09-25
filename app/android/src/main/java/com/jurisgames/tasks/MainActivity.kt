@@ -113,7 +113,8 @@ class MainActivity : ComponentActivity() {
         if (now - prefs.getLong("checked", 0) < 24 * 3600_000L) return
         val current = packageManager.getPackageInfo(packageName, 0).longVersionCode.toULong()
         lifecycleScope.launch(Dispatchers.IO) {
-            val found = app.node.checkUpdate(current, Store.UPDATE_CHANNEL)
+            // A failed check is just "nothing found this time": tried again next launch.
+            val found = runCatching { app.node.checkUpdate(current, Store.UPDATE_CHANNEL) }.getOrElse { return@launch }
             prefs.edit().putLong("checked", now).apply()
             update.value = found
         }

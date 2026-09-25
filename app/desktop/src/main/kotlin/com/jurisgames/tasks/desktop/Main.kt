@@ -99,7 +99,7 @@ fun main(args: Array<String>) {
         var update by remember { mutableStateOf<com.jurisgames.tasks.core.UpdateItem?>(null) }
         androidx.compose.runtime.LaunchedEffect(Unit) {
             val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
-            update = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { node.checkUpdate(VERSION_CODE, channel) }
+            update = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { node.checkUpdate(VERSION_CODE, channel) }.getOrNull() }
         }
         Tray(
             state = trayState,

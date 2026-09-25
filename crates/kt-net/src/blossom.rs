@@ -34,7 +34,7 @@ pub struct Blossom {
 impl Blossom {
     pub fn new(servers: Vec<String>) -> Option<Blossom> {
         let _ = rustls::crypto::ring::default_provider().install_default();
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(60)).build().ok()?;
+        let client = crate::http::client(Duration::from_secs(60))?;
         Some(Blossom { servers, client, down: Mutex::new(HashMap::new()) })
     }
 
