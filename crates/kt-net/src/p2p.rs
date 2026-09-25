@@ -163,6 +163,9 @@ pub struct P2p {
     syncer: Arc<Syncer>,
     conns: Mutex<HashMap<(EndpointId, Vec<u8>), Connection>>,
     helper: Option<Arc<crate::helper::HelperStore>>,
+    /// Helping right now (a phone helps only on Wi-Fi, and by default while charging or
+    /// open: the store stays, serving pauses).
+    helping: std::sync::atomic::AtomicBool,
     /// Sealed invite records we serve, by lookup key.
     invites: Mutex<HashMap<[u8; 32], Vec<u8>>>,
 }
@@ -205,7 +208,14 @@ impl P2p {
         }
         let ep = b.bind().await.map_err(|e| e.to_string())?;
         let helper = cfg.helper.clone().map(crate::helper::HelperStore::new);
-        let p = Arc::new(P2p { ep, syncer, conns: Mutex::new(HashMap::new()), helper, invites: Mutex::new(HashMap::new()) });
+        let p = Arc::new(P2p {
+            ep,
+            syncer,
+            conns: Mutex::new(HashMap::new()),
+            helper,
+            helping: std::sync::atomic::AtomicBool::new(true),
+            invites: Mutex::new(HashMap::new()),
+        });
         let acc = p.clone();
         tokio::spawn(async move { acc.accept_loop().await });
         Ok(p)
@@ -325,9 +335,15 @@ impl P2p {
         r.epochs(&g).is_some_and(|e| e.is_current_member(&r.device_id()))
     }
 
-    /// Our helper store, if helping.
+    /// Our helper store, if helping right now.
     pub fn helper(&self) -> Option<Arc<crate::helper::HelperStore>> {
-        self.helper.clone()
+        self.helper.clone().filter(|_| self.helping.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// Pause or resume helping others (held slots stay; strangers are turned away and
+    /// nothing is announced while paused).
+    pub fn set_helping(&self, on: bool) {
+        self.helping.store(on, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Exchange slots with every reachable member device, all at once (an offline member
@@ -388,7 +404,7 @@ impl P2p {
                 }
                 if conn.alpn() == crate::helper::HELPER_ALPN {
                     // Helping strangers: no membership needed, the store enforces its rules.
-                    let Some(h) = me.helper.clone() else {
+                    let Some(h) = me.helper() else {
                         conn.close(2u32.into(), b"not helping");
                         return;
                     };

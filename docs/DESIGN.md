@@ -128,6 +128,7 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
   - Link codes look different from invites and are **refused on the join path** with a plain explanation.
   - Link codes are **reusable and valid for a few hours**. Every device that links through one triggers the alert below.
   - **"New device linked · Undo"** appears on every device for a while. Undo removes the device and automatically rotates the keys of every list involved.
+  - **One account, every group:** each device of an account keeps the account's other devices in all its groups, automatically (removals are respected: a removed device is never re-added). A newly linked device receives each group through the personal group, which only the account's own devices read. The linking device's own lists are copied into the account, its other groups stay, and each device names itself (model or computer name) for the device list and the confirmation screen. A device removed through Undo goes back to an account of its own, with copies of the lists it had.
 - **Groups and key epochs (D5):** a group is a random 256-bit secret; the working keys live in **epochs** that rotate. Rules, validated by **every receiver** (simulated in E8: 3,000/3,000 runs after rule 4):
   1. **Strong remove:** a removed device can never be re-added.
   2. **Concurrent rotations merge:** a deterministic merger creates one successor whose recipients are the *intersection* of the concurrent epochs.

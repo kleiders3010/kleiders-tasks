@@ -117,6 +117,7 @@ pub fn add_task(doc: &LoroDoc, parent: Option<&str>, title: &str) -> Result<Stri
     meta.insert("id", id.as_str()).map_err(loro)?;
     meta.insert("title", title).map_err(loro)?;
     meta.insert("done", false).map_err(loro)?;
+    meta.insert("created_ms", now_ms() as i64).map_err(loro)?;
     doc.commit();
     Ok(id)
 }
@@ -130,7 +131,11 @@ pub fn set_title(doc: &LoroDoc, task: &str, title: &str) -> Result<()> {
 
 pub fn set_done(doc: &LoroDoc, task: &str, done: bool) -> Result<()> {
     let n = find(doc, task)?;
-    tree(doc).get_meta(n).map_err(loro)?.insert("done", done).map_err(loro)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    meta.insert("done", done).map_err(loro)?;
+    if done {
+        meta.insert("done_ms", now_ms() as i64).map_err(loro)?;
+    }
     doc.commit();
     Ok(())
 }
@@ -179,6 +184,54 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
 }
 
 /// All tasks in display order, nested.
+/// Who did what when, per task (for notifications about others' changes). Times are as
+/// the editing device stated them; peers are Loro peer IDs (see `kt_engine::peer_id_for`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskActivity {
+    pub id: String,
+    pub title: String,
+    pub done: bool,
+    pub created_ms: u64,
+    pub created_by: u64,
+    pub done_ms: u64,
+    pub done_by: Option<u64>,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
+
+fn get_ms(m: &LoroMap, k: &str) -> u64 {
+    match m.get(k) {
+        Some(ValueOrContainer::Value(LoroValue::I64(v))) => v.max(0) as u64,
+        _ => 0,
+    }
+}
+
+/// Every live task (any depth) with its authorship.
+pub fn activity(doc: &LoroDoc) -> Vec<TaskActivity> {
+    let t = tree(doc);
+    let mut out = Vec::new();
+    for n in t.nodes() {
+        if t.is_node_deleted(&n).unwrap_or(true) {
+            continue;
+        }
+        let Ok(meta) = t.get_meta(n) else { continue };
+        let Some(id) = get_str(&meta, "id") else { continue };
+        let done = matches!(meta.get("done"), Some(ValueOrContainer::Value(LoroValue::Bool(true))));
+        out.push(TaskActivity {
+            id,
+            title: get_str(&meta, "title").unwrap_or_default(),
+            done,
+            created_ms: get_ms(&meta, "created_ms"),
+            created_by: n.peer,
+            done_ms: get_ms(&meta, "done_ms"),
+            done_by: meta.get_last_editor("done"),
+        });
+    }
+    out
+}
+
 pub fn tasks(doc: &LoroDoc) -> Vec<TaskView> {
     let t = tree(doc);
     t.roots().into_iter().filter_map(|n| view_of(&t, n)).collect()
@@ -279,11 +332,22 @@ pub fn rebase(base: &LoroDoc, local: &LoroDoc, target: &LoroDoc) -> Result<()> {
             let index = t.children_num(pn).unwrap_or(0);
             if let Ok(node) = t.create_at(pn, index) {
                 if let Ok(meta) = t.get_meta(node) {
-                    let _ = meta.insert("id", id.as_str());
-                    let _ = meta.insert("title", title.as_str());
-                    let _ = meta.insert("done", *done);
-                    if !notes.is_empty() {
-                        let _ = meta.insert("notes", notes.as_str());
+                    // Every field as it is locally (times included), not just the known ones.
+                    let local_meta = find(local, id).ok().and_then(|n| tree(local).get_meta(n).ok());
+                    match local_meta.map(|m| m.get_deep_value()) {
+                        Some(LoroValue::Map(m)) => {
+                            for (k, v) in m.iter() {
+                                let _ = meta.insert(k, v.clone());
+                            }
+                        }
+                        _ => {
+                            let _ = meta.insert("id", id.as_str());
+                            let _ = meta.insert("title", title.as_str());
+                            let _ = meta.insert("done", *done);
+                            if !notes.is_empty() {
+                                let _ = meta.insert("notes", notes.as_str());
+                            }
+                        }
                     }
                 }
             }
@@ -303,6 +367,15 @@ pub fn rebase(base: &LoroDoc, local: &LoroDoc, target: &LoroDoc) -> Result<()> {
                 }
                 if ld != bd {
                     let _ = set_done(target, id, *ld);
+                    // Keep when it was done locally, not when it was rebased.
+                    if let (Ok(ln), Ok(tn)) = (find(local, id), find(target, id)) {
+                        if let (Ok(lm), Ok(tm)) = (tree(local).get_meta(ln), tree(target).get_meta(tn)) {
+                            if let Some(ValueOrContainer::Value(v)) = lm.get("done_ms") {
+                                let _ = tm.insert("done_ms", v);
+                                target.commit();
+                            }
+                        }
+                    }
                 }
                 if ln != bn {
                     let _ = set_notes(target, id, ln);

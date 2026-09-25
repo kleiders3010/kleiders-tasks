@@ -697,6 +697,8 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_kt_ffi_checksum_func_qr_matrix(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktlistener_on_change(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_add_task(
@@ -713,6 +715,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_device_key(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_devices(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_display_name(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_export_list_file(
@@ -725,11 +729,23 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_invite(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_is_linking(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_is_pristine(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_join_code(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_link_code(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_link_confirm(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_link_preview(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_lists(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_mark_seen(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_recent_links(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
     ): Int
@@ -737,11 +753,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_device_state(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_display_name(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_done(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_settings(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_settings(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_start_live(
     ): Int
@@ -749,7 +771,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_sync_now(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_take_changes(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_tasks(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_unlink_device(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_write_backup(
     ): Int
@@ -808,6 +834,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_device_key(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_devices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_display_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_export_list_file(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -820,11 +848,23 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_invite(`ptr`: Long,`groupId`: RustBuffer.ByValue,`days`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_is_linking(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_is_pristine(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_join_code(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_link_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_link_confirm(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_link_preview(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_lists(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_mark_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_recent_links(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_relay_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -832,22 +872,34 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_display_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_done(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`done`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_settings(`ptr`: Long,`new`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_settings(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_start_live(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_stop_live(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_sync_now(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_take_changes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_tasks(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_unlink_device(`ptr`: Long,`deviceId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_func_qr_matrix(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun ffi_kt_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_kt_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -967,6 +1019,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_kt_ffi_checksum_func_qr_matrix() and 0xFFFF) != 37680) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktlistener_on_change() and 0xFFFF) != 2985) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -991,6 +1046,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_device_key() and 0xFFFF) != 21563) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_devices() and 0xFFFF) != 35103) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_display_name() and 0xFFFF) != 16726) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1009,13 +1067,31 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_invite() and 0xFFFF) != 24950) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_is_linking() and 0xFFFF) != 24685) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_is_pristine() and 0xFFFF) != 50454) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_join_code() and 0xFFFF) != 57120) {
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_join_code() and 0xFFFF) != 30344) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_link_code() and 0xFFFF) != 52526) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_link_confirm() and 0xFFFF) != 13437) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_link_preview() and 0xFFFF) != 24606) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_lists() and 0xFFFF) != 16925) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_mark_seen() and 0xFFFF) != 44362) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_recent_links() and 0xFFFF) != 22864) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_relay_stats() and 0xFFFF) != 64491) {
@@ -1027,6 +1103,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_device_state() and 0xFFFF) != 59577) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_display_name() and 0xFFFF) != 11119) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1034,6 +1113,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_settings() and 0xFFFF) != 5947) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_settings() and 0xFFFF) != 24849) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_start_live() and 0xFFFF) != 63714) {
@@ -1045,7 +1130,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_sync_now() and 0xFFFF) != 14869) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_take_changes() and 0xFFFF) != 24321) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_tasks() and 0xFFFF) != 31507) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_unlink_device() and 0xFFFF) != 3021) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_write_backup() and 0xFFFF) != 29557) {
@@ -1823,6 +1914,11 @@ public interface KtNodeInterface {
     
     fun `deviceKey`(): kotlin.String
     
+    /**
+     * This account's devices.
+     */
+    fun `devices`(): List<DeviceItem>
+    
     fun `displayName`(): kotlin.String
     
     /**
@@ -1848,16 +1944,48 @@ public interface KtNodeInterface {
     fun `invite`(`groupId`: kotlin.String, `days`: kotlin.UInt): InviteInfo
     
     /**
+     * Linking into another account and not in yet.
+     */
+    fun `isLinking`(): kotlin.Boolean
+    
+    /**
      * Nothing made on this device yet: the first-launch screen may offer a restore.
      */
     fun `isPristine`(): kotlin.Boolean
     
     /**
      * Join a group with an invite's 8 words (network: seconds).
+     * Join with an invite's words or its link (typed, pasted or scanned).
      */
     fun `joinCode`(`words`: kotlin.String): JoinResult
     
+    /**
+     * A link code for adding another device to this account (valid a few hours).
+     */
+    fun `linkCode`(): InviteInfo
+    
+    /**
+     * The user confirmed the previewed account: link this device to it. Its lists merge
+     * into the account once a device of the account lets it in.
+     */
+    fun `linkConfirm`(`words`: kotlin.String)
+    
+    /**
+     * Find the account a link code joins (the confirmation screen shows it).
+     */
+    fun `linkPreview`(`words`: kotlin.String): LinkPreview
+    
     fun `lists`(): List<ListItem>
+    
+    /**
+     * The user is looking: nothing so far needs a notification.
+     */
+    fun `markSeen`()
+    
+    /**
+     * Devices linked in the last day ("New device linked · Undo" on every device).
+     */
+    fun `recentLinks`(): List<RecentLinkItem>
     
     /**
      * Relay health (diagnostics).
@@ -1871,11 +1999,27 @@ public interface KtNodeInterface {
      */
     fun `restored`(): RestoreInfo?
     
+    /**
+     * Phones report Wi-Fi and charging (and the node knows when the app is open): helping
+     * others follows them (§7a).
+     */
+    fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean)
+    
     fun `setDisplayName`(`name`: kotlin.String)
     
     fun `setDone`(`listId`: kotlin.String, `taskId`: kotlin.String, `done`: kotlin.Boolean)
     
     fun `setListener`(`listener`: KtListener)
+    
+    /**
+     * Save the settings screen. Settings that don't exist on this platform are refused.
+     */
+    fun `setSettings`(`new`: Settings)
+    
+    /**
+     * The settings screen's current values.
+     */
+    fun `settings`(): Settings
     
     /**
      * App open: live updates on every layer until [`KtNode::stop_live`].
@@ -1893,7 +2037,18 @@ public interface KtNodeInterface {
      */
     fun `syncNow`(): SyncReport
     
+    /**
+     * Others' changes since the last call (background sync posts them as notifications).
+     * Changes older than a few days are dropped; none with "Notify me" off.
+     */
+    fun `takeChanges`(): List<ChangeItem>
+    
     fun `tasks`(`listId`: kotlin.String): List<TaskItem>
+    
+    /**
+     * Undo a link: the device leaves the account and every group (keys rotate).
+     */
+    fun `unlinkDevice`(`deviceId`: kotlin.String)
     
     /**
      * Write a sealed backup now (export, or before a risky operation).
@@ -2113,6 +2268,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     
 
+    
+    /**
+     * This account's devices.
+     */override fun `devices`(): List<DeviceItem> {
+            return FfiConverterSequenceTypeDeviceItem.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_devices(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
     override fun `displayName`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -2215,6 +2386,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * Linking into another account and not in yet.
+     */override fun `isLinking`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_is_linking(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Nothing made on this device yet: the first-launch screen may offer a restore.
      */override fun `isPristine`(): kotlin.Boolean {
             return FfiConverterBoolean.lift(
@@ -2232,6 +2419,7 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
     /**
      * Join a group with an invite's 8 words (network: seconds).
+     * Join with an invite's words or its link (typed, pasted or scanned).
      */
     @Throws(KtException::class)override fun `joinCode`(`words`: kotlin.String): JoinResult {
             return FfiConverterTypeJoinResult.lift(
@@ -2247,11 +2435,95 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     
 
+    
+    /**
+     * A link code for adding another device to this account (valid a few hours).
+     */
+    @Throws(KtException::class)override fun `linkCode`(): InviteInfo {
+            return FfiConverterTypeInviteInfo.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_link_code(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The user confirmed the previewed account: link this device to it. Its lists merge
+     * into the account once a device of the account lets it in.
+     */
+    @Throws(KtException::class)override fun `linkConfirm`(`words`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_link_confirm(
+        it,
+        
+        FfiConverterString.lower(`words`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Find the account a link code joins (the confirmation screen shows it).
+     */
+    @Throws(KtException::class)override fun `linkPreview`(`words`: kotlin.String): LinkPreview {
+            return FfiConverterTypeLinkPreview.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_link_preview(
+        it,
+        
+        FfiConverterString.lower(`words`),_status)
+}
+    }
+    )
+    }
+    
+
     override fun `lists`(): List<ListItem> {
             return FfiConverterSequenceTypeListItem.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_lists(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The user is looking: nothing so far needs a notification.
+     */override fun `markSeen`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_mark_seen(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Devices linked in the last day ("New device linked · Undo" on every device).
+     */override fun `recentLinks`(): List<RecentLinkItem> {
+            return FfiConverterSequenceTypeRecentLinkItem.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_recent_links(
         it,
         _status)
 }
@@ -2309,6 +2581,24 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    /**
+     * Phones report Wi-Fi and charging (and the node knows when the app is open): helping
+     * others follows them (§7a).
+     */override fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean)
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_device_state(
+        it,
+        
+        FfiConverterBoolean.lower(`onWifi`),
+        FfiConverterBoolean.lower(`charging`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(KtException::class)override fun `setDisplayName`(`name`: kotlin.String)
         = 
     callWithHandle {
@@ -2349,6 +2639,39 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 }
     }
     
+    
+
+    
+    /**
+     * Save the settings screen. Settings that don't exist on this platform are refused.
+     */
+    @Throws(KtException::class)override fun `setSettings`(`new`: Settings)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_settings(
+        it,
+        
+        FfiConverterTypeSettings.lower(`new`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * The settings screen's current values.
+     */override fun `settings`(): Settings {
+            return FfiConverterTypeSettings.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_settings(
+        it,
+        _status)
+}
+    }
+    )
+    }
     
 
     
@@ -2399,6 +2722,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    /**
+     * Others' changes since the last call (background sync posts them as notifications).
+     * Changes older than a few days are dropped; none with "Notify me" off.
+     */override fun `takeChanges`(): List<ChangeItem> {
+            return FfiConverterSequenceTypeChangeItem.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_take_changes(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(KtException::class)override fun `tasks`(`listId`: kotlin.String): List<TaskItem> {
             return FfiConverterSequenceTypeTaskItem.lift(
     callWithHandle {
@@ -2411,6 +2751,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Undo a link: the device leaves the account and every group (keys rotate).
+     */
+    @Throws(KtException::class)override fun `unlinkDevice`(`deviceId`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_unlink_device(
+        it,
+        
+        FfiConverterString.lower(`deviceId`),_status)
+}
+    }
+    
     
 
     
@@ -2508,6 +2865,124 @@ public object FfiConverterTypeKtNode: FfiConverter<KtNode, Long> {
 
 
 
+/**
+ * Something another person did (for notifications; batched per list by the platform).
+ */
+data class ChangeItem (
+    var `groupName`: kotlin.String
+    , 
+    /**
+     * Empty for joins.
+     */
+    var `listId`: kotlin.String
+    , 
+    var `listName`: kotlin.String
+    , 
+    var `who`: kotlin.String
+    , 
+    /**
+     * "added", "completed" or "joined".
+     */
+    var `kind`: kotlin.String
+    , 
+    var `title`: kotlin.String
+    , 
+    var `atMs`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeChangeItem: FfiConverterRustBuffer<ChangeItem> {
+    override fun read(buf: ByteBuffer): ChangeItem {
+        return ChangeItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ChangeItem) = (
+            FfiConverterString.allocationSize(value.`groupName`) +
+            FfiConverterString.allocationSize(value.`listId`) +
+            FfiConverterString.allocationSize(value.`listName`) +
+            FfiConverterString.allocationSize(value.`who`) +
+            FfiConverterString.allocationSize(value.`kind`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterULong.allocationSize(value.`atMs`)
+    )
+
+    override fun write(value: ChangeItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`groupName`, buf)
+            FfiConverterString.write(value.`listId`, buf)
+            FfiConverterString.write(value.`listName`, buf)
+            FfiConverterString.write(value.`who`, buf)
+            FfiConverterString.write(value.`kind`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterULong.write(value.`atMs`, buf)
+    }
+}
+
+
+
+/**
+ * A device of this account.
+ */
+data class DeviceItem (
+    var `id`: kotlin.String
+    , 
+    var `name`: kotlin.String
+    , 
+    var `thisDevice`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDeviceItem: FfiConverterRustBuffer<DeviceItem> {
+    override fun read(buf: ByteBuffer): DeviceItem {
+        return DeviceItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: DeviceItem) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterBoolean.allocationSize(value.`thisDevice`)
+    )
+
+    override fun write(value: DeviceItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterBoolean.write(value.`thisDevice`, buf)
+    }
+}
+
+
+
 data class GroupItem (
     var `id`: kotlin.String
     , 
@@ -2555,6 +3030,11 @@ data class InviteInfo (
     var `words`: List<kotlin.String>
     , 
     var `expiresMs`: kotlin.ULong
+    , 
+    /**
+     * The same code as a link (and QR content), with this device's addresses when known.
+     */
+    var `link`: kotlin.String
     
 ){
     
@@ -2573,17 +3053,20 @@ public object FfiConverterTypeInviteInfo: FfiConverterRustBuffer<InviteInfo> {
         return InviteInfo(
             FfiConverterSequenceString.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
     override fun allocationSize(value: InviteInfo) = (
             FfiConverterSequenceString.allocationSize(value.`words`) +
-            FfiConverterULong.allocationSize(value.`expiresMs`)
+            FfiConverterULong.allocationSize(value.`expiresMs`) +
+            FfiConverterString.allocationSize(value.`link`)
     )
 
     override fun write(value: InviteInfo, buf: ByteBuffer) {
             FfiConverterSequenceString.write(value.`words`, buf)
             FfiConverterULong.write(value.`expiresMs`, buf)
+            FfiConverterString.write(value.`link`, buf)
     }
 }
 
@@ -2630,6 +3113,53 @@ public object FfiConverterTypeJoinResult: FfiConverterRustBuffer<JoinResult> {
             FfiConverterString.write(value.`groupName`, buf)
             FfiConverterString.write(value.`inviterName`, buf)
             FfiConverterBoolean.write(value.`joined`, buf)
+    }
+}
+
+
+
+/**
+ * What a link code joins, shown before the user confirms (D6).
+ */
+data class LinkPreview (
+    /**
+     * The account's display name.
+     */
+    var `accountName`: kotlin.String
+    , 
+    /**
+     * Its devices and lists: "Pixel 7 · Mark's PC · 12 lists (Work, Groceries, …)".
+     */
+    var `summary`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLinkPreview: FfiConverterRustBuffer<LinkPreview> {
+    override fun read(buf: ByteBuffer): LinkPreview {
+        return LinkPreview(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LinkPreview) = (
+            FfiConverterString.allocationSize(value.`accountName`) +
+            FfiConverterString.allocationSize(value.`summary`)
+    )
+
+    override fun write(value: LinkPreview, buf: ByteBuffer) {
+            FfiConverterString.write(value.`accountName`, buf)
+            FfiConverterString.write(value.`summary`, buf)
     }
 }
 
@@ -2707,6 +3237,11 @@ data class NodeOptions (
     var `bind`: kotlin.String
     , 
     /**
+     * This device's name for the account's other devices ("Pixel 7", the host name).
+     */
+    var `deviceName`: kotlin.String
+    , 
+    /**
      * Where the daily sealed backup goes ("" = none). Android: a folder that Android
      * backup includes (and nothing else). A backup found here on a fresh install is
      * restored automatically.
@@ -2734,6 +3269,7 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
@@ -2743,6 +3279,7 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterBoolean.allocationSize(value.`p2p`) +
             FfiConverterBoolean.allocationSize(value.`dht`) +
             FfiConverterString.allocationSize(value.`bind`) +
+            FfiConverterString.allocationSize(value.`deviceName`) +
             FfiConverterString.allocationSize(value.`backupDir`)
     )
 
@@ -2752,7 +3289,98 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterBoolean.write(value.`p2p`, buf)
             FfiConverterBoolean.write(value.`dht`, buf)
             FfiConverterString.write(value.`bind`, buf)
+            FfiConverterString.write(value.`deviceName`, buf)
             FfiConverterString.write(value.`backupDir`, buf)
+    }
+}
+
+
+
+/**
+ * A QR code as a square of modules (the UI draws it).
+ */
+data class QrMatrix (
+    var `size`: kotlin.UInt
+    , 
+    /**
+     * Row by row, `size * size` entries; true = dark.
+     */
+    var `dark`: List<kotlin.Boolean>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeQrMatrix: FfiConverterRustBuffer<QrMatrix> {
+    override fun read(buf: ByteBuffer): QrMatrix {
+        return QrMatrix(
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: QrMatrix) = (
+            FfiConverterUInt.allocationSize(value.`size`) +
+            FfiConverterSequenceBoolean.allocationSize(value.`dark`)
+    )
+
+    override fun write(value: QrMatrix, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`size`, buf)
+            FfiConverterSequenceBoolean.write(value.`dark`, buf)
+    }
+}
+
+
+
+/**
+ * A device linked recently ("New device linked · Undo").
+ */
+data class RecentLinkItem (
+    var `deviceId`: kotlin.String
+    , 
+    var `name`: kotlin.String
+    , 
+    var `linkedMs`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRecentLinkItem: FfiConverterRustBuffer<RecentLinkItem> {
+    override fun read(buf: ByteBuffer): RecentLinkItem {
+        return RecentLinkItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RecentLinkItem) = (
+            FfiConverterString.allocationSize(value.`deviceId`) +
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterULong.allocationSize(value.`linkedMs`)
+    )
+
+    override fun write(value: RecentLinkItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`deviceId`, buf)
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterULong.write(value.`linkedMs`, buf)
     }
 }
 
@@ -2861,6 +3489,86 @@ public object FfiConverterTypeRestoreInfo: FfiConverterRustBuffer<RestoreInfo> {
     override fun write(value: RestoreInfo, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`rejoiningGroups`, buf)
             FfiConverterUInt.write(value.`rehomedLists`, buf)
+    }
+}
+
+
+
+/**
+ * The settings screen (DESIGN settings table). A setting that doesn't exist on this
+ * platform is `None` and isn't shown at all.
+ */
+data class Settings (
+    /**
+     * Off = sync only while the app is open.
+     */
+    var `syncInBackground`: kotlin.Boolean
+    , 
+    /**
+     * "Notify me when others change a list".
+     */
+    var `notifyChanges`: kotlin.Boolean
+    , 
+    /**
+     * "Help others sync": one of `help_options`.
+     */
+    var `helpOthers`: kotlin.String
+    , 
+    /**
+     * "wifi_and_charging", "wifi_while_open" (phones), "on" (desktops), "off".
+     */
+    var `helpOptions`: List<kotlin.String>
+    , 
+    /**
+     * "Relay connections for others" (D51): desktops only.
+     */
+    var `relayForOthers`: kotlin.Boolean?
+    , 
+    /**
+     * "Start with computer": desktops only.
+     */
+    var `startWithComputer`: kotlin.Boolean?
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
+    override fun read(buf: ByteBuffer): Settings {
+        return Settings(
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: Settings) = (
+            FfiConverterBoolean.allocationSize(value.`syncInBackground`) +
+            FfiConverterBoolean.allocationSize(value.`notifyChanges`) +
+            FfiConverterString.allocationSize(value.`helpOthers`) +
+            FfiConverterSequenceString.allocationSize(value.`helpOptions`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`relayForOthers`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`startWithComputer`)
+    )
+
+    override fun write(value: Settings, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`syncInBackground`, buf)
+            FfiConverterBoolean.write(value.`notifyChanges`, buf)
+            FfiConverterString.write(value.`helpOthers`, buf)
+            FfiConverterSequenceString.write(value.`helpOptions`, buf)
+            FfiConverterOptionalBoolean.write(value.`relayForOthers`, buf)
+            FfiConverterOptionalBoolean.write(value.`startWithComputer`, buf)
     }
 }
 
@@ -3080,6 +3788,38 @@ public object FfiConverterTypePlatform: FfiConverterRustBuffer<Platform> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
+    override fun read(buf: ByteBuffer): kotlin.Boolean? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterBoolean.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Boolean?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterBoolean.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Boolean?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterBoolean.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?> {
     override fun read(buf: ByteBuffer): kotlin.String? {
         if (buf.get().toInt() == 0) {
@@ -3144,6 +3884,34 @@ public object FfiConverterOptionalTypeRestoreInfo: FfiConverterRustBuffer<Restor
 /**
  * @suppress
  */
+public object FfiConverterSequenceBoolean: FfiConverterRustBuffer<List<kotlin.Boolean>> {
+    override fun read(buf: ByteBuffer): List<kotlin.Boolean> {
+        val len = buf.getInt()
+        return List<kotlin.Boolean>(len) {
+            FfiConverterBoolean.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.Boolean>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterBoolean.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.Boolean>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterBoolean.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.String>> {
     override fun read(buf: ByteBuffer): List<kotlin.String> {
         val len = buf.getInt()
@@ -3162,6 +3930,62 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterString.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeChangeItem: FfiConverterRustBuffer<List<ChangeItem>> {
+    override fun read(buf: ByteBuffer): List<ChangeItem> {
+        val len = buf.getInt()
+        return List<ChangeItem>(len) {
+            FfiConverterTypeChangeItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ChangeItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeChangeItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ChangeItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeChangeItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeDeviceItem: FfiConverterRustBuffer<List<DeviceItem>> {
+    override fun read(buf: ByteBuffer): List<DeviceItem> {
+        val len = buf.getInt()
+        return List<DeviceItem>(len) {
+            FfiConverterTypeDeviceItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<DeviceItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeDeviceItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<DeviceItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeDeviceItem.write(it, buf)
         }
     }
 }
@@ -3228,6 +4052,34 @@ public object FfiConverterSequenceTypeListItem: FfiConverterRustBuffer<List<List
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeRecentLinkItem: FfiConverterRustBuffer<List<RecentLinkItem>> {
+    override fun read(buf: ByteBuffer): List<RecentLinkItem> {
+        val len = buf.getInt()
+        return List<RecentLinkItem>(len) {
+            FfiConverterTypeRecentLinkItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RecentLinkItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRecentLinkItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RecentLinkItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRecentLinkItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeRelayStat: FfiConverterRustBuffer<List<RelayStat>> {
     override fun read(buf: ByteBuffer): List<RelayStat> {
         val len = buf.getInt()
@@ -3277,4 +4129,19 @@ public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<Task
         }
     }
 }
+        /**
+         * Encode text (a share link) as a QR code.
+         */
+    @Throws(KtException::class) fun `qrMatrix`(`text`: kotlin.String): QrMatrix {
+            return FfiConverterTypeQrMatrix.lift(
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_qr_matrix(
+    
+        
+        FfiConverterString.lower(`text`),_status)
+}
+    )
+    }
+    
+
 

@@ -26,6 +26,8 @@ kt-net = { path = "../kt-net", default-features = false }
 uniffi.workspace = true
 tokio.workspace = true
 hex.workspace = true
+serde.workspace = true
+qrcode = { version = "=0.14.1", default-features = false }
 loro.workspace = true
 thiserror.workspace = true
 # Compile out dependencies' internal logging in release builds (size; the app has its own diagnostics).

@@ -514,6 +514,9 @@ impl Replica {
         if let Some(w) = self.whereabouts_record(&t.group)? {
             messages.push(Message::Whereabouts(w).encode()?);
         }
+        for h in self.handover_messages(&t.group)? {
+            messages.push(Message::Handover(h).encode()?);
+        }
         for d in docs {
             let ds = &self.groups[&t.group].docs[&d];
             // The generation's proposal (the document's base), if nobody else carries it.

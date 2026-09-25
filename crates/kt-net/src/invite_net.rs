@@ -259,11 +259,79 @@ pub async fn join(syncer: &Arc<Syncer>, p2p: Option<&Arc<P2p>>, rec: &InviteReco
         }
         .map_err(|e| e.to_string())?;
     }
+    Ok(join_direct(p2p, rec).await)
+}
+
+/// After a join or link request is posted: ask the member's device directly when the
+/// record carries its addresses. True if it let us in right away.
+pub async fn join_direct(p2p: Option<&Arc<P2p>>, rec: &InviteRecord) -> bool {
     if let (Some(p), Some(w)) = (p2p, &rec.whereabouts) {
         if let Some(addr) = postcard::from_bytes::<crate::p2p::WhereData>(w).ok().and_then(|d| d.to_addr()) {
             p.publish_whereabouts();
-            return Ok(p.join_via(rec.group, addr).await);
+            return p.join_via(rec.group, addr).await;
         }
     }
-    Ok(false)
+    false
+}
+
+/// The public join page (DESIGN §5). Everything after `#` stays in the browser or app: the
+/// fragment never reaches the server.
+pub const JOIN_BASE: &str = "https://jurisgames.com";
+
+/// The link (and QR) for a code: `…/join#words` for invites, `…/link#words` for device
+/// links, optionally followed by `~` and the sharing device's addresses for a direct
+/// connection.
+pub fn share_url(code: &Code, kind: CodeKind, direct: Option<&crate::p2p::WhereData>) -> String {
+    use base64::Engine as _;
+    let path = match kind {
+        CodeKind::Invite => "join",
+        CodeKind::Link => "link",
+    };
+    let mut s = format!("{JOIN_BASE}/{path}#{}", code.to_words().join("-"));
+    if let Some(b) = direct.and_then(|w| postcard::to_stdvec(w).ok()) {
+        s.push('~');
+        s.push_str(&base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b));
+    }
+    s
+}
+
+/// What someone pasted, typed or scanned: a share link or just the words.
+pub struct Shared {
+    pub code: Code,
+    /// From the link's path; words alone don't say.
+    pub kind: Option<CodeKind>,
+    /// The sharing device, if the link carried its addresses.
+    pub direct: Option<EndpointAddr>,
+}
+
+/// Parse a share link or plain words (untrusted input: addresses are only a hint; the
+/// record still has to open with the code's key).
+pub fn parse_shared(input: &str) -> Result<Shared, String> {
+    use base64::Engine as _;
+    let t = input.trim();
+    let (kind, rest) = match t.find('#') {
+        Some(i) => {
+            let path = t[..i].trim_end_matches('/');
+            let kind = if path.ends_with("/link") {
+                Some(CodeKind::Link)
+            } else if path.ends_with("/join") {
+                Some(CodeKind::Invite)
+            } else {
+                None
+            };
+            (kind, &t[i + 1..])
+        }
+        None => (None, t),
+    };
+    let (words, addr) = match rest.split_once('~') {
+        Some((w, a)) => (w, Some(a)),
+        None => (rest, None),
+    };
+    let code = Code::parse(words).map_err(|e| e.to_string())?;
+    let direct = addr
+        .filter(|a| a.len() <= 2048)
+        .and_then(|a| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(a).ok())
+        .and_then(|b| postcard::from_bytes::<crate::p2p::WhereData>(&b).ok())
+        .and_then(|w| w.to_addr());
+    Ok(Shared { code, kind, direct })
 }

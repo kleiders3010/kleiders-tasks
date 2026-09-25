@@ -55,10 +55,93 @@ pub struct NodeOptions {
     pub dht: bool,
     /// Bind address for P2P ("" = all interfaces; tests use "127.0.0.1:0").
     pub bind: String,
+    /// This device's name for the account's other devices ("Pixel 7", the host name).
+    pub device_name: String,
     /// Where the daily sealed backup goes ("" = none). Android: a folder that Android
     /// backup includes (and nothing else). A backup found here on a fresh install is
     /// restored automatically.
     pub backup_dir: String,
+}
+
+/// What a link code joins, shown before the user confirms (D6).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct LinkPreview {
+    /// The account's display name.
+    pub account_name: String,
+    /// Its devices and lists: "Pixel 7 · Mark's PC · 12 lists (Work, Groceries, …)".
+    pub summary: String,
+}
+
+/// A device of this account.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct DeviceItem {
+    pub id: String,
+    pub name: String,
+    pub this_device: bool,
+}
+
+/// A device linked recently ("New device linked · Undo").
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RecentLinkItem {
+    pub device_id: String,
+    pub name: String,
+    pub linked_ms: u64,
+}
+
+/// Something another person did (for notifications; batched per list by the platform).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ChangeItem {
+    pub group_name: String,
+    /// Empty for joins.
+    pub list_id: String,
+    pub list_name: String,
+    pub who: String,
+    /// "added", "completed" or "joined".
+    pub kind: String,
+    pub title: String,
+    pub at_ms: u64,
+}
+
+/// The settings screen (DESIGN settings table). A setting that doesn't exist on this
+/// platform is `None` and isn't shown at all.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct Settings {
+    /// Off = sync only while the app is open.
+    pub sync_in_background: bool,
+    /// "Notify me when others change a list".
+    pub notify_changes: bool,
+    /// "Help others sync": one of `help_options`.
+    pub help_others: String,
+    /// "wifi_and_charging", "wifi_while_open" (phones), "on" (desktops), "off".
+    pub help_options: Vec<String>,
+    /// "Relay connections for others" (D51): desktops only.
+    pub relay_for_others: Option<bool>,
+    /// "Start with computer": desktops only.
+    pub start_with_computer: Option<bool>,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct StoredSettings {
+    sync_in_background: bool,
+    notify_changes: bool,
+    net: NetSettings,
+    start_with_computer: bool,
+}
+
+impl StoredSettings {
+    fn defaults(p: NetPlatform) -> StoredSettings {
+        StoredSettings { sync_in_background: true, notify_changes: true, net: NetSettings::defaults(p), start_with_computer: true }
+    }
+}
+
+fn help_name(h: kt_net::settings::HelpOthers) -> &'static str {
+    use kt_net::settings::HelpOthers::*;
+    match h {
+        WifiAndCharging => "wifi_and_charging",
+        WifiWhileOpen => "wifi_while_open",
+        On => "on",
+        Off => "off",
+    }
 }
 
 /// What a restore did.
@@ -100,6 +183,25 @@ pub struct TaskItem {
 pub struct InviteInfo {
     pub words: Vec<String>,
     pub expires_ms: u64,
+    /// The same code as a link (and QR content), with this device's addresses when known.
+    pub link: String,
+}
+
+/// A QR code as a square of modules (the UI draws it).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct QrMatrix {
+    pub size: u32,
+    /// Row by row, `size * size` entries; true = dark.
+    pub dark: Vec<bool>,
+}
+
+/// Encode text (a share link) as a QR code.
+#[uniffi::export]
+pub fn qr_matrix(text: String) -> Result<QrMatrix, KtError> {
+    let q = qrcode::QrCode::with_error_correction_level(text.as_bytes(), qrcode::EcLevel::M).map_err(fail)?;
+    let size = q.width() as u32;
+    let dark = q.to_colors().into_iter().map(|c| c == qrcode::Color::Dark).collect();
+    Ok(QrMatrix { size, dark })
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -152,10 +254,15 @@ pub struct KtNode {
     net: Net,
     data_dir: PathBuf,
     listener: Mutex<Option<Arc<dyn KtListener>>>,
+    /// The link record last previewed (confirmed with the same words).
+    previewed: Mutex<Option<(String, kt_engine::invite::InviteRecord)>>,
     /// Live mode: the stop signal and the task holding a reference to this node.
     live: Mutex<Option<(tokio::sync::watch::Sender<bool>, tokio::task::JoinHandle<()>)>>,
     backup_dir: Option<PathBuf>,
     restored: Option<RestoreInfo>,
+    settings: Mutex<StoredSettings>,
+    /// (on Wi-Fi, charging, app open), as the platform last reported (phones).
+    device_state: Mutex<(bool, bool, bool)>,
 }
 
 const BACKUP_FILE: &str = "tasks.ktbackup";
@@ -179,9 +286,13 @@ impl KtNode {
         self.app.lists().into_iter().find(|l| l.doc == d).ok_or_else(|| fail("no such list"))
     }
 
+    /// (name, our display name) per group for invite records. The personal group is
+    /// advertised by its summary: that's what a link code's confirmation screen shows.
     fn names(&self) -> std::collections::HashMap<GroupId, (String, String)> {
         let me = self.app.display_name();
-        self.app.groups().into_iter().map(|g| (g.group, (g.name, me.clone()))).collect()
+        let personal = self.app.personal_group();
+        let summary = self.app.account_summary();
+        self.app.groups().into_iter().map(|g| (g.group, (if g.group == personal { summary.clone() } else { g.name }, me.clone()))).collect()
     }
 
     fn layers(&self) -> InviteLayers {
@@ -214,6 +325,28 @@ impl KtNode {
             let _ = std::fs::copy(path, path.with_extension("prev.ktbackup"));
         }
         kt_engine::storage::write_atomic(path, &bytes).map_err(fail)
+    }
+
+    fn invite_info(&self, code: &kt_engine::invite::Code, kind: CodeKind, expires_ms: u64) -> InviteInfo {
+        let here = self.net.p2p.as_ref().map(|p| p.where_data());
+        InviteInfo {
+            words: code.to_words().into_iter().map(str::to_string).collect(),
+            expires_ms,
+            link: kt_net::invite_net::share_url(code, kind, here.as_ref()),
+        }
+    }
+
+    /// Helping follows the setting and the device's state.
+    fn apply_helping(&self) {
+        let (wifi, charging, open) = *self.device_state.lock().expect("lock");
+        let on = self.settings.lock().expect("lock").net.helper_limits(wifi, charging, open).is_some();
+        if let Some(p) = &self.net.p2p {
+            p.set_helping(on);
+        }
+    }
+
+    fn save_settings(&self, s: &StoredSettings) -> Result<(), KtError> {
+        kt_engine::storage::write_atomic(&self.data_dir.join("settings"), &kt_engine::wire::encode(*b"SE", 1, s).map_err(fail)?).map_err(fail)
     }
 
     fn notify(&self) {
@@ -250,6 +383,8 @@ impl KtNode {
             kt_net::invite_net::publish_ahead(&net.syncer, &layers, &names_fn).await;
         }
         let joined = self.app.with(|r| r.settle_joins()).into_iter().map(|p| p.group_name).collect();
+        let _ = self.app.settle_account();
+        let _ = self.app.publish_names();
         SyncReport { written: w.written as u32, received: r.slots_opened as u32, rejected: r.rejected as u32, peers_reached: peers, joined_groups: joined }
     }
 }
@@ -301,10 +436,17 @@ impl KtNode {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().worker_threads(2).build().map_err(fail)?;
         let seeds: Vec<String> = if options.relays.is_empty() { kt_net::relays::SEED_RELAYS.iter().map(|s| s.to_string()).collect() } else { options.relays.clone() };
         let replica = app.replica();
-        let settings = NetSettings::defaults(match options.platform {
+        let platform = match options.platform {
             Platform::Desktop => NetPlatform::Desktop,
             Platform::Phone => NetPlatform::Phone,
-        });
+        };
+        let stored = std::fs::read(data.join("settings"))
+            .ok()
+            .and_then(|b| kt_engine::wire::decode::<StoredSettings>(*b"SE", 1, &b).ok())
+            .map(|x| x.1)
+            .filter(|s| s.net.platform() == platform)
+            .unwrap_or_else(|| StoredSettings::defaults(platform));
+        let settings = stored.net.clone();
         let net = rt.block_on(async {
             let refs: Vec<&str> = seeds.iter().map(|s| s.as_str()).collect();
             let nostr = Arc::new(NostrMailbox::new(&refs, NostrPolicy::default()));
@@ -322,6 +464,8 @@ impl KtNode {
             let mut helpers = None;
             if options.p2p {
                 let key = kt_engine::crypto::derive(&replica.lock().expect("lock").identity().secret().to_bytes(), "kt/helper-disk-key/v1", b"");
+                // The store exists whenever helping is on at all; whether it serves right now
+                // follows the device's state (set_device_state).
                 let helper = settings.helper_limits_with_disk(true, true, true, &data.join("helping"), key);
                 let cfg = P2pConfig {
                     bind: (!options.bind.is_empty()).then(|| options.bind.parse().ok()).flatten(),
@@ -341,8 +485,26 @@ impl KtNode {
             let dht = if options.dht { DhtDiscovery::with_cache(replica.clone(), data.join("dht_nodes.txt"), None).ok().map(Arc::new) } else { None };
             Net { syncer, nostr, relays, p2p, helpers, dht }
         });
+        if !options.device_name.is_empty() {
+            let _ = app.set_device_name(&options.device_name);
+        }
         let backup_dir = (!options.backup_dir.is_empty()).then(|| PathBuf::from(&options.backup_dir));
-        Ok(Arc::new(KtNode { app, rt, net, data_dir: data, listener: Mutex::new(None), live: Mutex::new(None), backup_dir, restored }))
+        let node = Arc::new(KtNode {
+            app,
+            rt,
+            net,
+            data_dir: data,
+            listener: Mutex::new(None),
+            previewed: Mutex::new(None),
+            live: Mutex::new(None),
+            backup_dir,
+            restored,
+            settings: Mutex::new(stored),
+            // Phones start as "not on Wi-Fi" until the platform says otherwise.
+            device_state: Mutex::new((platform == NetPlatform::Desktop, false, false)),
+        });
+        node.apply_helping();
+        Ok(node)
     }
 }
 
@@ -452,7 +614,7 @@ impl KtNode {
         }
         let ms = u64::from(days.clamp(1, 30)) * 86_400_000;
         let (code, expires) = self.app.with(|r| r.create_invite(&g, CodeKind::Invite, ms)).map_err(fail)?;
-        Ok(InviteInfo { words: code.to_words().into_iter().map(str::to_string).collect(), expires_ms: expires })
+        Ok(self.invite_info(&code, CodeKind::Invite, expires))
     }
 
     /// Autocomplete one word of a code (3+ letters): the full word, if unique.
@@ -461,11 +623,17 @@ impl KtNode {
     }
 
     /// Join a group with an invite's 8 words (network: seconds).
+    /// Join with an invite's words or its link (typed, pasted or scanned).
     pub fn join_code(&self, words: String) -> Result<JoinResult, KtError> {
-        let code = kt_engine::invite::Code::parse(&words).map_err(fail)?;
+        let shared = kt_net::invite_net::parse_shared(&words).map_err(fail)?;
+        if shared.kind == Some(CodeKind::Link) {
+            return Err(fail("this is a device link, not an invite: use it to link this device to your account"));
+        }
+        let code = shared.code;
+        let direct: Vec<_> = shared.direct.into_iter().collect();
         self.rt.block_on(async {
             let layers = self.layers();
-            let found = kt_net::invite_net::fetch(&layers, &code, CodeKind::Invite, &[], Duration::from_millis(0)).await;
+            let found = kt_net::invite_net::fetch(&layers, &code, CodeKind::Invite, &direct, Duration::from_millis(0)).await;
             let Some((rec, _)) = found else {
                 if kt_net::invite_net::fetch(&layers, &code, CodeKind::Link, &[], Duration::from_millis(0)).await.is_some() {
                     return Err(fail("this is a device link code, not an invite: use it to link this device to your account"));
@@ -476,6 +644,152 @@ impl KtNode {
             self.net.syncer.sync_once().await;
             Ok(JoinResult { group_name: rec.group_name, inviter_name: rec.inviter_name, joined })
         })
+    }
+
+    /// Others' changes since the last call (background sync posts them as notifications).
+    /// Changes older than a few days are dropped; none with "Notify me" off.
+    pub fn take_changes(&self) -> Vec<ChangeItem> {
+        let changes = self.app.take_changes().unwrap_or_default();
+        if !self.settings.lock().expect("lock").notify_changes {
+            return Vec::new();
+        }
+        changes
+            .into_iter()
+            .map(|c| ChangeItem {
+                group_name: c.group_name,
+                list_id: c.list.as_ref().map(|l| l.doc.to_hex()).unwrap_or_default(),
+                list_name: c.list.map(|l| l.name).unwrap_or_default(),
+                who: c.who,
+                kind: match c.kind {
+                    kt_tasks::app::ChangeKind::Added => "added",
+                    kt_tasks::app::ChangeKind::Completed => "completed",
+                    kt_tasks::app::ChangeKind::Joined => "joined",
+                }
+                .into(),
+                title: c.title,
+                at_ms: c.at_ms,
+            })
+            .collect()
+    }
+
+    /// The settings screen's current values.
+    pub fn settings(&self) -> Settings {
+        let s = self.settings.lock().expect("lock").clone();
+        let desktop = s.net.platform() == NetPlatform::Desktop;
+        Settings {
+            sync_in_background: s.sync_in_background,
+            notify_changes: s.notify_changes,
+            help_others: help_name(s.net.help_others).into(),
+            help_options: s.net.help_options().into_iter().map(|h| help_name(h).into()).collect(),
+            relay_for_others: s.net.relay_setting_available().then(|| s.net.relay_for_others()),
+            start_with_computer: desktop.then_some(s.start_with_computer),
+        }
+    }
+
+    /// Save the settings screen. Settings that don't exist on this platform are refused.
+    pub fn set_settings(&self, new: Settings) -> Result<(), KtError> {
+        let mut s = self.settings.lock().expect("lock").clone();
+        s.sync_in_background = new.sync_in_background;
+        s.notify_changes = new.notify_changes;
+        let h = s.net.help_options().into_iter().find(|h| help_name(*h) == new.help_others).ok_or_else(|| fail("not a choice on this device"))?;
+        s.net.set_help_others(h).map_err(fail)?;
+        if let Some(r) = new.relay_for_others {
+            s.net.set_relay_for_others(r).map_err(fail)?;
+        }
+        match (new.start_with_computer, s.net.platform()) {
+            (Some(v), NetPlatform::Desktop) => s.start_with_computer = v,
+            (Some(_), _) => return Err(fail("desktop only")),
+            (None, _) => {}
+        }
+        if h == kt_net::settings::HelpOthers::Off {
+            kt_net::helper::wipe_disk(&self.data_dir.join("helping")); // disk doesn't clear itself
+        }
+        self.save_settings(&s)?;
+        *self.settings.lock().expect("lock") = s;
+        self.apply_helping();
+        Ok(())
+    }
+
+    /// Phones report Wi-Fi and charging (and the node knows when the app is open): helping
+    /// others follows them (§7a).
+    pub fn set_device_state(&self, on_wifi: bool, charging: bool) {
+        self.device_state.lock().expect("lock").0 = on_wifi;
+        self.device_state.lock().expect("lock").1 = charging;
+        self.apply_helping();
+    }
+
+    /// The user is looking: nothing so far needs a notification.
+    pub fn mark_seen(&self) {
+        let _ = self.app.mark_seen();
+    }
+
+    /// A link code for adding another device to this account (valid a few hours).
+    pub fn link_code(&self) -> Result<InviteInfo, KtError> {
+        let (code, expires_ms) = self.app.create_link_code().map_err(fail)?;
+        Ok(self.invite_info(&code, CodeKind::Link, expires_ms))
+    }
+
+    /// Find the account a link code joins (the confirmation screen shows it).
+    pub fn link_preview(&self, words: String) -> Result<LinkPreview, KtError> {
+        let shared = kt_net::invite_net::parse_shared(&words).map_err(fail)?;
+        if shared.kind == Some(CodeKind::Invite) {
+            return Err(fail("this is an invite, not a device link: use \"Join with code\""));
+        }
+        let code = shared.code;
+        let direct: Vec<_> = shared.direct.into_iter().collect();
+        let rec = self.rt.block_on(async {
+            let layers = self.layers();
+            match kt_net::invite_net::fetch(&layers, &code, CodeKind::Link, &direct, Duration::from_millis(0)).await {
+                Some((rec, _)) => Ok(rec),
+                None if kt_net::invite_net::fetch(&layers, &code, CodeKind::Invite, &[], Duration::from_millis(0)).await.is_some() => {
+                    Err(fail("this is an invite, not a device link code: use \"Join with code\""))
+                }
+                None => Err(fail("no link code found for these words: check them, or it may have expired")),
+            }
+        })?;
+        let preview = LinkPreview { account_name: rec.inviter_name.clone(), summary: rec.group_name.clone() };
+        *self.previewed.lock().expect("lock") = Some((code.to_text(), rec));
+        Ok(preview)
+    }
+
+    /// The user confirmed the previewed account: link this device to it. Its lists merge
+    /// into the account once a device of the account lets it in.
+    pub fn link_confirm(&self, words: String) -> Result<(), KtError> {
+        let code = kt_net::invite_net::parse_shared(&words).map_err(fail)?.code.to_text();
+        let rec = match self.previewed.lock().expect("lock").take() {
+            Some((c, rec)) if c == code => rec,
+            _ => return Err(fail("preview the code first")),
+        };
+        self.app.begin_link(&rec).map_err(fail)?;
+        self.rt.block_on(async {
+            kt_net::invite_net::join_direct(self.net.p2p.as_ref(), &rec).await;
+            self.net.syncer.sync_once().await;
+        });
+        self.notify();
+        Ok(())
+    }
+
+    /// Linking into another account and not in yet.
+    pub fn is_linking(&self) -> bool {
+        self.app.linking().is_some()
+    }
+
+    /// This account's devices.
+    pub fn devices(&self) -> Vec<DeviceItem> {
+        self.app.devices().into_iter().map(|d| DeviceItem { id: d.device.to_hex(), name: d.name, this_device: d.this_device }).collect()
+    }
+
+    /// Devices linked in the last day ("New device linked · Undo" on every device).
+    pub fn recent_links(&self) -> Vec<RecentLinkItem> {
+        self.app.recent_links().into_iter().map(|l| RecentLinkItem { device_id: l.device.to_hex(), name: l.name, linked_ms: l.linked_ms }).collect()
+    }
+
+    /// Undo a link: the device leaves the account and every group (keys rotate).
+    pub fn unlink_device(&self, device_id: String) -> Result<(), KtError> {
+        let d = kt_engine::DeviceId::from_hex(&device_id).ok_or_else(|| fail("bad device id"))?;
+        self.app.unlink_device(d).map_err(fail)?;
+        self.notify();
+        Ok(())
     }
 
     /// One sync round on every layer (background jobs call this).
@@ -491,6 +805,8 @@ impl KtNode {
 
     /// App open: live updates on every layer until [`KtNode::stop_live`].
     pub fn start_live(self: Arc<Self>) {
+        self.device_state.lock().expect("lock").2 = true;
+        self.apply_helping();
         let (tx, rx) = tokio::sync::watch::channel(false);
         self.stop_live();
         let net_syncer = self.net.syncer.clone();
@@ -514,6 +830,7 @@ impl KtNode {
                     matches!(e, Event::Imported { .. } | Event::DeviceJoined { .. } | Event::DocEpochSwitched { .. } | Event::EpochAccepted { .. })
                 });
                 if changed {
+                    let _ = me.app.mark_seen(); // the app is open: shown, not notified
                     me.notify();
                 }
                 tokio::select! {
@@ -528,6 +845,8 @@ impl KtNode {
     /// Back to background mode. Returns once live mode has let go of this node (so the
     /// platform can close it, e.g. to restore a backup).
     pub fn stop_live(&self) {
+        self.device_state.lock().expect("lock").2 = false;
+        self.apply_helping();
         if let Some((tx, task)) = self.live.lock().expect("lock").take() {
             let _ = tx.send(true);
             task.abort();

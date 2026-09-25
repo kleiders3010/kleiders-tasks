@@ -11,7 +11,13 @@ import androidx.work.ExistingWorkPolicy
 /** One sync round on every layer (periodic, and expedited when leaving the app). */
 class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
-        (applicationContext as TasksApplication).node.syncNow()
+        val app = applicationContext as TasksApplication
+        val node = app.node
+        if (!node.settings().syncInBackground) return Result.success() // sync only while open
+        app.reportDeviceState()
+        node.syncNow()
+        ChangeNotifier.post(applicationContext, node.takeChanges())
+        TasksWidget.refresh(applicationContext) // every change redraws the widget
         return Result.success()
     }
 

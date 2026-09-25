@@ -33,6 +33,7 @@ mod mailboxset;
 pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
 pub mod backup;
+pub mod handover;
 mod compaction;
 mod slots;
 pub use compaction::CompactionPolicy;
@@ -60,6 +61,8 @@ pub enum Message {
     JoinRequest(Vec<u8>),
     /// The group's signed mailbox set (which relays its devices use).
     MailboxSet(Vec<u8>),
+    /// Another group handed to a linked device of the account (see `handover`).
+    Handover(Vec<u8>),
 }
 
 impl Message {
@@ -538,6 +541,7 @@ impl Replica {
             Message::Invite(b) => self.receive_invite(&b),
             Message::JoinRequest(b) => self.receive_join_request(&b),
             Message::MailboxSet(b) => self.receive_mailbox_set(&b),
+            Message::Handover(b) => self.receive_handover(&b),
         }
     }
 
@@ -888,6 +892,7 @@ impl Replica {
     }
 }
 
-fn now_ms() -> u64 {
+/// Wall-clock milliseconds (the time every record carries).
+pub fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }

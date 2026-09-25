@@ -25,5 +25,7 @@ compose.desktop {
 val rustTarget = rootDir.resolve("../target/debug")
 tasks.test {
     systemProperty("jna.library.path", rustTarget.absolutePath)
-    systemProperty("kt.worker", rustTarget.resolve(if (System.getProperty("os.name").lowercase().contains("win")) "kt-import-worker.exe" else "kt-import-worker").absolutePath)
+    val exe = if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else ""
+    systemProperty("kt.worker", rustTarget.resolve("kt-import-worker$exe").absolutePath)
+    systemProperty("kt.cli", rustTarget.resolve("kt$exe").absolutePath) // local test relay
 }

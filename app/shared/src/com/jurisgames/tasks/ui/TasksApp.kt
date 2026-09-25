@@ -45,7 +45,14 @@ import kotlinx.coroutines.withContext
  * Everything technical happens in the Rust node; this only shows state and forwards taps.
  */
 @Composable
-fun TasksApp(node: KtNode, onRestore: (() -> Unit)? = null, onExport: ((ListItem) -> Unit)? = null) {
+fun TasksApp(
+    node: KtNode,
+    onRestore: (() -> Unit)? = null,
+    onExport: ((ListItem) -> Unit)? = null,
+    onShare: ((String) -> Unit)? = null,
+    openedCode: String? = null,
+    onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)? = null,
+) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
     DisposableEffect(node) {
@@ -61,7 +68,7 @@ fun TasksApp(node: KtNode, onRestore: (() -> Unit)? = null, onExport: ((ListItem
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
-                ListsScreen(node, version, onRestore, onChanged = { version++ }, onOpen = { open = it })
+                ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onChanged = { version++ }, onOpen = { open = it })
             } else {
                 TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })
             }
@@ -70,7 +77,18 @@ fun TasksApp(node: KtNode, onRestore: (() -> Unit)? = null, onExport: ((ListItem
 }
 
 @Composable
-private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, onChanged: () -> Unit, onOpen: (ListItem) -> Unit) {
+private fun ListsScreen(
+    node: KtNode,
+    version: Int,
+    onRestore: (() -> Unit)?,
+    onShare: ((String) -> Unit)?,
+    openedCode: String?,
+    onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)?,
+    onChanged: () -> Unit,
+    onOpen: (ListItem) -> Unit,
+) {
+    var settingsOpen by remember { mutableStateOf(false) }
+    if (settingsOpen) SettingsDialog(node, onSaved = { onSettings?.invoke(it) }, onClose = { settingsOpen = false })
     val scope = rememberCoroutineScope()
     val lists = remember(node, version) { node.lists() }
     val groups = remember(node, version) { node.groups() }
@@ -78,7 +96,14 @@ private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, on
     var newList by remember { mutableStateOf("") }
     var newGroup by remember { mutableStateOf("") }
     var invite by remember { mutableStateOf<Pair<String, InviteInfo>?>(null) }
-    var joining by remember { mutableStateOf(false) }
+    // A link that opened the app goes straight to the matching dialog, prefilled.
+    val opened = openedCode?.takeIf { it.isNotBlank() }
+    var joining by remember(opened) { mutableStateOf(opened != null && !opened.contains("/link")) }
+    var linkCode by remember { mutableStateOf<InviteInfo?>(null) }
+    var linkingThis by remember(opened) { mutableStateOf(opened != null && opened.contains("/link")) }
+    val devices = remember(node, version) { node.devices() }
+    val recent = remember(node, version) { node.recentLinks() }
+    val isLinking = remember(node, version) { node.isLinking() }
     var name by remember(node, version) { mutableStateOf(node.displayName()) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -98,6 +123,27 @@ private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, on
             Button(onClick = { joining = true }, modifier = Modifier.testTag("join")) { Text("Join with code") }
         }
         if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("status"))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = { linkCode = node.linkCode() }, modifier = Modifier.testTag("linkDevice")) { Text("Link a device") }
+            TextButton(onClick = { settingsOpen = true }, modifier = Modifier.testTag("settingsOpen")) { Text("Settings") }
+            if (!isLinking) TextButton(onClick = { linkingThis = true }, modifier = Modifier.testTag("linkThis")) { Text("Link this device") }
+        }
+        if (isLinking) {
+            Text("Linking: this device joins the account as soon as one of its devices is online", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("linkingStatus"))
+        } else if (devices.size > 1) {
+            Text(
+                "Devices: " + devices.joinToString(" · ") { (it.name.ifEmpty { "a device" }) + if (it.thisDevice) " (this one)" else "" },
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("devices"),
+            )
+        }
+        for (l in recent) {
+            val who = l.name.ifEmpty { "A device" }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("New device linked: $who", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f).testTag("recentLink"))
+                TextButton(onClick = { node.unlinkDevice(l.deviceId); onChanged() }, modifier = Modifier.testTag("undo-$who")) { Text("Undo") }
+            }
+        }
         node.restored()?.let { r ->
             Text(
                 "Restored from a backup: ${r.rehomedLists} of your own lists are back" +
@@ -160,12 +206,86 @@ private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, on
                     Spacer(Modifier.padding(4.dp))
                     Text(info.words.take(4).joinToString(" "), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("words1"))
                     Text(info.words.drop(4).joinToString(" "), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("words2"))
+                    Spacer(Modifier.padding(4.dp))
+                    Text("Or the same as a link or QR code:")
+                    Text(info.link, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("inviteLink"))
+                    QrView(info.link)
+                    if (onShare != null) TextButton(onClick = { onShare(info.link) }, modifier = Modifier.testTag("shareInvite")) { Text("Share link") }
+                }
+            },
+        )
+    }
+    linkCode?.let { info ->
+        AlertDialog(
+            onDismissRequest = { linkCode = null },
+            confirmButton = { TextButton(onClick = { linkCode = null }) { Text("Done") } },
+            title = { Text("Link a device") },
+            text = {
+                Column {
+                    Text("On the other device, choose \"Link this device\" and enter these 8 words (valid 4 hours):")
+                    Spacer(Modifier.padding(4.dp))
+                    Text(info.words.take(4).joinToString(" "), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("linkWords1"))
+                    Text(info.words.drop(4).joinToString(" "), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("linkWords2"))
+                    Spacer(Modifier.padding(4.dp))
+                    Text("Or scan this on the other device:")
+                    QrView(info.link)
+                }
+            },
+        )
+    }
+    if (linkingThis) {
+        var words by remember { mutableStateOf(opened?.takeIf { it.contains("/link") } ?: "") }
+        var preview by remember { mutableStateOf<String?>(null) }
+        var result by remember { mutableStateOf("") }
+        val ownLists = remember(node, version) { node.lists().size }
+        AlertDialog(
+            onDismissRequest = { linkingThis = false },
+            confirmButton = {
+                if (preview == null) {
+                    TextButton(onClick = {
+                        result = "Looking…"
+                        scope.launch {
+                            try {
+                                val p = withContext(Dispatchers.IO) { node.linkPreview(words) }
+                                preview = "This will join ${p.accountName}'s account: ${p.summary}" +
+                                    when (ownLists) {
+                                        0 -> "."
+                                        1 -> ". The list on this device will be added to it."
+                                        else -> ". The $ownLists lists on this device will be added to it."
+                                    }
+                                result = ""
+                            } catch (e: Exception) {
+                                result = e.message ?: "Failed"
+                            }
+                        }
+                    }, modifier = Modifier.testTag("linkFind")) { Text("Find") }
+                } else {
+                    TextButton(onClick = {
+                        scope.launch {
+                            result = try {
+                                withContext(Dispatchers.IO) { node.linkConfirm(words) }
+                                onChanged()
+                                "Linking: this device joins as soon as one of the account's devices is online"
+                            } catch (e: Exception) {
+                                e.message ?: "Failed"
+                            }
+                        }
+                    }, modifier = Modifier.testTag("linkGo")) { Text("Link") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { linkingThis = false }) { Text("Close") } },
+            title = { Text("Link this device") },
+            text = {
+                Column {
+                    OutlinedTextField(words, { words = it; preview = null }, label = { Text("8 words or the link from your other device") }, modifier = Modifier.testTag("linkThisWords"))
+                    preview?.let { Text(it, modifier = Modifier.testTag("linkPreview")) }
+                    if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("linkResult"))
                 }
             },
         )
     }
     if (joining) {
-        var words by remember { mutableStateOf("") }
+        var words by remember { mutableStateOf(opened?.takeIf { !it.contains("/link") } ?: "") }
         var result by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { joining = false },
@@ -187,7 +307,7 @@ private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, on
             title = { Text("Join with code") },
             text = {
                 Column {
-                    OutlinedTextField(words, { words = it }, label = { Text("8 words (3 letters each is enough)") }, modifier = Modifier.testTag("joinWords"))
+                    OutlinedTextField(words, { words = it }, label = { Text("8 words (3 letters each is enough) or a link") }, modifier = Modifier.testTag("joinWords"))
                     if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("joinResult"))
                 }
             },

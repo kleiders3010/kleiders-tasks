@@ -17,6 +17,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+    buildTypes {
+        release {
+            // R8: what Play users download. Signing happens at release time, outside the repo.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
     // Native libraries stay as files: the import sandbox worker is executed from there.
     packaging { jniLibs { useLegacyPackaging = true } }
     sourceSets["main"].kotlin.directories.add("../shared/src")
@@ -33,10 +41,12 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
+    implementation("androidx.glance:glance-appwidget:1.2.0")
     implementation("net.java.dev.jna:jna:5.19.1@aar")
     androidTestImplementation(bom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.glance:glance-appwidget-testing:1.2.0")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

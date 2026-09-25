@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:name=".TasksApplication"
         android:label="@string/app_name"
@@ -11,11 +12,32 @@
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Invite and device links (DESIGN §5). Verified once jurisgames.com serves
+                 /.well-known/assetlinks.json; until then Android asks which app to use. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="jurisgames.com" android:pathPrefix="/join" />
+                <data android:scheme="https" android:host="jurisgames.com" android:pathPrefix="/link" />
+            </intent-filter>
         </activity>
+        <receiver
+            android:name=".TasksWidgetReceiver"
+            android:exported="true"
+            android:label="Tasks">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/tasks_widget_info" />
+        </receiver>
     </application>
 </manifest>

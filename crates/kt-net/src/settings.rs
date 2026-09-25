@@ -11,7 +11,7 @@ use crate::helper::HelperLimits;
 #[cfg(feature = "relay-server")]
 use crate::helper_relay::HelperRelayConfig;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Platform {
     Desktop,
     Phone,
@@ -25,7 +25,7 @@ pub enum SettingId {
     RelayForOthers,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum HelpOthers {
     /// Phones: on Wi-Fi while charging, plus on Wi-Fi while the app is open (default).
     WifiAndCharging,
@@ -36,7 +36,7 @@ pub enum HelpOthers {
     Off,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NetSettings {
     platform: Platform,
     pub help_others: HelpOthers,
@@ -62,6 +62,23 @@ impl NetSettings {
             Platform::Desktop => vec![SettingId::HelpOthers, SettingId::RelayForOthers],
             Platform::Phone => vec![SettingId::HelpOthers],
         }
+    }
+
+    /// The "Help others sync" choices on this platform (DESIGN settings table).
+    pub fn help_options(&self) -> Vec<HelpOthers> {
+        match self.platform {
+            Platform::Desktop => vec![HelpOthers::On, HelpOthers::Off],
+            Platform::Phone => vec![HelpOthers::WifiAndCharging, HelpOthers::WifiWhileOpen, HelpOthers::Off],
+        }
+    }
+
+    /// Change "Help others sync" to one of [`NetSettings::help_options`].
+    pub fn set_help_others(&mut self, h: HelpOthers) -> Result<(), &'static str> {
+        if !self.help_options().contains(&h) {
+            return Err("not a choice on this platform");
+        }
+        self.help_others = h;
+        Ok(())
     }
 
     /// Whether the "Relay connections for others" setting exists on this platform.
@@ -157,5 +174,21 @@ mod tests {
         d.help_others = HelpOthers::Off;
         assert!(d.helper_limits_with_disk(true, true, true, &dir, key).is_none());
         assert!(!dir.exists());
+    }
+
+    #[test]
+    fn choices_per_platform() {
+        let mut phone = NetSettings::defaults(Platform::Phone);
+        assert_eq!(phone.help_options(), [HelpOthers::WifiAndCharging, HelpOthers::WifiWhileOpen, HelpOthers::Off]);
+        assert!(phone.set_help_others(HelpOthers::On).is_err(), "not a phone choice");
+        assert!(phone.set_help_others(HelpOthers::WifiWhileOpen).is_ok());
+        assert!(phone.helper_limits(true, true, false).is_none(), "Wi-Fi while open: closed means no");
+        assert!(phone.helper_limits(true, false, true).is_some());
+        assert!(phone.set_relay_for_others(true).is_err(), "no relay setting on phones");
+        let mut desk = NetSettings::defaults(Platform::Desktop);
+        assert_eq!(desk.help_options(), [HelpOthers::On, HelpOthers::Off]);
+        assert!(desk.set_help_others(HelpOthers::WifiAndCharging).is_err());
+        assert!(desk.set_help_others(HelpOthers::Off).is_ok());
+        assert!(desk.helper_limits(true, true, true).is_none());
     }
 }

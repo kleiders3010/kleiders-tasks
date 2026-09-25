@@ -24,7 +24,7 @@ class DesktopSmokeTest {
         val home = Files.createTempDirectory("kt-desktop").toFile()
         val worker = System.getProperty("kt.worker")
         // No network: a dead relay and no P2P (nothing leaves this machine).
-        val node = KtNode.open(File(home, "identity").path, File(home, "data").path, worker, NodeOptions(Platform.DESKTOP, listOf("ws://127.0.0.1:9"), false, false, "127.0.0.1:0", ""))
+        val node = KtNode.open(File(home, "identity").path, File(home, "data").path, worker, NodeOptions(Platform.DESKTOP, listOf("ws://127.0.0.1:9"), false, false, "127.0.0.1:0", "", ""))
         rule.setContent { TasksApp(node) }
         rule.onNodeWithTag("newgroup").performTextInput("Family")
         rule.onNodeWithTag("addgroup").performClick()
@@ -40,6 +40,9 @@ class DesktopSmokeTest {
         check(node.tasks(node.lists().first { it.name == "Groceries" }.id).single().done) { "done state reached the engine" }
         // An invite from the desktop app: 8 words.
         val family = node.groups().first { it.name == "Family" }
-        check(node.invite(family.id, 30u).words.size == 8)
+        val invite = node.invite(family.id, 30u)
+        check(invite.words.size == 8)
+        check(invite.link.startsWith("https://jurisgames.com/join#" + invite.words.joinToString("-"))) { invite.link }
+        check(com.jurisgames.tasks.core.qrMatrix(invite.link).size >= 21u)
     }
 }

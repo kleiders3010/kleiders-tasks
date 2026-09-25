@@ -15,7 +15,7 @@
 //! it exactly once and passes it to internal helpers, so nothing locks twice.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use kt_engine::crypto::DevicePublic;
 use kt_engine::replica::Replica;
@@ -26,6 +26,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, TaskSemantics};
 
+mod linking;
+mod notify;
+pub use notify::{Change, ChangeKind, STALE_MS};
+pub use linking::{AccountChanges, DeviceInfo, RecentLink, LINK_CODE_MS, RECENT_LINK_MS};
+
 #[derive(Serialize, Deserialize, Clone, Copy)]
 struct AppMeta {
     personal: GroupId,
@@ -35,7 +40,9 @@ struct AppMeta {
 
 pub struct App {
     replica: Arc<Mutex<Replica>>,
-    meta: AppMeta,
+    /// Which account this device is in (changes once, when it links into another).
+    meta: RwLock<AppMeta>,
+    data_dir: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -127,6 +134,27 @@ fn lists_of(r: &Replica, personal: GroupId) -> Vec<ListInfo> {
     out
 }
 
+/// A fresh personal group (a person without an account, §5), recorded as this device's.
+fn new_account(r: &mut Replica, data_dir: &Path) -> Result<AppMeta> {
+    let personal = r.create_group().map_err(eng)?;
+    let profile = r.create_doc(&personal).map_err(eng)?;
+    let index = r.create_doc(&personal).map_err(eng)?;
+    {
+        let p = r.doc(&personal, &profile).unwrap();
+        p.get_map("meta").insert("kind", "profile").map_err(eng)?;
+        p.get_map("profile").insert("name", "").map_err(eng)?;
+        let i = r.doc(&personal, &index).unwrap();
+        i.get_map("meta").insert("kind", "index").map_err(eng)?;
+        i.get_map("groups").insert(&personal.to_hex(), true).map_err(eng)?;
+    }
+    r.commit(&personal, &profile).map_err(eng)?;
+    r.commit(&personal, &index).map_err(eng)?;
+    create_group_doc(r, personal, "Personal")?;
+    let meta = AppMeta { personal, profile, index };
+    storage::write_atomic(&data_dir.join("app.meta"), &wire::encode(*b"AM", 1, &meta).map_err(eng)?).map_err(eng)?;
+    Ok(meta)
+}
+
 fn register_group(r: &mut Replica, meta: &AppMeta, g: GroupId) -> Result<()> {
     r.doc(&meta.personal, &meta.index).ok_or(Error::NotFound)?.get_map("groups").insert(&g.to_hex(), true).map_err(eng)?;
     r.commit(&meta.personal, &meta.index).map_err(eng)
@@ -144,27 +172,13 @@ impl App {
         let meta_path: PathBuf = data_dir.join("app.meta");
         let meta = match std::fs::read(&meta_path) {
             Ok(b) => wire::decode::<AppMeta>(*b"AM", 1, &b).map_err(eng)?.1,
-            Err(_) => {
-                let personal = replica.create_group().map_err(eng)?;
-                let profile = replica.create_doc(&personal).map_err(eng)?;
-                let index = replica.create_doc(&personal).map_err(eng)?;
-                {
-                    let p = replica.doc(&personal, &profile).unwrap();
-                    p.get_map("meta").insert("kind", "profile").map_err(eng)?;
-                    p.get_map("profile").insert("name", "").map_err(eng)?;
-                    let i = replica.doc(&personal, &index).unwrap();
-                    i.get_map("meta").insert("kind", "index").map_err(eng)?;
-                    i.get_map("groups").insert(&personal.to_hex(), true).map_err(eng)?;
-                }
-                replica.commit(&personal, &profile).map_err(eng)?;
-                replica.commit(&personal, &index).map_err(eng)?;
-                create_group_doc(&mut replica, personal, "Personal")?;
-                let meta = AppMeta { personal, profile, index };
-                storage::write_atomic(&meta_path, &wire::encode(*b"AM", 1, &meta).map_err(eng)?).map_err(eng)?;
-                meta
-            }
+            Err(_) => new_account(&mut replica, data_dir)?,
         };
-        Ok(App { replica: Arc::new(Mutex::new(replica)), meta })
+        Ok(App { replica: Arc::new(Mutex::new(replica)), meta: RwLock::new(meta), data_dir: data_dir.to_path_buf() })
+    }
+
+    fn meta(&self) -> AppMeta {
+        *self.meta.read().expect("meta lock")
     }
 
     /// The shared replica (for transports).
@@ -182,17 +196,17 @@ impl App {
     }
 
     pub fn personal_group(&self) -> GroupId {
-        self.meta.personal
+        self.meta().personal
     }
 
     pub fn display_name(&self) -> String {
         let r = self.lock();
-        r.doc(&self.meta.personal, &self.meta.profile).and_then(|d| str_of(d.get_map("profile").get("name"))).unwrap_or_default()
+        r.doc(&self.meta().personal, &self.meta().profile).and_then(|d| str_of(d.get_map("profile").get("name"))).unwrap_or_default()
     }
 
     pub fn set_display_name(&self, name: &str) -> Result<()> {
         let mut r = self.lock();
-        let (g, d) = (self.meta.personal, self.meta.profile);
+        let (g, d) = (self.meta().personal, self.meta().profile);
         r.doc(&g, &d).ok_or(Error::NotFound)?.get_map("profile").insert("name", name).map_err(eng)?;
         r.commit(&g, &d).map_err(eng)
     }
@@ -202,18 +216,18 @@ impl App {
         let mut r = self.lock();
         let g = r.create_group().map_err(eng)?;
         create_group_doc(&mut r, g, name)?;
-        register_group(&mut r, &self.meta, g)?;
+        register_group(&mut r, &self.meta(), g)?;
         Ok(GroupInfo { group: g, name: name.to_string(), personal: false })
     }
 
     pub fn groups(&self) -> Vec<GroupInfo> {
-        groups_of(&self.lock(), self.meta.personal)
+        groups_of(&self.lock(), self.meta().personal)
     }
 
     /// Create a list in `group`, or a solo list in the personal group.
     pub fn create_list(&self, group: Option<GroupId>, name: &str) -> Result<ListInfo> {
         let mut r = self.lock();
-        let g = group.unwrap_or(self.meta.personal);
+        let g = group.unwrap_or(self.meta().personal);
         let gd = group_doc(&r, &g).ok_or(Error::NotFound)?;
         let d = r.create_doc(&g).map_err(eng)?;
         {
@@ -224,7 +238,7 @@ impl App {
         r.commit(&g, &d).map_err(eng)?;
         r.doc(&g, &gd).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
         r.commit(&g, &gd).map_err(eng)?;
-        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
+        let group_name = groups_of(&r, self.meta().personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: g, doc: d, name: name.to_string(), group_name })
     }
 
@@ -232,12 +246,12 @@ impl App {
     /// backup can still be restored onto it.
     pub fn is_pristine(&self) -> bool {
         let r = self.lock();
-        groups_of(&r, self.meta.personal).len() <= 1 && lists_of(&r, self.meta.personal).is_empty() && r.pending_joins().is_empty()
+        groups_of(&r, self.meta().personal).len() <= 1 && lists_of(&r, self.meta().personal).is_empty() && r.pending_joins().is_empty()
     }
 
     /// All lists on this device, across all groups.
     pub fn lists(&self) -> Vec<ListInfo> {
-        lists_of(&self.lock(), self.meta.personal)
+        lists_of(&self.lock(), self.meta().personal)
     }
 
     /// Find a list by exact name or by a prefix of its document ID.
@@ -299,14 +313,14 @@ impl App {
         let gd_from = group_doc(&r, &list.group).ok_or(Error::NotFound)?;
         r.doc(&list.group, &gd_from).unwrap().get_map("lists").insert(&list.doc.to_hex(), false).map_err(eng)?;
         r.commit(&list.group, &gd_from).map_err(eng)?;
-        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == to).map(|x| x.name).unwrap_or_default();
+        let group_name = groups_of(&r, self.meta().personal).into_iter().find(|x| x.group == to).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: to, doc: d, name: list.name.clone(), group_name })
     }
 
     /// A sealed backup of everything on this device (DESIGN §11). Includes a recovery
     /// invite per shared group, valid `recovery_days`.
     pub fn backup(&self, recovery_days: u32) -> Result<Vec<u8>> {
-        let app = wire::encode(*b"AM", 1, &self.meta).map_err(eng)?;
+        let app = wire::encode(*b"AM", 1, &self.meta()).map_err(eng)?;
         let b = self.lock().make_backup(u64::from(recovery_days.clamp(1, 30)) * 86_400_000, app).map_err(eng)?;
         kt_engine::replica::backup::seal(&b).map_err(eng)
     }
@@ -342,7 +356,7 @@ impl App {
             // The display name comes along (already there when the old personal group is ours).
             let name = if adopt { None } else { r.doc(&old.personal, &old.profile).and_then(|d| str_of(d.get_map("profile").get("name"))) };
             if let Some(name) = name {
-                let (g, d) = (app.meta.personal, app.meta.profile);
+                let (g, d) = (app.meta().personal, app.meta().profile);
                 r.doc(&g, &d).ok_or(Error::NotFound)?.get_map("profile").insert("name", name.as_str()).map_err(eng)?;
                 r.commit(&g, &d).map_err(eng)?;
             }
@@ -351,19 +365,10 @@ impl App {
                     kt_engine::replica::backup::Restored::Rejoining(g) => summary.rejoining.push(g),
                     kt_engine::replica::backup::Restored::ReadOnly(g) => {
                         // Copy the lists into our personal group (nobody can let us back in).
-                        let personal = app.meta.personal;
-                        let Some(gd_to) = group_doc(&r, &personal) else { continue };
-                        let peer = r.identity().peer_id();
+                        let personal = app.meta().personal;
                         let lists: Vec<DocId> = r.docs(&g).into_iter().filter(|d| r.doc(&g, d).and_then(doc_kind).as_deref() == Some("list")).collect();
                         for d in lists {
-                            let Some(src) = r.doc(&g, &d) else { continue };
-                            let copy = crate::rebuild(src, peer)?;
-                            let snap = copy.export(loro::ExportMode::Snapshot).map_err(eng)?;
-                            let nd = r.create_doc(&personal).map_err(eng)?;
-                            r.doc(&personal, &nd).unwrap().import(&snap).map_err(eng)?;
-                            r.commit(&personal, &nd).map_err(eng)?;
-                            r.doc(&personal, &gd_to).unwrap().get_map("lists").insert(&nd.to_hex(), true).map_err(eng)?;
-                            r.commit(&personal, &gd_to).map_err(eng)?;
+                            linking::copy_list(&mut r, &g, &d, &personal)?;
                             summary.rehomed_lists += 1;
                         }
                         // Copied: this device doesn't keep the old group around.
@@ -395,7 +400,7 @@ impl App {
     pub fn import_list_file(&self, group: Option<GroupId>, bytes: &[u8]) -> Result<ListInfo> {
         let body = kt_engine::replica::backup::open_file(b"KTL1", b"kt/tasklist/v1", bytes).map_err(|_| Error::Invalid("not a .tasklist file".into()))?;
         let (name, snap): (String, Vec<u8>) = wire::decode(*b"LF", 1, &body).map_err(eng)?.1;
-        let g = group.unwrap_or(self.meta.personal);
+        let g = group.unwrap_or(self.meta().personal);
         let mut r = self.lock();
         let src = r.load_untrusted_snapshot(&snap).map_err(eng)?;
         if doc_kind(&src).as_deref() != Some("list") {
@@ -408,14 +413,14 @@ impl App {
         r.commit(&g, &d).map_err(eng)?;
         r.doc(&g, &gd).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
         r.commit(&g, &gd).map_err(eng)?;
-        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
+        let group_name = groups_of(&r, self.meta().personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: g, doc: d, name, group_name })
     }
 
     /// Manual sharing (file bundles): add another device to a group and return the
     /// messages it needs to join. Invites (`create_invite`) are the normal way.
     pub fn share_group_with_device(&self, group: GroupId, device: DevicePublic) -> Result<Vec<Vec<u8>>> {
-        if group == self.meta.personal {
+        if group == self.meta().personal {
             return Err(Error::Invalid("the personal group is only for your own devices (device linking)".into()));
         }
         let mut r = self.lock();
@@ -430,6 +435,6 @@ impl App {
         for m in messages {
             let _ = r.receive(m);
         }
-        register_group(&mut r, &self.meta, group)
+        register_group(&mut r, &self.meta(), group)
     }
 }

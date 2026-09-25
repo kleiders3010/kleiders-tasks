@@ -4,6 +4,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.jurisgames.tasks.core.KtNode
@@ -33,7 +39,8 @@ fun openNode(backup: ByteArray? = null): KtNode {
     val bind = System.getProperty("kt.bind", "")
     // Daily sealed backup (the folder choice prompt comes with the polished UI, DESIGN §11).
     val backups = System.getProperty("kt.backups") ?: File(base, "backups").absolutePath
-    val options = NodeOptions(Platform.DESKTOP, relays, p2p, p2p, bind, backups)
+    val name = System.getProperty("kt.deviceName") ?: System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrDefault("")
+    val options = NodeOptions(Platform.DESKTOP, relays, p2p, p2p, bind, name, backups)
     return if (backup == null) KtNode.open(identity.absolutePath, data.absolutePath, worker, options)
     else KtNode.openRestoring(identity.absolutePath, data.absolutePath, worker, options, backup)
 }
@@ -47,13 +54,49 @@ fun restoreNode(old: KtNode, backup: ByteArray): Result<KtNode> {
 
 private fun isWindows() = System.getProperty("os.name").lowercase().contains("win")
 
-fun main() {
+/** The tray icon: a plain check-mark disc (drawn, no image files). */
+private object TrayIcon : Painter() {
+    override val intrinsicSize = Size(64f, 64f)
+    override fun DrawScope.onDraw() {
+        drawCircle(Color(0xFF3F6FD8))
+        val w = size.width
+        drawLine(Color.White, Offset(w * 0.28f, w * 0.52f), Offset(w * 0.44f, w * 0.68f), strokeWidth = w * 0.1f)
+        drawLine(Color.White, Offset(w * 0.44f, w * 0.68f), Offset(w * 0.74f, w * 0.34f), strokeWidth = w * 0.1f)
+    }
+}
+
+/**
+ * The desktop app lives in the tray (DESIGN §8: it stays connected and starts with the
+ * computer). Closing the window keeps it syncing; Quit ends it. Started at login with
+ * `--background`, it opens straight into the tray.
+ */
+fun main(args: Array<String>) {
+    val background = Autostart.BACKGROUND_ARG in args
     val first = openNode()
-    first.startLive() // the desktop app stays live while it runs (tray app later)
+    Autostart.apply(enabled = first.settings().startWithComputer ?: true) // "Start with computer" (on by default)
+    first.startLive()
     application {
         var node by remember { mutableStateOf(first) }
-        Window(onCloseRequest = { node.stopLive(); node.syncNow(); exitApplication() }, title = "Tasks") {
-            TasksApp(node, onRestore = {
+        var visible by remember { mutableStateOf(!background) }
+        Tray(
+            icon = TrayIcon,
+            tooltip = "Tasks",
+            onAction = { visible = true },
+            menu = {
+                Item("Open Tasks", onClick = { visible = true })
+                Item("Sync now", onClick = { Thread { node.syncNow() }.start() })
+                Separator()
+                Item("Quit", onClick = { node.stopLive(); node.syncNow(); exitApplication() })
+            },
+        )
+        // Closing the window: stay in the tray and keep syncing, unless background sync is off.
+        Window(onCloseRequest = {
+            if (node.settings().syncInBackground) visible = false else { node.stopLive(); node.syncNow(); exitApplication() }
+        }, visible = visible, title = "Tasks") {
+            TasksApp(node, onSettings = { Autostart.apply(it.startWithComputer ?: true) }, onShare = { link ->
+                // Desktop: onto the clipboard, ready to paste into any chat.
+                java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(link), null)
+            }, onRestore = {
                 val dialog = FileDialog(null as Frame?, "Restore from a backup file", FileDialog.LOAD).apply { isVisible = true }
                 val file = dialog.file?.let { File(dialog.directory, it) }
                 if (file != null) {
