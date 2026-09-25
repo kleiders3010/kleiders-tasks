@@ -488,6 +488,8 @@ pub struct NostrMailbox {
     last_gen: Mutex<HashMap<[u8; 32], u64>>,
     /// What we last stored per (relay, writer): (topic, generation), for read-back health.
     stored: Mutex<HashMap<(String, [u8; 32]), ([u8; 32], u64)>>,
+    /// Other members' relay observations (weighted and decayed, `health`).
+    shared_health: Mutex<HashMap<String, RelayHealth>>,
 }
 
 impl NostrMailbox {
@@ -502,7 +504,27 @@ impl NostrMailbox {
             policy,
             last_gen: Mutex::new(HashMap::new()),
             stored: Mutex::new(HashMap::new()),
+            shared_health: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Other members' relay observations, replacing the previous set (`health::apply`).
+    pub fn set_shared_health(&self, shared: HashMap<String, RelayHealth>) {
+        *self.shared_health.lock().expect("lock") = shared;
+    }
+
+    /// Relay health as this device's groups know it: own observations plus members'.
+    /// Streaks (failures in a row) stay our own.
+    pub fn health_merged(&self) -> Vec<(String, RelayHealth)> {
+        let mut all: HashMap<String, RelayHealth> = self.health().into_iter().collect();
+        for (u, s) in self.shared_health.lock().expect("lock").iter() {
+            let e = all.entry(u.clone()).or_default();
+            e.published_ok += s.published_ok;
+            e.connect_failures += s.connect_failures;
+            e.readback_hits += s.readback_hits;
+            e.readback_misses += s.readback_misses;
+        }
+        all.into_iter().collect()
     }
 
     /// The connection for a relay URL (created on first use).

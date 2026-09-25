@@ -208,7 +208,7 @@ impl RelayDirectory {
     /// All candidates in order of preference for this device: proven by read-back, then
     /// seeds, then untried candidates (popular, fast first). Failing relays go last.
     pub fn ordered(&self, mb: &NostrMailbox) -> Vec<String> {
-        let health: BTreeMap<String, crate::nostr::RelayHealth> = mb.health().into_iter().collect();
+        let health: BTreeMap<String, crate::nostr::RelayHealth> = mb.health_merged().into_iter().collect();
         let cands = self.candidates();
         let mut v: Vec<(u8, i64, String)> = cands
             .iter()
@@ -233,7 +233,7 @@ impl RelayDirectory {
     }
 
     fn is_failing(mb: &NostrMailbox, url: &str) -> bool {
-        mb.health().into_iter().find(|(u, _)| u == url).is_some_and(|(_, h)| {
+        mb.health_merged().into_iter().find(|(u, _)| u == url).is_some_and(|(_, h)| {
             h.readback_misses > h.readback_hits + 2 || h.failures_in_a_row >= 3
         })
     }
@@ -242,7 +242,7 @@ impl RelayDirectory {
     /// at most one if there are enough proven ones (a trial share).
     pub fn choose_set(&self, mb: &NostrMailbox, keep: &[String]) -> Vec<String> {
         let cands = self.candidates();
-        let health: BTreeMap<String, crate::nostr::RelayHealth> = mb.health().into_iter().collect();
+        let health: BTreeMap<String, crate::nostr::RelayHealth> = mb.health_merged().into_iter().collect();
         let mut out: Vec<String> = keep.to_vec();
         let trusted = self
             .ordered(mb)

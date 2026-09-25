@@ -439,6 +439,7 @@ impl KtNode {
         let joined = self.app.with(|r| r.settle_joins()).into_iter().map(|p| p.group_name).collect();
         let _ = self.app.settle_account();
         let _ = self.app.publish_names();
+        kt_net::health::exchange(&net.syncer, net.helpers.as_ref().map(|h| h.0.as_ref()), &net.nostr);
         SyncReport { written: w.written as u32, received: r.slots_opened as u32, rejected: r.rejected as u32, peers_reached: peers, joined_groups: joined }
     }
 }

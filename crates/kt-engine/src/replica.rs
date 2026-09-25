@@ -34,6 +34,7 @@ pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
 pub mod backup;
 pub mod handover;
+pub mod health;
 mod fuzzing;
 mod compaction;
 mod slots;
@@ -64,6 +65,8 @@ pub enum Message {
     MailboxSet(Vec<u8>),
     /// Another group handed to a linked device of the account (see `handover`).
     Handover(Vec<u8>),
+    /// A member's signed helper/relay health observations (see `health`).
+    Health(Vec<u8>),
 }
 
 impl Message {
@@ -155,6 +158,8 @@ pub struct Replica {
     imported: std::collections::HashSet<[u8; 32]>,
     /// This device's current whereabouts (opaque, from the transport layer).
     whereabouts: Option<Vec<u8>>,
+    /// This device's health observations for its groups (opaque, from the transport layer).
+    health: Option<Vec<u8>>,
     invite_cache: invites::InviteCache,
     /// Bumped on every local commit (lets live transports push right away).
     local_changes: u64,
@@ -184,6 +189,7 @@ impl Replica {
             parked: Vec::new(),
             imported: std::collections::HashSet::new(),
             whereabouts: None,
+            health: None,
             invite_cache: Default::default(),
             local_changes: 0,
             last_base_fp: HashMap::new(),
@@ -543,6 +549,7 @@ impl Replica {
             Message::JoinRequest(b) => self.receive_join_request(&b),
             Message::MailboxSet(b) => self.receive_mailbox_set(&b),
             Message::Handover(b) => self.receive_handover(&b),
+            Message::Health(b) => self.receive_health(&b),
         }
     }
 

@@ -606,6 +606,8 @@ pub struct HelperMailbox {
     reads_per_topic: usize,
     /// When any helper last answered (proof this device can reach the network).
     last_success: Mutex<Option<Instant>>,
+    /// Other members' observations (already weighted and decayed, `health`).
+    shared: Mutex<HashMap<EndpointId, Reliability>>,
 }
 
 /// A device that reached a helper this recently counts as online (see [`HelperMailbox::we_are_online`]).
@@ -629,7 +631,43 @@ impl HelperMailbox {
             writes_per_slot: 3,
             reads_per_topic: 4,
             last_success: Mutex::new(None),
+            shared: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Other members' observations, replacing the previous set (`health::apply`).
+    pub fn set_shared(&self, shared: HashMap<EndpointId, Reliability>) {
+        *self.shared.lock().expect("lock") = shared;
+    }
+
+    /// Only this device's own observations (what it shares with its groups).
+    pub fn own_records(&self) -> HashMap<EndpointId, Reliability> {
+        self.records.lock().expect("lock").clone()
+    }
+
+    /// Own observations plus members' (counts added; exclusion from either side).
+    fn merged(&self, id: &EndpointId) -> Option<Reliability> {
+        let own = self.records.lock().expect("lock").get(id).cloned();
+        let sh = self.shared.lock().expect("lock").get(id).cloned();
+        match (own, sh) {
+            (None, None) => None,
+            (Some(o), None) => Some(o),
+            (None, Some(s)) => Some(Reliability { unreachable_in_a_row: 0, ..s }),
+            (Some(o), Some(s)) => Some(Reliability {
+                reachable: o.reachable + s.reachable,
+                unreachable: o.unreachable + s.unreachable,
+                withheld: o.withheld + s.withheld,
+                restarts: o.restarts + s.restarts,
+                excluded: o.excluded || s.excluded,
+                ..o
+            }),
+        }
+    }
+
+    /// Test hook: record an observation as if made by this device.
+    #[doc(hidden)]
+    pub fn note_for_tests(&self, id: EndpointId, r: Reliability) {
+        self.records.lock().expect("lock").insert(id, r);
     }
 
     /// Failures only count against helpers when this device is demonstrably online: it
@@ -645,8 +683,13 @@ impl HelperMailbox {
         self
     }
 
+    /// What this device knows about helpers: its own observations plus its groups'.
     pub fn records(&self) -> HashMap<EndpointId, Reliability> {
-        self.records.lock().expect("lock").clone()
+        let mut ids: Vec<EndpointId> = self.records.lock().expect("lock").keys().copied().collect();
+        ids.extend(self.shared.lock().expect("lock").keys().copied());
+        ids.sort_by_key(|i| *i.as_bytes());
+        ids.dedup();
+        ids.into_iter().filter_map(|i| self.merged(&i).map(|r| (i, r))).collect()
     }
 
     pub fn set_pool(&self, helpers: Vec<EndpointAddr>) {
@@ -667,7 +710,8 @@ impl HelperMailbox {
 
     /// Whether this device's records say a helper isn't working.
     pub fn is_failing(&self, id: &EndpointId) -> bool {
-        self.records.lock().expect("lock").get(id).is_some_and(|r| r.excluded || r.score() < 0.0 || r.unreachable_in_a_row >= 3)
+        let own_streak = self.records.lock().expect("lock").get(id).is_some_and(|r| r.unreachable_in_a_row >= 3);
+        own_streak || self.merged(id).is_some_and(|r| r.excluded || r.score() < 0.0)
     }
 
     /// Skip a helper that just failed, for a growing interval (fail fast, like relays).
@@ -680,12 +724,12 @@ impl HelperMailbox {
     fn ranked(&self, topic: &[u8; 32]) -> Vec<EndpointAddr> {
         let resolver = self.resolver.lock().expect("lock").clone();
         let base = resolver.and_then(|r| r(topic)).filter(|v| !v.is_empty()).unwrap_or_else(|| self.pool());
-        let rec = self.records.lock().expect("lock");
         let mut v: Vec<(i64, [u8; 32], EndpointAddr)> = base
             .iter()
-            .filter(|h| !rec.get(&h.id).is_some_and(|r| r.excluded))
-            .map(|h| {
-                let s = rec.get(&h.id).map(|r| r.score()).unwrap_or(0.5);
+            .filter_map(|h| Some((h, self.merged(&h.id))))
+            .filter(|(_, r)| !r.as_ref().is_some_and(|r| r.excluded))
+            .map(|(h, r)| {
+                let s = r.map(|r| r.score()).unwrap_or(0.5);
                 let mut m = topic.to_vec();
                 m.extend_from_slice(h.id.as_bytes());
                 (-(s * 1000.0) as i64, *blake3::hash(&m).as_bytes(), h.clone())

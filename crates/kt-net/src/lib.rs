@@ -6,6 +6,7 @@
 
 pub mod dht;
 pub mod helper;
+pub mod health;
 pub mod helper_dir;
 #[cfg(feature = "relay-server")]
 pub mod helper_relay;

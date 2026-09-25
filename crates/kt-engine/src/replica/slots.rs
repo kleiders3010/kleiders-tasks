@@ -312,6 +312,12 @@ impl Replica {
             if let Some(w) = &self.whereabouts {
                 out.push(w.clone());
             }
+            // Handovers must go out even when nothing else changed.
+            out.extend(self.handover_messages(&t.group)?);
+            // Health reports ride along with real changes, and go out at least daily.
+            if self.health.is_some() {
+                out.push(b"health".iter().copied().chain((super::now_ms() / super::health::HEALTH_INTERVAL_MS).to_le_bytes()).collect());
+            }
         }
         Ok(out)
     }
@@ -516,6 +522,9 @@ impl Replica {
         }
         for h in self.handover_messages(&t.group)? {
             messages.push(Message::Handover(h).encode()?);
+        }
+        if let Some(h) = self.health_record(&t.group)? {
+            messages.push(Message::Health(h).encode()?);
         }
         for d in docs {
             let ds = &self.groups[&t.group].docs[&d];
