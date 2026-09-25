@@ -723,6 +723,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_lists(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_rename_task(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_display_name(
@@ -799,6 +801,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_join_code(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_lists(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_relay_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_rename_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -972,6 +976,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_lists() and 0xFFFF) != 16925) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_relay_stats() and 0xFFFF) != 64491) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_rename_task() and 0xFFFF) != 12754) {
@@ -1764,6 +1771,11 @@ public interface KtNodeInterface {
     
     fun `lists`(): List<ListItem>
     
+    /**
+     * Relay health (diagnostics).
+     */
+    fun `relayStats`(): List<RelayStat>
+    
     fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
     
     fun `setDisplayName`(`name`: kotlin.String)
@@ -2067,6 +2079,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     callWithHandle {
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_lists(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Relay health (diagnostics).
+     */override fun `relayStats`(): List<RelayStat> {
+            return FfiConverterSequenceTypeRelayStat.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_relay_stats(
         it,
         _status)
 }
@@ -2490,6 +2518,67 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
 
 
 
+/**
+ * One relay's health as this device sees it (hidden diagnostics screen).
+ */
+data class RelayStat (
+    var `url`: kotlin.String
+    , 
+    var `publishedOk`: kotlin.ULong
+    , 
+    var `connectFailures`: kotlin.ULong
+    , 
+    var `failuresInARow`: kotlin.ULong
+    , 
+    var `readbackHits`: kotlin.ULong
+    , 
+    var `readbackMisses`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRelayStat: FfiConverterRustBuffer<RelayStat> {
+    override fun read(buf: ByteBuffer): RelayStat {
+        return RelayStat(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RelayStat) = (
+            FfiConverterString.allocationSize(value.`url`) +
+            FfiConverterULong.allocationSize(value.`publishedOk`) +
+            FfiConverterULong.allocationSize(value.`connectFailures`) +
+            FfiConverterULong.allocationSize(value.`failuresInARow`) +
+            FfiConverterULong.allocationSize(value.`readbackHits`) +
+            FfiConverterULong.allocationSize(value.`readbackMisses`)
+    )
+
+    override fun write(value: RelayStat, buf: ByteBuffer) {
+            FfiConverterString.write(value.`url`, buf)
+            FfiConverterULong.write(value.`publishedOk`, buf)
+            FfiConverterULong.write(value.`connectFailures`, buf)
+            FfiConverterULong.write(value.`failuresInARow`, buf)
+            FfiConverterULong.write(value.`readbackHits`, buf)
+            FfiConverterULong.write(value.`readbackMisses`, buf)
+    }
+}
+
+
+
 data class SyncReport (
     var `written`: kotlin.UInt
     , 
@@ -2810,6 +2899,34 @@ public object FfiConverterSequenceTypeListItem: FfiConverterRustBuffer<List<List
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeListItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeRelayStat: FfiConverterRustBuffer<List<RelayStat>> {
+    override fun read(buf: ByteBuffer): List<RelayStat> {
+        val len = buf.getInt()
+        return List<RelayStat>(len) {
+            FfiConverterTypeRelayStat.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RelayStat>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRelayStat.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RelayStat>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRelayStat.write(it, buf)
         }
     }
 }

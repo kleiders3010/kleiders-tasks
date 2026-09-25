@@ -478,6 +478,10 @@ pub struct NostrMailbox {
     conns: Mutex<HashMap<String, Arc<RelayConn>>>,
     /// This device's own candidates, best first (seed list, then the relay directory).
     pool: Mutex<Vec<String>>,
+    /// The seed list this app version shipped with: the one relay set every device knows
+    /// without talking, used for topics no group has a set for (invite lookups, helper
+    /// rendezvous), so writers and readers meet even when their own pools differ.
+    seeds: Vec<String>,
     resolver: Mutex<Option<RelayResolver>>,
     policy: NostrPolicy,
     /// Last generation written per writer pubkey (strictly increasing created_at / generation).
@@ -493,6 +497,7 @@ impl NostrMailbox {
         NostrMailbox {
             conns: Mutex::new(HashMap::new()),
             pool: Mutex::new(relay_urls.iter().map(|u| u.to_string()).collect()),
+            seeds: relay_urls.iter().map(|u| u.to_string()).collect(),
             resolver: Mutex::new(None),
             policy,
             last_gen: Mutex::new(HashMap::new()),
@@ -571,8 +576,19 @@ impl NostrMailbox {
                 }
                 v
             }
-            None => self.ranked(topic, &self.pool()).into_iter().take(self.policy.relays_per_topic).collect(),
+            None => self.shared_targets(topic, self.policy.relays_per_topic, 2),
         }
+    }
+
+    /// No group set: the seed-ranked relays (shared by every device) plus a few of our own.
+    fn shared_targets(&self, topic: &[u8; 32], from_seeds: usize, from_pool: usize) -> Vec<String> {
+        let mut v: Vec<String> = self.ranked(topic, &self.seeds).into_iter().take(from_seeds).collect();
+        for p in self.ranked(topic, &self.pool()).into_iter().take(from_pool) {
+            if !v.contains(&p) {
+                v.push(p);
+            }
+        }
+        v
     }
 
     /// Relays to read a topic from: the whole group set plus, for a while, the previous
@@ -590,7 +606,7 @@ impl NostrMailbox {
                 }
                 v
             }
-            None => self.ranked(topic, &self.pool()).into_iter().take(self.policy.read_relays_per_topic).collect(),
+            None => self.shared_targets(topic, self.policy.read_relays_per_topic, self.policy.read_relays_per_topic),
         }
     }
 

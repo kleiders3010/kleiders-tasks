@@ -128,12 +128,13 @@ async fn survives_dropping_rate_limiting_and_offline_relays() {
     assert!(relays[1].received_events() <= 2, "rate-limited relay got {} events", relays[1].received_events());
     let health: std::collections::HashMap<String, _> = amb.health().into_iter().collect();
     println!("health: {health:#?}");
-    let dropper = &health[&urls[0]];
-    if dropper.published_ok > 0 {
+    // Relays are contacted on demand: check the ones this device actually used.
+    if let Some(dropper) = health.get(&urls[0]).filter(|h| h.published_ok > 0) {
         assert!(dropper.readback_misses > 0, "a relay that says OK but drops is noticed: {dropper:?}");
     }
-    let offline = &health[&urls[2]];
-    assert_eq!(offline.published_ok, 0);
+    if let Some(offline) = health.get(&urls[2]) {
+        assert_eq!(offline.published_ok, 0);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -179,4 +180,22 @@ async fn rate_limited_relay_is_backed_off() {
     // backoff (at least 45 s), across all 4 rounds.
     assert!(relays[0].received_events() <= 4, "got {}", relays[0].received_events());
     assert!(relays[0].rate_limited_count() <= 2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn devices_with_different_pools_still_meet_on_topics_outside_groups() {
+    use nostr::prelude::*;
+    let (_relays, urls) = relays(6).await;
+    let seeds: Vec<&str> = urls[..3].iter().map(|s| s.as_str()).collect();
+    let a = NostrMailbox::new(&seeds, test_policy());
+    let b = NostrMailbox::new(&seeds, test_policy());
+    // Their own pools have evolved differently (relay discovery, health).
+    a.set_pool(vec![urls[3].clone(), urls[4].clone()]);
+    b.set_pool(vec![urls[5].clone()]);
+    let topic = [42u8; 32];
+    let keys = Keys::generate();
+    let ev = EventBuilder::new(Kind::Custom(35713), "invite").tags([Tag::hashtag(kt_net::nostr::topic_tag(&topic))]).finalize(&keys).unwrap();
+    assert!(a.publish_on(&topic, ev).await > 0);
+    let got = b.query_on(&topic, Filter::new().kind(Kind::Custom(35713)).hashtag(kt_net::nostr::topic_tag(&topic))).await;
+    assert_eq!(got.len(), 1, "met through the shared seed list");
 }

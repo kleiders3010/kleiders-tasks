@@ -106,6 +106,17 @@ pub struct SyncReport {
     pub joined_groups: Vec<String>,
 }
 
+/// One relay's health as this device sees it (hidden diagnostics screen).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RelayStat {
+    pub url: String,
+    pub published_ok: u64,
+    pub connect_failures: u64,
+    pub failures_in_a_row: u64,
+    pub readback_hits: u64,
+    pub readback_misses: u64,
+}
+
 /// Something changed that the UI should show (lists, tasks, membership).
 #[uniffi::export(with_foreign)]
 pub trait KtListener: Send + Sync {
@@ -401,6 +412,26 @@ impl KtNode {
         if let Some(tx) = self.live.lock().expect("lock").take() {
             let _ = tx.send(true);
         }
+    }
+
+    /// Relay health (diagnostics).
+    pub fn relay_stats(&self) -> Vec<RelayStat> {
+        let mut v: Vec<RelayStat> = self
+            .net
+            .nostr
+            .health()
+            .into_iter()
+            .map(|(url, h)| RelayStat {
+                url,
+                published_ok: h.published_ok,
+                connect_failures: h.connect_failures,
+                failures_in_a_row: h.failures_in_a_row,
+                readback_hits: h.readback_hits,
+                readback_misses: h.readback_misses,
+            })
+            .collect();
+        v.sort_by(|a, b| a.url.cmp(&b.url));
+        v
     }
 
     pub fn data_dir(&self) -> String {

@@ -73,44 +73,23 @@ impl DeviceIdentity {
 }
 
 /// Exclusive single-instance lock (D1). Held for the lifetime of the engine.
+///
+/// An OS file lock, not a marker file: the OS releases it when the process dies, so a
+/// killed app (Android kills processes all the time) never locks itself out.
 pub struct IdentityLock {
     _file: File,
-    path: PathBuf,
 }
 
 impl IdentityLock {
-    /// Acquire the lock by creating a lock file exclusively. Fails if another instance holds it.
-    /// A stale lock (left by a crash) is detected by the owning PID no longer running;
-    /// on platforms where that can't be checked, the host app is responsible for clearing it.
+    /// Acquire the lock. Fails if another running instance holds it.
     pub fn acquire(dir: &Path) -> Result<Self> {
         fs::create_dir_all(dir)?;
-        let path = dir.join(LOCK_FILE);
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(mut f) => {
-                writeln!(f, "{}", std::process::id())?;
-                Ok(IdentityLock { _file: f, path })
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                Err(Error::Rejected("another instance is already running".into()))
-            }
-            Err(e) => Err(e.into()),
+        let f = OpenOptions::new().read(true).write(true).create(true).truncate(false).open(dir.join(LOCK_FILE))?;
+        match f.try_lock() {
+            Ok(()) => Ok(IdentityLock { _file: f }),
+            Err(std::fs::TryLockError::WouldBlock) => Err(Error::Rejected("another instance is already running".into())),
+            Err(std::fs::TryLockError::Error(e)) => Err(e.into()),
         }
-    }
-
-    /// Remove a lock file left behind by a crashed instance. Call only after confirming
-    /// no other instance runs (e.g. the PID in the file is gone).
-    pub fn clear_stale(dir: &Path) -> Result<()> {
-        let p = dir.join(LOCK_FILE);
-        if p.exists() {
-            fs::remove_file(p)?;
-        }
-        Ok(())
-    }
-}
-
-impl Drop for IdentityLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
     }
 }
 
@@ -154,6 +133,10 @@ mod tests {
         assert!(IdentityLock::acquire(&d).is_err());
         drop(l1);
         assert!(IdentityLock::acquire(&d).is_ok());
+        // A lock file left behind by a killed process doesn't lock the app out.
+        fs::write(d.join(LOCK_FILE), b"12345
+").unwrap();
+        assert!(IdentityLock::acquire(&d).is_ok(), "stale lock file ignored");
         let _ = fs::remove_dir_all(&d);
     }
 }
