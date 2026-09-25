@@ -178,14 +178,14 @@ fn run_helper_relay(port: u16, token: Option<String>) -> Result<()> {
 }
 
 fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every: u64, p2p: P2pOpts) -> Result<()> {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     let urls: Vec<String> = match relays {
         Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
         None => BASELINE_RELAYS.iter().map(|s| s.to_string()).collect(),
     };
     let me_name = app.display_name();
     let names: std::collections::HashMap<GroupId, (String, String)> = app.groups().into_iter().map(|g| (g.group, (g.name, me_name.clone()))).collect();
-    let replica = Arc::new(Mutex::new(app.into_replica()));
+    let replica = app.replica();
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let url_refs: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
@@ -298,13 +298,13 @@ fn run_sync(app: App, home: &Path, relays: Option<String>, rounds: usize, every:
 }
 
 fn run_join_code(app: App, relays: Option<String>, words: &str, p2p: P2pOpts) -> Result<()> {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     let code = kt_engine::invite::Code::parse(words).map_err(|e| anyhow!("{e}"))?;
     let urls: Vec<String> = match relays {
         Some(r) => r.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
         None => BASELINE_RELAYS.iter().map(|s| s.to_string()).collect(),
     };
-    let replica = Arc::new(Mutex::new(app.into_replica()));
+    let replica = app.replica();
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let url_refs: Vec<&str> = urls.iter().map(|s| s.as_str()).collect();
@@ -412,7 +412,7 @@ fn run() -> Result<()> {
     };
     let cmd = args.first().cloned().unwrap_or_default();
     let arg = |i: usize| args.get(i).cloned().ok_or_else(|| anyhow!("{}", usage()));
-    let mut app = open(&home)?;
+    let app = open(&home)?;
     if cmd == "sync" {
         return run_sync(app, &home, relays_flag, rounds, every, p2p);
     }
@@ -421,8 +421,8 @@ fn run() -> Result<()> {
         return run_join_code(app, relays_flag, &words, p2p);
     }
     match cmd.as_str() {
-        "init" => println!("device ready: {}", &device_key(&app.replica.device_public())[..16]),
-        "whoami" => println!("{}", device_key(&app.replica.device_public())),
+        "init" => println!("device ready: {}", &device_key(&app.with(|r| r.device_public()))[..16]),
+        "whoami" => println!("{}", device_key(&app.with(|r| r.device_public()))),
         "name" => match args.get(1) {
             Some(n) => app.set_display_name(n).map_err(|e| anyhow!("{e}"))?,
             None => println!("{}", app.display_name()),
@@ -433,7 +433,7 @@ fn run() -> Result<()> {
         }
         "groups" => {
             for g in app.groups() {
-                let members = app.replica.epochs(&g.group).and_then(|e| e.head().and_then(|h| e.recipients(&h).map(|r| r.len()))).unwrap_or(0);
+                let members = app.with(|r| r.epochs(&g.group).and_then(|e| e.head().and_then(|h| e.recipients(&h).map(|x| x.len()))).unwrap_or(0));
                 println!("{}  {}{}  ({} device{})", g.group.short(), g.name, if g.personal { " (personal)" } else { "" }, members, if members == 1 { "" } else { "s" });
             }
         }
@@ -465,7 +465,7 @@ fn run() -> Result<()> {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
             let title = arg(2)?;
             let parent = match &under {
-                Some(p) => Some(find_task(&kt_tasks::tasks(app.replica.doc(&l.group, &l.doc).unwrap()), p)?),
+                Some(p) => Some(find_task(&app.read(&l, kt_tasks::tasks).map_err(|e| anyhow!("{e}"))?, p)?),
                 None => None,
             };
             let id = app.edit(&l, |d| kt_tasks::add_task(d, parent.as_deref(), &title)).map_err(|e| anyhow!("{e}"))?;
@@ -474,11 +474,11 @@ fn run() -> Result<()> {
         "tasks" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
             println!("{}:", l.name);
-            print_tasks(&kt_tasks::tasks(app.replica.doc(&l.group, &l.doc).unwrap()), 1);
+            print_tasks(&app.read(&l, kt_tasks::tasks).map_err(|e| anyhow!("{e}"))?, 1);
         }
         "done" | "undone" | "rm" | "rename" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
-            let t = find_task(&kt_tasks::tasks(app.replica.doc(&l.group, &l.doc).unwrap()), &arg(2)?)?;
+            let t = find_task(&app.read(&l, kt_tasks::tasks).map_err(|e| anyhow!("{e}"))?, &arg(2)?)?;
             let res = match cmd.as_str() {
                 "done" => app.edit(&l, |d| kt_tasks::set_done(d, &t, true)),
                 "undone" => app.edit(&l, |d| kt_tasks::set_done(d, &t, false)),
@@ -509,7 +509,7 @@ fn run() -> Result<()> {
             println!("joined group '{}' ({}) with lists: {}", name, g.short(), lists.join(", "));
         }
         "send" => {
-            let msgs = app.replica.outbox().map_err(|e| anyhow!("{e}"))?;
+            let msgs = app.with(|r| r.outbox()).map_err(|e| anyhow!("{e}"))?;
             write_messages(Path::new(&arg(1)?), &msgs)?;
             println!("wrote {} message(s)", msgs.len());
         }
@@ -517,12 +517,12 @@ fn run() -> Result<()> {
             let msgs = read_messages(Path::new(&arg(1)?))?;
             let (mut ok, mut bad) = (0, 0);
             for m in &msgs {
-                match app.replica.receive(m) {
+                match app.with(|r| r.receive(m)) {
                     Ok(()) => ok += 1,
                     Err(_) => bad += 1,
                 }
             }
-            let events = app.replica.take_events();
+            let events = app.with(|r| r.take_events());
             let parked = events.iter().filter(|e| matches!(e, kt_engine::replica::Event::Parked)).count();
             println!("applied {ok} message(s), rejected {bad}, waiting {parked} (other groups or not yet decodable)");
             for e in events {
@@ -538,7 +538,7 @@ fn run() -> Result<()> {
                 bail!("your personal group is for your own devices (device linking), not invites");
             }
             let days: u64 = args.iter().position(|a| a == "--days").and_then(|i| args.get(i + 1)).and_then(|d| d.parse().ok()).unwrap_or(30).clamp(1, 30);
-            let (code, expires) = app.replica.create_invite(&g.group, kt_engine::invite::CodeKind::Invite, days * 86_400_000).map_err(|e| anyhow!("{e}"))?;
+            let (code, expires) = app.with(|r| r.create_invite(&g.group, kt_engine::invite::CodeKind::Invite, days * 86_400_000)).map_err(|e| anyhow!("{e}"))?;
             let words: Vec<&str> = code.to_words();
             println!("invite to '{}' (valid {days} day(s), until day {}):", g.name, expires / 86_400_000);
             println!("  {}", words[..4].join(" "));
@@ -547,19 +547,17 @@ fn run() -> Result<()> {
         }
         "epoch" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
-            app.replica.propose_doc_epoch(&l.group, &l.doc).map_err(|e| anyhow!("{e}"))?;
-            println!("proposed generation {}", app.replica.doc_generation(&l.group, &l.doc).unwrap_or(0));
+            app.with(|r| r.propose_doc_epoch(&l.group, &l.doc)).map_err(|e| anyhow!("{e}"))?;
+            println!("proposed generation {}", app.with(|r| r.doc_generation(&l.group, &l.doc)).unwrap_or(0));
         }
         "info" => {
             let l = app.find_list(&arg(1)?).map_err(|e| anyhow!("{e}"))?;
-            let doc = app.replica.doc(&l.group, &l.doc).unwrap();
-            let size = doc.export(loro::ExportMode::Snapshot).map(|s| s.len()).unwrap_or(0);
+            let size = app.read(&l, |doc| doc.export(loro::ExportMode::Snapshot).map(|s| s.len()).unwrap_or(0)).map_err(|e| anyhow!("{e}"))?;
             println!("list '{}' in group '{}' ({}), doc {}", l.name, l.group_name, l.group.short(), l.doc.short());
-            println!("generation {}  snapshot {} bytes", app.replica.doc_generation(&l.group, &l.doc).unwrap_or(0), size);
-            if let Some(e) = app.replica.epochs(&l.group) {
-                if let Some(h) = e.head() {
-                    println!("epoch {}  devices {}", h.short(), e.recipients(&h).map(|r| r.len()).unwrap_or(0));
-                }
+            println!("generation {}  snapshot {} bytes", app.with(|r| r.doc_generation(&l.group, &l.doc)).unwrap_or(0), size);
+            let epoch = app.with(|r| r.epochs(&l.group).and_then(|e| e.head().map(|h| (h.short(), e.recipients(&h).map(|x| x.len()).unwrap_or(0)))));
+            if let Some((h, n)) = epoch {
+                println!("epoch {h}  devices {n}");
             }
         }
         _ => bail!("{}", usage()),

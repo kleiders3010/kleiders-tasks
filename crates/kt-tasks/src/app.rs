@@ -10,8 +10,12 @@
 //!   encrypted with different keys) and removes it from the old group.
 //!
 //! Every document carries `meta.kind` so the app can tell lists from group/profile/index docs.
+//!
+//! The replica is shared (`Arc<Mutex<_>>`) with the transports. Every public method locks
+//! it exactly once and passes it to internal helpers, so nothing locks twice.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use kt_engine::crypto::DevicePublic;
 use kt_engine::replica::Replica;
@@ -30,7 +34,7 @@ struct AppMeta {
 }
 
 pub struct App {
-    pub replica: Replica,
+    replica: Arc<Mutex<Replica>>,
     meta: AppMeta,
 }
 
@@ -65,6 +69,60 @@ fn doc_kind(doc: &LoroDoc) -> Option<String> {
     str_of(doc.get_map("meta").get("kind"))
 }
 
+fn create_group_doc(r: &mut Replica, g: GroupId, name: &str) -> Result<DocId> {
+    let d = r.create_doc(&g).map_err(eng)?;
+    {
+        let doc = r.doc(&g, &d).unwrap();
+        doc.get_map("meta").insert("kind", "group").map_err(eng)?;
+        doc.get_map("meta").insert("name", name).map_err(eng)?;
+        doc.get_map("lists").insert("_", true).map_err(eng)?;
+    }
+    r.commit(&g, &d).map_err(eng)?;
+    Ok(d)
+}
+
+fn group_doc(r: &Replica, g: &GroupId) -> Option<DocId> {
+    r.docs(g).into_iter().filter(|d| r.doc(g, d).and_then(doc_kind).as_deref() == Some("group")).min()
+}
+
+fn groups_of(r: &Replica, personal: GroupId) -> Vec<GroupInfo> {
+    let mut out: Vec<GroupInfo> = r
+        .groups()
+        .into_iter()
+        .filter_map(|g| {
+            let gd = group_doc(r, &g)?;
+            let name = r.doc(&g, &gd).and_then(|d| str_of(d.get_map("meta").get("name"))).unwrap_or_default();
+            Some(GroupInfo { group: g, name, personal: g == personal })
+        })
+        .collect();
+    out.sort_by(|a, b| b.personal.cmp(&a.personal).then(a.name.cmp(&b.name)));
+    out
+}
+
+fn lists_of(r: &Replica, personal: GroupId) -> Vec<ListInfo> {
+    let mut out = Vec::new();
+    for gi in groups_of(r, personal) {
+        let Some(gd) = group_doc(r, &gi.group) else { continue };
+        let Some(gdoc) = r.doc(&gi.group, &gd) else { continue };
+        let listed: Vec<DocId> = match gdoc.get_map("lists").get_deep_value() {
+            LoroValue::Map(m) => m.iter().filter(|(_, v)| matches!(v, LoroValue::Bool(true))).filter_map(|(k, _)| DocId::from_hex(k)).collect(),
+            _ => Vec::new(),
+        };
+        for d in listed {
+            if let Some(doc) = r.doc(&gi.group, &d) {
+                out.push(ListInfo { group: gi.group, doc: d, name: crate::list_name(doc), group_name: gi.name.clone() });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.group_name.cmp(&b.group_name).then(a.name.cmp(&b.name)));
+    out
+}
+
+fn register_group(r: &mut Replica, meta: &AppMeta, g: GroupId) -> Result<()> {
+    r.doc(&meta.personal, &meta.index).ok_or(Error::NotFound)?.get_map("groups").insert(&g.to_hex(), true).map_err(eng)?;
+    r.commit(&meta.personal, &meta.index).map_err(eng)
+}
+
 impl App {
     /// Open the app. `identity_dir` must be excluded from backups (D1).
     pub fn open(identity_dir: &Path, data_dir: &Path, sandbox: SandboxConfig) -> Result<App> {
@@ -87,38 +145,27 @@ impl App {
                 }
                 replica.commit(&personal, &profile).map_err(eng)?;
                 replica.commit(&personal, &index).map_err(eng)?;
-                let mut app = App { replica, meta: AppMeta { personal, profile, index } };
-                app.create_group_doc(personal, "Personal")?;
-                storage::write_atomic(&meta_path, &wire::encode(*b"AM", 1, &app.meta).map_err(eng)?).map_err(eng)?;
-                return Ok(app);
+                create_group_doc(&mut replica, personal, "Personal")?;
+                let meta = AppMeta { personal, profile, index };
+                storage::write_atomic(&meta_path, &wire::encode(*b"AM", 1, &meta).map_err(eng)?).map_err(eng)?;
+                meta
             }
         };
-        Ok(App { replica, meta })
+        Ok(App { replica: Arc::new(Mutex::new(replica)), meta })
     }
 
-    /// Hand the replica to a transport driver (which needs shared ownership).
-    pub fn into_replica(self) -> Replica {
-        self.replica
+    /// The shared replica (for transports).
+    pub fn replica(&self) -> Arc<Mutex<Replica>> {
+        self.replica.clone()
     }
 
-    fn create_group_doc(&mut self, g: GroupId, name: &str) -> Result<DocId> {
-        let d = self.replica.create_doc(&g).map_err(eng)?;
-        {
-            let doc = self.replica.doc(&g, &d).unwrap();
-            doc.get_map("meta").insert("kind", "group").map_err(eng)?;
-            doc.get_map("meta").insert("name", name).map_err(eng)?;
-            doc.get_map("lists").insert("_", true).map_err(eng)?;
-        }
-        self.replica.commit(&g, &d).map_err(eng)?;
-        Ok(d)
+    fn lock(&self) -> MutexGuard<'_, Replica> {
+        self.replica.lock().expect("replica lock")
     }
 
-    fn group_doc(&self, g: &GroupId) -> Option<DocId> {
-        self.replica
-            .docs(g)
-            .into_iter()
-            .filter(|d| self.replica.doc(g, d).and_then(doc_kind).as_deref() == Some("group"))
-            .min()
+    /// Run something against the replica (one lock).
+    pub fn with<T>(&self, f: impl FnOnce(&mut Replica) -> T) -> T {
+        f(&mut self.lock())
     }
 
     pub fn personal_group(&self) -> GroupId {
@@ -126,86 +173,51 @@ impl App {
     }
 
     pub fn display_name(&self) -> String {
-        self.replica
-            .doc(&self.meta.personal, &self.meta.profile)
-            .and_then(|d| str_of(d.get_map("profile").get("name")))
-            .unwrap_or_default()
+        let r = self.lock();
+        r.doc(&self.meta.personal, &self.meta.profile).and_then(|d| str_of(d.get_map("profile").get("name"))).unwrap_or_default()
     }
 
-    pub fn set_display_name(&mut self, name: &str) -> Result<()> {
+    pub fn set_display_name(&self, name: &str) -> Result<()> {
+        let mut r = self.lock();
         let (g, d) = (self.meta.personal, self.meta.profile);
-        self.replica.doc(&g, &d).ok_or(Error::NotFound)?.get_map("profile").insert("name", name).map_err(eng)?;
-        self.replica.commit(&g, &d).map_err(eng)
+        r.doc(&g, &d).ok_or(Error::NotFound)?.get_map("profile").insert("name", name).map_err(eng)?;
+        r.commit(&g, &d).map_err(eng)
     }
 
     /// Create a shared group (a circle of people) with its group document.
-    pub fn create_group(&mut self, name: &str) -> Result<GroupInfo> {
-        let g = self.replica.create_group().map_err(eng)?;
-        self.create_group_doc(g, name)?;
-        self.register_group(g)?;
+    pub fn create_group(&self, name: &str) -> Result<GroupInfo> {
+        let mut r = self.lock();
+        let g = r.create_group().map_err(eng)?;
+        create_group_doc(&mut r, g, name)?;
+        register_group(&mut r, &self.meta, g)?;
         Ok(GroupInfo { group: g, name: name.to_string(), personal: false })
     }
 
-    fn register_group(&mut self, g: GroupId) -> Result<()> {
-        let (pg, idx) = (self.meta.personal, self.meta.index);
-        self.replica.doc(&pg, &idx).ok_or(Error::NotFound)?.get_map("groups").insert(&g.to_hex(), true).map_err(eng)?;
-        self.replica.commit(&pg, &idx).map_err(eng)
-    }
-
     pub fn groups(&self) -> Vec<GroupInfo> {
-        let mut out: Vec<GroupInfo> = self
-            .replica
-            .groups()
-            .into_iter()
-            .filter_map(|g| {
-                let gd = self.group_doc(&g)?;
-                let name = self.replica.doc(&g, &gd).and_then(|d| str_of(d.get_map("meta").get("name"))).unwrap_or_default();
-                Some(GroupInfo { group: g, name, personal: g == self.meta.personal })
-            })
-            .collect();
-        out.sort_by(|a, b| b.personal.cmp(&a.personal).then(a.name.cmp(&b.name)));
-        out
+        groups_of(&self.lock(), self.meta.personal)
     }
 
     /// Create a list in `group`, or a solo list in the personal group.
-    pub fn create_list(&mut self, group: Option<GroupId>, name: &str) -> Result<ListInfo> {
+    pub fn create_list(&self, group: Option<GroupId>, name: &str) -> Result<ListInfo> {
+        let mut r = self.lock();
         let g = group.unwrap_or(self.meta.personal);
-        let gd = self.group_doc(&g).ok_or(Error::NotFound)?;
-        let d = self.replica.create_doc(&g).map_err(eng)?;
+        let gd = group_doc(&r, &g).ok_or(Error::NotFound)?;
+        let d = r.create_doc(&g).map_err(eng)?;
         {
-            let doc = self.replica.doc(&g, &d).unwrap();
+            let doc = r.doc(&g, &d).unwrap();
             crate::init_list(doc, name)?;
             doc.get_map("meta").insert("kind", "list").map_err(eng)?;
         }
-        self.replica.commit(&g, &d).map_err(eng)?;
-        self.replica.doc(&g, &gd).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
-        self.replica.commit(&g, &gd).map_err(eng)?;
-        let group_name = self.groups().into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
+        r.commit(&g, &d).map_err(eng)?;
+        r.doc(&g, &gd).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
+        r.commit(&g, &gd).map_err(eng)?;
+        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: g, doc: d, name: name.to_string(), group_name })
     }
 
     /// All lists on this device, across all groups.
     pub fn lists(&self) -> Vec<ListInfo> {
-        let mut out = Vec::new();
-        for gi in self.groups() {
-            let Some(gd) = self.group_doc(&gi.group) else { continue };
-            let Some(gdoc) = self.replica.doc(&gi.group, &gd) else { continue };
-            let listed: Vec<DocId> = match gdoc.get_map("lists").get_deep_value() {
-                LoroValue::Map(m) => m
-                    .iter()
-                    .filter(|(_, v)| matches!(v, LoroValue::Bool(true)))
-                    .filter_map(|(k, _)| DocId::from_hex(k))
-                    .collect(),
-                _ => Vec::new(),
-            };
-            for d in listed {
-                if let Some(doc) = self.replica.doc(&gi.group, &d) {
-                    out.push(ListInfo { group: gi.group, doc: d, name: crate::list_name(doc), group_name: gi.name.clone() });
-                }
-            }
-        }
-        out.sort_by(|a, b| a.group_name.cmp(&b.group_name).then(a.name.cmp(&b.name)));
-        out
+        lists_of(&self.lock(), self.meta.personal)
     }
 
     /// Find a list by exact name or by a prefix of its document ID.
@@ -234,52 +246,61 @@ impl App {
         }
     }
 
+    /// Read a list's document.
+    pub fn read<T>(&self, list: &ListInfo, f: impl FnOnce(&LoroDoc) -> T) -> Result<T> {
+        let r = self.lock();
+        Ok(f(r.doc(&list.group, &list.doc).ok_or(Error::NotFound)?))
+    }
+
     /// Run an edit on a list's document and commit it.
-    pub fn edit<T>(&mut self, list: &ListInfo, f: impl FnOnce(&LoroDoc) -> Result<T>) -> Result<T> {
-        let doc = self.replica.doc(&list.group, &list.doc).ok_or(Error::NotFound)?;
-        let out = f(doc)?;
-        self.replica.commit(&list.group, &list.doc).map_err(eng)?;
+    pub fn edit<T>(&self, list: &ListInfo, f: impl FnOnce(&LoroDoc) -> Result<T>) -> Result<T> {
+        let mut r = self.lock();
+        let out = f(r.doc(&list.group, &list.doc).ok_or(Error::NotFound)?)?;
+        r.commit(&list.group, &list.doc).map_err(eng)?;
         Ok(out)
     }
 
     /// Move a list into another group: copy its live state (stable task IDs kept) and
     /// remove it from the old group's index.
-    pub fn move_list(&mut self, list: &ListInfo, to: GroupId) -> Result<ListInfo> {
+    pub fn move_list(&self, list: &ListInfo, to: GroupId) -> Result<ListInfo> {
         if list.group == to {
             return Ok(list.clone());
         }
-        let peer = self.replica.identity().peer_id();
-        let copy = crate::rebuild(self.replica.doc(&list.group, &list.doc).ok_or(Error::NotFound)?, peer)?;
+        let mut r = self.lock();
+        let peer = r.identity().peer_id();
+        let copy = crate::rebuild(r.doc(&list.group, &list.doc).ok_or(Error::NotFound)?, peer)?;
         let snapshot = copy.export(loro::ExportMode::Snapshot).map_err(eng)?;
-        let gd_to = self.group_doc(&to).ok_or(Error::NotFound)?;
-        let d = self.replica.create_doc(&to).map_err(eng)?;
-        self.replica.doc(&to, &d).unwrap().import(&snapshot).map_err(eng)?;
-        self.replica.commit(&to, &d).map_err(eng)?;
-        self.replica.doc(&to, &gd_to).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
-        self.replica.commit(&to, &gd_to).map_err(eng)?;
-        let gd_from = self.group_doc(&list.group).ok_or(Error::NotFound)?;
-        self.replica.doc(&list.group, &gd_from).unwrap().get_map("lists").insert(&list.doc.to_hex(), false).map_err(eng)?;
-        self.replica.commit(&list.group, &gd_from).map_err(eng)?;
-        let group_name = self.groups().into_iter().find(|x| x.group == to).map(|x| x.name).unwrap_or_default();
+        let gd_to = group_doc(&r, &to).ok_or(Error::NotFound)?;
+        let d = r.create_doc(&to).map_err(eng)?;
+        r.doc(&to, &d).unwrap().import(&snapshot).map_err(eng)?;
+        r.commit(&to, &d).map_err(eng)?;
+        r.doc(&to, &gd_to).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
+        r.commit(&to, &gd_to).map_err(eng)?;
+        let gd_from = group_doc(&r, &list.group).ok_or(Error::NotFound)?;
+        r.doc(&list.group, &gd_from).unwrap().get_map("lists").insert(&list.doc.to_hex(), false).map_err(eng)?;
+        r.commit(&list.group, &gd_from).map_err(eng)?;
+        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == to).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: to, doc: d, name: list.name.clone(), group_name })
     }
 
-    /// Manual sharing for the prototype: add another device to a group and return the
-    /// messages it needs to join. (Invites and device linking replace this in M3.)
-    pub fn share_group_with_device(&mut self, group: GroupId, device: DevicePublic) -> Result<Vec<Vec<u8>>> {
+    /// Manual sharing (file bundles): add another device to a group and return the
+    /// messages it needs to join. Invites (`create_invite`) are the normal way.
+    pub fn share_group_with_device(&self, group: GroupId, device: DevicePublic) -> Result<Vec<Vec<u8>>> {
         if group == self.meta.personal {
-            return Err(Error::Invalid("the personal group is only for your own devices (device linking, M3)".into()));
+            return Err(Error::Invalid("the personal group is only for your own devices (device linking)".into()));
         }
-        self.replica.add_member(&group, device).map_err(eng)?;
-        self.replica.export_group(&group).map_err(eng)
+        let mut r = self.lock();
+        r.add_member(&group, device).map_err(eng)?;
+        r.export_group(&group).map_err(eng)
     }
 
     /// Accept a join bundle produced by [`App::share_group_with_device`].
-    pub fn join_from_bundle(&mut self, group: GroupId, messages: &[Vec<u8>]) -> Result<()> {
-        self.replica.accept_group(group);
+    pub fn join_from_bundle(&self, group: GroupId, messages: &[Vec<u8>]) -> Result<()> {
+        let mut r = self.lock();
+        r.accept_group(group);
         for m in messages {
-            let _ = self.replica.receive(m);
+            let _ = r.receive(m);
         }
-        self.register_group(group)
+        register_group(&mut r, &self.meta, group)
     }
 }
