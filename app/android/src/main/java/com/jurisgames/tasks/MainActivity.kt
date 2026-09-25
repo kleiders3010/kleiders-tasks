@@ -30,6 +30,17 @@ class MainActivity : ComponentActivity() {
         setContent {
             var node by remember { mutableStateOf(app.node) }
             val scope = rememberCoroutineScope()
+            val importList = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) scope.launch {
+                    val msg = try {
+                        val l = withContext(Dispatchers.IO) { node.importListFile(null, contentResolver.openInputStream(uri)!!.use { it.readBytes() }) }
+                        "Imported ${l.name}"
+                    } catch (e: Exception) {
+                        e.message ?: "Not a list file"
+                    }
+                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                }
+            }
             val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) scope.launch {
                     try {
@@ -49,12 +60,20 @@ class MainActivity : ComponentActivity() {
             }, update = update.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
             }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
-                // Markdown through the share sheet (Obsidian, notes apps, email).
-                val send = Intent(Intent.ACTION_SEND).setType("text/markdown")
+                // Both formats at once: readable Markdown as text (Obsidian, notes apps,
+                // email) and the re-importable .tasklist file attached.
+                val dir = java.io.File(cacheDir, "exports").apply { mkdirs() }
+                val safe = l.name.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").take(60).ifBlank { "list" }
+                val file = java.io.File(dir, "$safe.tasklist")
+                file.writeBytes(node.exportListFile(l.id))
+                val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file)
+                val send = Intent(Intent.ACTION_SEND).setType("application/octet-stream")
                     .putExtra(Intent.EXTRA_SUBJECT, l.name)
                     .putExtra(Intent.EXTRA_TEXT, node.exportMarkdown(l.id))
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 startActivity(Intent.createChooser(send, "Export ${l.name}"))
-            })
+            }, onImport = { importList.launch(arrayOf("*/*")) })
         }
     }
 

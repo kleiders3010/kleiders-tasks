@@ -739,6 +739,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_join_code(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_keep_replaced_device(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_link_code(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_link_confirm(
@@ -753,7 +755,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_rename_task(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_replaced_device_groups(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
@@ -860,6 +866,8 @@ internal object UniffiLib {
     ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_join_code(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_keep_replaced_device(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_link_code(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_link_confirm(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -874,8 +882,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_relay_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_remove_replaced_device(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_rename_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_replaced_device_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1090,6 +1102,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_join_code() and 0xFFFF) != 30344) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_keep_replaced_device() and 0xFFFF) != 59535) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_link_code() and 0xFFFF) != 52526) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1111,7 +1126,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_relay_stats() and 0xFFFF) != 64491) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device() and 0xFFFF) != 49607) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_rename_task() and 0xFFFF) != 12754) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_replaced_device_groups() and 0xFFFF) != 27855) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
@@ -1981,6 +2002,11 @@ public interface KtNodeInterface {
     fun `joinCode`(`words`: kotlin.String): JoinResult
     
     /**
+     * The previous device was only reset: stop asking.
+     */
+    fun `keepReplacedDevice`()
+    
+    /**
      * A link code for adding another device to this account (valid a few hours).
      */
     fun `linkCode`(): InviteInfo
@@ -2013,7 +2039,18 @@ public interface KtNodeInterface {
      */
     fun `relayStats`(): List<RelayStat>
     
+    /**
+     * Remove the previous device from those groups (their keys rotate).
+     */
+    fun `removeReplacedDevice`(): kotlin.UInt
+    
     fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
+    
+    /**
+     * After a restore: how many groups the previous device is still in with us (0: nothing
+     * to offer). The app asks once: remove it (lost or stolen) or keep it (just reset).
+     */
+    fun `replacedDeviceGroups`(): kotlin.UInt
     
     /**
      * Set when this node was opened from a backup.
@@ -2478,6 +2515,21 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * The previous device was only reset: stop asking.
+     */override fun `keepReplacedDevice`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_keep_replaced_device(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    /**
      * A link code for adding another device to this account (valid a few hours).
      */
     @Throws(KtException::class)override fun `linkCode`(): InviteInfo {
@@ -2590,6 +2642,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    /**
+     * Remove the previous device from those groups (their keys rotate).
+     */
+    @Throws(KtException::class)override fun `removeReplacedDevice`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_remove_replaced_device(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(KtException::class)override fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
         = 
     callWithHandle {
@@ -2603,6 +2672,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 }
     }
     
+    
+
+    
+    /**
+     * After a restore: how many groups the previous device is still in with us (0: nothing
+     * to offer). The app asks once: remove it (lost or stolen) or keep it (just reset).
+     */override fun `replacedDeviceGroups`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_replaced_device_groups(
+        it,
+        _status)
+}
+    }
+    )
+    }
     
 
     

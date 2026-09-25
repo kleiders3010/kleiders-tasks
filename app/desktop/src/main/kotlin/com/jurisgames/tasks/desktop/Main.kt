@@ -101,7 +101,13 @@ fun main(args: Array<String>) {
         Window(onCloseRequest = {
             if (node.settings().syncInBackground) visible = false else { node.stopLive(); node.syncNow(); exitApplication() }
         }, visible = visible, title = "Tasks") {
-            TasksApp(node, update = update, onUpdate = { link ->
+            TasksApp(node, onImport = {
+                val dialog = FileDialog(null as Frame?, "Import a list file", FileDialog.LOAD).apply { file = "*.tasklist"; isVisible = true }
+                dialog.file?.let { f ->
+                    runCatching { node.importListFile(null, File(dialog.directory, f).readBytes()) }
+                        .onFailure { System.err.println("import failed: ${it.message}") } // prototype: no error UI yet
+                }
+            }, update = update, onUpdate = { link ->
                 runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(link)) }
             }, onSettings = { Autostart.apply(it.startWithComputer ?: true) }, onShare = { link ->
                 // Desktop: onto the clipboard, ready to paste into any chat.

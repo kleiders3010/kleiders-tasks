@@ -4,6 +4,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -29,9 +30,10 @@ class BackupFlowTest {
     @Test
     fun make() {
         assumeTrue(step == "make")
+        rule.onNodeWithTag("lists").performScrollToNode(hasTestTag("newlist-Personal"))
         rule.onNodeWithTag("newlist-Personal").performTextInput("Kept")
         rule.onNodeWithTag("addlist-Personal").performClick()
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("list-Kept")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("lists").performScrollToNode(hasTestTag("list-Kept"))
         val app = rule.activity.application as TasksApplication
         val file = File(app.filesDir, "backup/tasks.ktbackup")
         file.delete()
@@ -42,7 +44,8 @@ class BackupFlowTest {
     @Test
     fun check() {
         assumeTrue(step == "check")
-        rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("list-Kept")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("lists")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("lists").performScrollToNode(hasTestTag("list-Kept"))
         check(rule.onAllNodes(hasTestTag("restoredInfo")).fetchSemanticsNodes().isNotEmpty()) { "restored at first launch" }
     }
 }

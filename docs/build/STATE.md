@@ -105,10 +105,10 @@
 - [x] Android backup rules: only `files/backup/tasks.ktbackup` (cloud + device transfer); first-launch "Restore from a backup file" (document picker)
 - [x] Desktop: backup folder (`<app data>/backups` for now; the folder prompt comes with polished UI), restore from a file dialog; headless test `DesktopRestoreTest`
 - [x] Exports: Markdown (Obsidian Tasks format) and sealed `.tasklist` files (re-import starts a new list from the current state); `KtNode.export_markdown / export_list_file / import_list_file`; Export button (Android: Markdown via the share sheet; desktop: `.md` + `.tasklist` side by side)
-- [ ] `.tasklist` in the Android UI (share via FileProvider, open to import)
+- [x] `.tasklist` in the apps (2026-09-25): Android Export shares the Markdown text and the `.tasklist` file together (FileProvider, cache `exports/` only); "Import a list file" on Android (document picker) and desktop (file dialog). Test `FileShareTest`
 - [x] Android backup verified on the emulator (`scripts/android-backup-test.sh`, local transport): 5 KB backed up (only the sealed file), restored at reinstall, first launch restored the list, a new daily backup written
 - [ ] ~~Block Store~~, ~~Google Drive~~: deferred (2026-09-25, DECIDED): backups only matter for sole members who lose their device
-- [ ] The old device stays a member after a restore: offer to remove it (lost vs. reset is the user's call)
+- [x] After a restore, the previous device is offered for removal (2026-09-25): "Your previous device is still in N shared groups. If it was lost or stolen, remove it" with Remove it / Keep it, once the new device is back in; removal rotates those groups' keys (`App::replaced_device`, `remove_replaced_device`). Test in `kt-tasks/tests/backup.rs`
 
 ## Current state
 - **M4/M5 nearly done (2026-09-25).** Done since M4 started: backups and restore, exports, device linking (app side, with handovers and Undo), notifications (changes and joins), widget, tray and autostart, share links and QR, settings. Rust suite, desktop UI tests (smoke, link, restore, settings, autostart) and emulator tests (smoke, backup round trip, notifications, widget) green.

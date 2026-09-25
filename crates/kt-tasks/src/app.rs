@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use kt_engine::crypto::DevicePublic;
 use kt_engine::replica::Replica;
 use kt_engine::sandbox::SandboxConfig;
-use kt_engine::{storage, wire, DocId, GroupId};
+use kt_engine::{storage, wire, DeviceId, DocId, GroupId};
 use loro::{LoroDoc, LoroValue, ValueOrContainer};
 use serde::{Deserialize, Serialize};
 
@@ -59,6 +59,8 @@ pub struct RestoreSummary {
     pub rejoining: Vec<GroupId>,
     /// Lists from groups nobody else can let us back into, copied into our personal group.
     pub rehomed_lists: usize,
+    /// The device the backup came from (still a member of its groups until removed).
+    pub old_device: Option<DeviceId>,
 }
 
 /// A list as the UI sees it.
@@ -350,7 +352,10 @@ impl App {
             storage::write_atomic(&data_dir.join("app.meta"), &wire::encode(*b"AM", 1, &old).map_err(eng)?).map_err(eng)?;
         }
         let app = App::with_replica(replica, data_dir)?;
-        let mut summary = RestoreSummary::default();
+        let mut summary = RestoreSummary { old_device: Some(b.old_device), ..Default::default() };
+        // Remembered so the app can offer to remove it once we're back in (lost or stolen
+        // vs. just reset is the user's call, asked once).
+        storage::write_atomic(&data_dir.join("replaced_device"), &b.old_device.0).map_err(eng)?;
         {
             let mut r = app.lock();
             // The display name comes along (already there when the old personal group is ours).
@@ -415,6 +420,37 @@ impl App {
         r.commit(&g, &gd).map_err(eng)?;
         let group_name = groups_of(&r, self.meta().personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: g, doc: d, name, group_name })
+    }
+
+    /// After a restore: the previous device, and the groups we're back in where it's still
+    /// a member (we can only remove it where we're a member ourselves).
+    pub fn replaced_device(&self) -> Option<(DeviceId, Vec<GroupId>)> {
+        let b = std::fs::read(self.data_dir.join("replaced_device")).ok()?;
+        let old = DeviceId(b.as_slice().try_into().ok()?);
+        let r = self.lock();
+        let me = r.device_id();
+        let groups: Vec<GroupId> = r
+            .groups()
+            .into_iter()
+            .filter(|g| r.epochs(g).is_some_and(|e| e.is_current_member(&me) && e.is_current_member(&old)))
+            .collect();
+        Some((old, groups))
+    }
+
+    /// Remove the previous device from every group it's still in with us (keys rotate).
+    /// Returns how many groups it left; the offer ends when none are left.
+    pub fn remove_replaced_device(&self) -> Result<usize> {
+        let Some((old, groups)) = self.replaced_device() else { return Ok(0) };
+        let mut r = self.lock();
+        for g in &groups {
+            r.remove_member(g, old).map_err(eng)?;
+        }
+        Ok(groups.len())
+    }
+
+    /// Keep the previous device (it was reset, not lost): stop offering.
+    pub fn keep_replaced_device(&self) {
+        let _ = std::fs::remove_file(self.data_dir.join("replaced_device"));
     }
 
     /// Manual sharing (file bundles): add another device to a group and return the

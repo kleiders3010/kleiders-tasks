@@ -581,6 +581,25 @@ impl KtNode {
         self.restored.clone()
     }
 
+    /// After a restore: how many groups the previous device is still in with us (0: nothing
+    /// to offer). The app asks once: remove it (lost or stolen) or keep it (just reset).
+    pub fn replaced_device_groups(&self) -> u32 {
+        self.app.replaced_device().map(|(_, g)| g.len() as u32).unwrap_or(0)
+    }
+
+    /// Remove the previous device from those groups (their keys rotate).
+    pub fn remove_replaced_device(&self) -> Result<u32, KtError> {
+        let n = self.app.remove_replaced_device().map_err(fail)? as u32;
+        self.notify();
+        Ok(n)
+    }
+
+    /// The previous device was only reset: stop asking.
+    pub fn keep_replaced_device(&self) {
+        self.app.keep_replaced_device();
+        self.notify();
+    }
+
     /// Nothing made on this device yet: the first-launch screen may offer a restore.
     pub fn is_pristine(&self) -> bool {
         self.app.is_pristine()

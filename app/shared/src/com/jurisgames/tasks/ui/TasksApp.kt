@@ -53,6 +53,7 @@ fun TasksApp(
     openedCode: String? = null,
     onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)? = null,
     onScan: ((onResult: (String) -> Unit) -> Unit)? = null,
+    onImport: (() -> Unit)? = null,
     update: com.jurisgames.tasks.core.UpdateItem? = null,
     onUpdate: ((String) -> Unit)? = null,
 ) {
@@ -77,7 +78,7 @@ fun TasksApp(
                         TextButton(onClick = { onUpdate(update.link) }, modifier = Modifier.testTag("updateGo")) { Text("Update") }
                     }
                 }
-                ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onScan, onChanged = { version++ }, onOpen = { open = it })
+                ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onScan, onImport, onChanged = { version++ }, onOpen = { open = it })
             } else {
                 TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })
             }
@@ -94,6 +95,7 @@ private fun ListsScreen(
     openedCode: String?,
     onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)?,
     onScan: ((onResult: (String) -> Unit) -> Unit)?,
+    onImport: (() -> Unit)?,
     onChanged: () -> Unit,
     onOpen: (ListItem) -> Unit,
 ) {
@@ -136,6 +138,7 @@ private fun ListsScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextButton(onClick = { linkCode = node.linkCode() }, modifier = Modifier.testTag("linkDevice")) { Text("Link a device") }
             TextButton(onClick = { settingsOpen = true }, modifier = Modifier.testTag("settingsOpen")) { Text("Settings") }
+            if (onImport != null) TextButton(onClick = onImport, modifier = Modifier.testTag("importList")) { Text("Import a list file") }
             if (!isLinking) TextButton(onClick = { linkingThis = true }, modifier = Modifier.testTag("linkThis")) { Text("Link this device") }
         }
         if (isLinking) {
@@ -162,11 +165,24 @@ private fun ListsScreen(
                 modifier = Modifier.testTag("restoredInfo"),
             )
         }
+        val oldDeviceGroups = remember(node, version) { node.replacedDeviceGroups() }
+        if (oldDeviceGroups > 0u) {
+            Column(Modifier.testTag("oldDevice")) {
+                Text(
+                    "Your previous device is still in $oldDeviceGroups shared ${if (oldDeviceGroups == 1u) "group" else "groups"}. If it was lost or stolen, remove it.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Row {
+                    TextButton(onClick = { node.removeReplacedDevice(); onChanged() }, modifier = Modifier.testTag("oldDeviceRemove")) { Text("Remove it") }
+                    TextButton(onClick = { node.keepReplacedDevice(); onChanged() }, modifier = Modifier.testTag("oldDeviceKeep")) { Text("Keep it") }
+                }
+            }
+        }
         if (onRestore != null && remember(node, version) { node.isPristine() }) {
             TextButton(onClick = onRestore, modifier = Modifier.testTag("restore")) { Text("Restore from a backup file") }
         }
         HorizontalDivider()
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(Modifier.weight(1f).testTag("lists")) {
             for (g in groups) {
                 item(key = "g" + g.id) {
                     Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {

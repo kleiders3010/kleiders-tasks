@@ -102,6 +102,15 @@ fn a_lost_device_comes_back_from_its_backup() {
     n.edit(&g, |d| tk::add_task(d, None, "eggs").map_err(Into::into)).unwrap();
     mb.sync(&[&n, &b]);
     assert_eq!(titles(&b, "Groceries"), ["milk", "eggs"]);
+
+    // The old phone is still in the group: the restored device can remove it.
+    let old = summary.old_device.expect("old device known");
+    let (who, groups) = n.replaced_device().expect("offer");
+    assert_eq!((who, groups.clone()), (old, vec![fam.group]));
+    assert_eq!(n.remove_replaced_device().unwrap(), 1);
+    mb.sync(&[&n, &b]);
+    assert!(!b.with(|r| r.epochs(&fam.group).unwrap().is_current_member(&old)), "removed for everyone");
+    assert!(n.replaced_device().unwrap().1.is_empty(), "nothing left to offer");
 }
 
 /// With another device of ours still around (device linking), the personal group comes
