@@ -41,6 +41,8 @@ pub struct TaskView {
     pub title: String,
     pub done: bool,
     pub notes: String,
+    /// A timed reminder (ms since the epoch), shared like any field.
+    pub remind_ms: Option<u64>,
     pub children: Vec<TaskView>,
 }
 
@@ -153,6 +155,18 @@ pub fn set_notes(doc: &LoroDoc, task: &str, notes: &str) -> Result<()> {
     Ok(())
 }
 
+/// Set or clear a task's reminder (ms since the epoch).
+pub fn set_reminder(doc: &LoroDoc, task: &str, at_ms: Option<u64>) -> Result<()> {
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    match at_ms {
+        Some(t) => meta.insert("remind_ms", t as i64).map_err(loro)?,
+        None => meta.delete("remind_ms").map_err(loro)?,
+    }
+    doc.commit();
+    Ok(())
+}
+
 pub fn delete_task(doc: &LoroDoc, task: &str) -> Result<()> {
     let n = find(doc, task)?;
     tree(doc).delete(n).map_err(loro)?;
@@ -176,6 +190,10 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
     let meta = t.get_meta(n).ok()?;
     let children = t.children(Some(n)).unwrap_or_default().into_iter().filter_map(|c| view_of(t, c)).collect();
     Some(TaskView {
+        remind_ms: match meta.get("remind_ms") {
+            Some(ValueOrContainer::Value(LoroValue::I64(v))) if v > 0 => Some(v as u64),
+            _ => None,
+        },
         id: get_str(&meta, "id").unwrap_or_default(),
         title: get_str(&meta, "title").unwrap_or_default(),
         done: get_bool(&meta, "done").unwrap_or(false),

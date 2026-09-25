@@ -81,12 +81,28 @@ fun main(args: Array<String>) {
     application {
         var node by remember { mutableStateOf(first) }
         var visible by remember { mutableStateOf(!background) }
+        val trayState = androidx.compose.ui.window.rememberTrayState()
+        // Reminders (§12): the tray app shows them when they're due.
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            val shown = mutableSetOf<String>()
+            while (true) {
+                val now = System.currentTimeMillis()
+                for (r in node.upcomingReminders()) {
+                    val key = r.listId + "|" + r.taskId + "|" + r.atMs
+                    if (r.atMs.toLong() <= now && shown.add(key)) {
+                        trayState.sendNotification(androidx.compose.ui.window.Notification(r.title, r.listName, androidx.compose.ui.window.Notification.Type.Info))
+                    }
+                }
+                kotlinx.coroutines.delay(30_000)
+            }
+        }
         var update by remember { mutableStateOf<com.jurisgames.tasks.core.UpdateItem?>(null) }
         androidx.compose.runtime.LaunchedEffect(Unit) {
             val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
             update = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { node.checkUpdate(VERSION_CODE, channel) }
         }
         Tray(
+            state = trayState,
             icon = TrayIcon,
             tooltip = "Tasks",
             onAction = { visible = true },

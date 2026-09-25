@@ -117,7 +117,7 @@
 - [ ] Text attachments for long notes (blob layer; currently refused)
 - [x] Same-Wi-Fi (LAN) layer in the apps: beacons while open, a direct round when a member is heard, LAN as an invite layer; Android multicast lock while open. Also fixed: `start_live` marked the app closed right after opening it (phone helping never saw the app open)
 - [x] Android network changes go to iroh (`network_changed`); phone helping is off in battery saver, below 20 % battery, at severe heat, or with data saver
-- [ ] Reminders (exact alarms, permission asked when first needed, rescheduled after a restore)
+- [x] Reminders (D43): `remind_ms` on tasks (shared like any field), `set_reminder` / `upcoming_reminders`; Android exact alarms when allowed (inexact otherwise), rescheduled after syncs, on leaving the app, at boot, after updates and when the exact-alarm permission is granted; the permission is asked once when a reminder first needs it (also after a restore); reminder button per task (in 1 hour, tomorrow 9:00, clear); desktop shows due reminders from the tray. Test `ReminderTest`
 - [ ] Format versioning: keep and pass on newer data, feature floor, "update available" from newer formats; required updates only via a signed manifest or Play priority
 - [ ] Golden corpus: old/new version interoperability tests
 - [ ] Keys in OS secure storage (Android Keystore, desktop keyring)

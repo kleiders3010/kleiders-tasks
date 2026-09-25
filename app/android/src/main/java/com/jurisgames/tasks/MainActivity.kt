@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
         multicast.acquire() // Android drops multicast (LAN beacons) without it
         app.node.startLive() // app open: live on every layer
         askForNotificationsWhenShared()
+        askForExactAlarmsIfNeeded()
         checkForUpdate()
     }
 
@@ -124,8 +125,19 @@ class MainActivity : ComponentActivity() {
         getSystemService(android.net.wifi.WifiManager::class.java).createMulticastLock("tasks-lan").apply { setReferenceCounted(false) }
     }
 
+    /** Asked once, the first time there's a reminder the phone can't set on time (also
+     *  after a restore: the permission doesn't come back with it, D43). */
+    private fun askForExactAlarmsIfNeeded() {
+        if (Build.VERSION.SDK_INT < 31 || Reminders.canBeExact(this)) return
+        val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
+        if (prefs.getBoolean("asked", false) || app.node.upcomingReminders().isEmpty()) return
+        prefs.edit().putBoolean("asked", true).apply()
+        runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) }
+    }
+
     override fun onStop() {
         if (multicast.isHeld) multicast.release()
+        runCatching { Reminders.reschedule(this) }
         lifecycleScope.launch { TasksWidget.refresh(applicationContext) } // edits made in the app
         app.node.stopLive()
         SyncWorker.flushNow(this) // everything is saved; send it without waiting (§8)

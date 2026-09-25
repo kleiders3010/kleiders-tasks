@@ -18,6 +18,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         node.syncNow()
         ChangeNotifier.post(applicationContext, node.takeChanges())
         TasksWidget.refresh(applicationContext) // every change redraws the widget
+        Reminders.reschedule(applicationContext) // others' reminders arrive by sync too
         return Result.success()
     }
 

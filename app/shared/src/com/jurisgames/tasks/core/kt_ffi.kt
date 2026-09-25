@@ -775,6 +775,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_reminder(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_settings(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_settings(
@@ -792,6 +794,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_undo_changes_by(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_unlink_device(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_upcoming_reminders(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_write_backup(
     ): Int
@@ -908,6 +912,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_reminder(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`atMs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_settings(`ptr`: Long,`new`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_settings(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -926,6 +932,8 @@ internal object UniffiLib {
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_unlink_device(`ptr`: Long,`deviceId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_upcoming_reminders(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_func_android_context_ready(uniffi_out_err: UniffiRustCallStatus, 
@@ -1168,6 +1176,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_reminder() and 0xFFFF) != 62604) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_settings() and 0xFFFF) != 5947) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1193,6 +1204,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_unlink_device() and 0xFFFF) != 3021) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_upcoming_reminders() and 0xFFFF) != 16505) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_write_backup() and 0xFFFF) != 29557) {
@@ -2103,6 +2117,11 @@ public interface KtNodeInterface {
     fun `setListener`(`listener`: KtListener)
     
     /**
+     * Set or clear a task's reminder (shared with everyone in the list, like any field).
+     */
+    fun `setReminder`(`listId`: kotlin.String, `taskId`: kotlin.String, `atMs`: kotlin.ULong?)
+    
+    /**
      * Save the settings screen. Settings that don't exist on this platform are refused.
      */
     fun `setSettings`(`new`: Settings)
@@ -2146,6 +2165,11 @@ public interface KtNodeInterface {
      * Undo a link: the device leaves the account and every group (keys rotate).
      */
     fun `unlinkDevice`(`deviceId`: kotlin.String)
+    
+    /**
+     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
+     */
+    fun `upcomingReminders`(): List<ReminderItem>
     
     /**
      * Write a sealed backup now (export, or before a risky operation).
@@ -2845,6 +2869,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * Set or clear a task's reminder (shared with everyone in the list, like any field).
+     */
+    @Throws(KtException::class)override fun `setReminder`(`listId`: kotlin.String, `taskId`: kotlin.String, `atMs`: kotlin.ULong?)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_reminder(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterOptionalULong.lower(`atMs`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * Save the settings screen. Settings that don't exist on this platform are refused.
      */
     @Throws(KtException::class)override fun `setSettings`(`new`: Settings)
@@ -2991,6 +3034,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 }
     }
     
+    
+
+    
+    /**
+     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
+     */override fun `upcomingReminders`(): List<ReminderItem> {
+            return FfiConverterSequenceTypeReminderItem.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_upcoming_reminders(
+        it,
+        _status)
+}
+    }
+    )
+    }
     
 
     
@@ -3715,6 +3774,62 @@ public object FfiConverterTypeRelayStat: FfiConverterRustBuffer<RelayStat> {
 
 
 /**
+ * An upcoming reminder (the platform schedules an alarm for each).
+ */
+data class ReminderItem (
+    var `listId`: kotlin.String
+    , 
+    var `listName`: kotlin.String
+    , 
+    var `taskId`: kotlin.String
+    , 
+    var `title`: kotlin.String
+    , 
+    var `atMs`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeReminderItem: FfiConverterRustBuffer<ReminderItem> {
+    override fun read(buf: ByteBuffer): ReminderItem {
+        return ReminderItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ReminderItem) = (
+            FfiConverterString.allocationSize(value.`listId`) +
+            FfiConverterString.allocationSize(value.`listName`) +
+            FfiConverterString.allocationSize(value.`taskId`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterULong.allocationSize(value.`atMs`)
+    )
+
+    override fun write(value: ReminderItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`listId`, buf)
+            FfiConverterString.write(value.`listName`, buf)
+            FfiConverterString.write(value.`taskId`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterULong.write(value.`atMs`, buf)
+    }
+}
+
+
+
+/**
  * What a restore did.
  */
 data class RestoreInfo (
@@ -3909,6 +4024,11 @@ data class TaskItem (
     var `done`: kotlin.Boolean
     , 
     var `notes`: kotlin.String
+    , 
+    /**
+     * A timed reminder (ms since the epoch).
+     */
+    var `remindMs`: kotlin.ULong?
     
 ){
     
@@ -3931,6 +4051,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
@@ -3940,7 +4061,8 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterUInt.allocationSize(value.`depth`) +
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterBoolean.allocationSize(value.`done`) +
-            FfiConverterString.allocationSize(value.`notes`)
+            FfiConverterString.allocationSize(value.`notes`) +
+            FfiConverterOptionalULong.allocationSize(value.`remindMs`)
     )
 
     override fun write(value: TaskItem, buf: ByteBuffer) {
@@ -3950,6 +4072,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterBoolean.write(value.`done`, buf)
             FfiConverterString.write(value.`notes`, buf)
+            FfiConverterOptionalULong.write(value.`remindMs`, buf)
     }
 }
 
@@ -4092,6 +4215,38 @@ public object FfiConverterTypePlatform: FfiConverterRustBuffer<Platform> {
 }
 
 
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
+    override fun read(buf: ByteBuffer): kotlin.ULong? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterULong.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.ULong?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterULong.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.ULong?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterULong.write(value, buf)
+        }
+    }
+}
 
 
 
@@ -4469,6 +4624,34 @@ public object FfiConverterSequenceTypeRelayStat: FfiConverterRustBuffer<List<Rel
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeRelayStat.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeReminderItem: FfiConverterRustBuffer<List<ReminderItem>> {
+    override fun read(buf: ByteBuffer): List<ReminderItem> {
+        val len = buf.getInt()
+        return List<ReminderItem>(len) {
+            FfiConverterTypeReminderItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ReminderItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeReminderItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ReminderItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeReminderItem.write(it, buf)
         }
     }
 }

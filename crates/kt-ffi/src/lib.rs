@@ -196,6 +196,18 @@ pub struct TaskItem {
     pub title: String,
     pub done: bool,
     pub notes: String,
+    /// A timed reminder (ms since the epoch).
+    pub remind_ms: Option<u64>,
+}
+
+/// An upcoming reminder (the platform schedules an alarm for each).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ReminderItem {
+    pub list_id: String,
+    pub list_name: String,
+    pub task_id: String,
+    pub title: String,
+    pub at_ms: u64,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -316,7 +328,7 @@ fn gid(s: &str) -> Result<GroupId, KtError> {
 
 fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
     for t in ts {
-        out.push(TaskItem { id: t.id.clone(), parent_id: parent.map(str::to_string), depth, title: t.title.clone(), done: t.done, notes: t.notes.clone() });
+        out.push(TaskItem { id: t.id.clone(), parent_id: parent.map(str::to_string), depth, title: t.title.clone(), done: t.done, notes: t.notes.clone(), remind_ms: t.remind_ms });
         flatten(&t.children, Some(&t.id), depth + 1, out);
     }
 }
@@ -697,6 +709,37 @@ impl KtNode {
     pub fn set_done(&self, list_id: String, task_id: String, done: bool) -> Result<(), KtError> {
         let l = self.list(&list_id)?;
         self.app.edit(&l, |d| kt_tasks::set_done(d, &task_id, done)).map_err(fail)
+    }
+
+    /// Set or clear a task's reminder (shared with everyone in the list, like any field).
+    pub fn set_reminder(&self, list_id: String, task_id: String, at_ms: Option<u64>) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::set_reminder(d, &task_id, at_ms)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Reminders of open tasks from an hour ago on, across all lists, soonest first.
+    pub fn upcoming_reminders(&self) -> Vec<ReminderItem> {
+        fn walk(ts: &[kt_tasks::TaskView], l: &ListInfo, from: u64, out: &mut Vec<ReminderItem>) {
+            for t in ts {
+                if let (Some(at), false) = (t.remind_ms, t.done) {
+                    if at >= from {
+                        out.push(ReminderItem { list_id: l.doc.to_hex(), list_name: l.name.clone(), task_id: t.id.clone(), title: t.title.clone(), at_ms: at });
+                    }
+                }
+                walk(&t.children, l, from, out);
+            }
+        }
+        let from = kt_engine::replica::now_ms().saturating_sub(3_600_000);
+        let mut out = Vec::new();
+        for l in self.app.lists() {
+            if let Ok(ts) = self.app.read(&l, kt_tasks::tasks) {
+                walk(&ts, &l, from, &mut out);
+            }
+        }
+        out.sort_by_key(|r| r.at_ms);
+        out
     }
 
     pub fn rename_task(&self, list_id: String, task_id: String, title: String) -> Result<(), KtError> {
