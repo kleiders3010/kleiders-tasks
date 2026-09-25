@@ -24,3 +24,5 @@ argon2.workspace = true
 
 [dev-dependencies]
 rand.workspace = true
+kt-fuzz = { path = "../kt-fuzz" }
+serde.workspace = true

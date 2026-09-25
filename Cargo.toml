@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/kt-engine", "crates/kt-tasks", "crates/kt-net", "crates/kt-cli", "crates/kt-ffi"]
+members = ["crates/kt-engine", "crates/kt-tasks", "crates/kt-net", "crates/kt-cli", "crates/kt-ffi", "crates/kt-fuzz"]
 exclude = ["research"]
 
 [workspace.package]

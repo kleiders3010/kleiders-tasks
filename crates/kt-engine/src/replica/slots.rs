@@ -143,7 +143,7 @@ pub struct SlotReport {
     pub parked: usize,
 }
 
-fn slot_aad(group: &GroupId, epoch: &EpochId, topic: &[u8; 32]) -> Vec<u8> {
+pub(super) fn slot_aad(group: &GroupId, epoch: &EpochId, topic: &[u8; 32]) -> Vec<u8> {
     let mut v = Vec::with_capacity(110);
     v.extend_from_slice(b"kt/slot/v1");
     v.extend_from_slice(&group.0);

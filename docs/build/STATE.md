@@ -27,6 +27,7 @@
 - [x] Document epochs: propose / verify / switch; rebase path; removal cutoffs; concurrent proposals (D24, D26): `kt-tasks/tests/doc_epochs.rs`
 - [x] Simulated-network harness + property tests (convergence, removal, impersonation, poison containment): `crates/kt-engine/tests/sim.rs`
 - [x] `kt-cli` (`kt`): lists, tasks, share / join bundles, send / recv message files, epochs, info. Two-device demo verified
+- [x] Fuzzing of every parser of untrusted input (2026-09-25, `crates/kt-fuzz`: a stable-Rust mutation fuzzer run in ordinary tests; seeds are valid inputs from the real code; encrypted layers are fuzzed from the inside through hidden sealing hooks; failures are saved to `target/fuzz-failures/`). Targets: messages, slot payloads, envelope contents, epoch records, invite records and join requests, whereabouts, LAN beacons, backups (open and restore), typed codes (kt-engine `tests/fuzz.rs`); helper frames and disk copy, P2P frames, DHT refs, Nostr chunks (kt-net unit tests); share links, update and operator manifests, helper announcements, persisted files (kt-net `tests/fuzz.rs`); `.tasklist` files and app restores (kt-tasks `tests/fuzz.rs`). Reach assertions check mutations get past decoding. Long run: 50,000 inputs per target in release, no failures. Long runs: `KT_FUZZ_ITERS=1000000 cargo test --release --test fuzz`
 
 ### M2: Transports
 - [x] Mailbox slots in the engine (`replica/slots.rs`): sealed per-device slots under rotating topics, forward slots across key epochs, epoch records first, signed per-document status, previous-generation carry
@@ -43,7 +44,8 @@
 - [x] Discovery via slots (whereabouts) and the **Mainline DHT** (`kt-net/src/dht.rs`, engine `replica/discovery.rs`): sealed, device-signed records at member-only locations that rotate with key epochs. Local testnet test + **public DHT from the tablet**: published and found by the other member device, ~20 s per publish+lookup round
 - [x] LAN discovery (`kt-net/src/lan.rs`, D57): beacons with 10-minute rotating tags and sealed device-signed whereabouts, padded entry counts; members learn LAN addresses and dial directly; outsiders learn nothing. Tested on loopback; multicast on a real LAN not yet tested (it would trigger a Windows firewall prompt on this PC)
 - [x] P2P membership proof: `Hello` carries the dialer's device-signed whereabouts naming its endpoint, so a responder serves a member it hasn't heard of yet
-- [ ] n0 DNS discovery as an optional best-effort layer (a config flag on the iroh endpoint)
+- [x] n0 DNS discovery as a best-effort layer (`P2pConfig::n0_dns`: pkarr publish + DNS lookup through n0) and n0's public relays added *next to* our own relays (`n0_relays` now keeps the custom map, so helper relays still work); both on in the app (2026-09-25). Before this the app used neither. Live test `kt-net/tests/n0_dns.rs` (`--ignored`) on the tablet: found by endpoint ID alone and fetched in 7.4 s. On the dev PC it can't pass bound to loopback (no home relay without internet on the UDP socket; binding all interfaces would trigger the firewall prompt)
+- [x] Android context for iroh (found by the n0 test): iroh's DNS resolver and network monitor call `ndk-context`, which panicked on worker threads because JNA-loaded libraries never get the app Context. Fixed: the app also `System.loadLibrary`s kt_ffi and registers the Context (`kt-ffi/src/android.rs`); `SmokeTest` asserts it on the emulator and the tablet
 - [x] Live mode (`kt-net/src/live.rs`): Nostr live subscriptions push members' slots (29 ms locally); knocks (ephemeral kind 25711, throwaway keys, sealed whereabouts) make online members dial each other at once (D49 (b) signaling)
 - [x] Helper storage (`kt-net/src/helper.rs`): RAM store for strangers' slots on the device's iroh endpoint (ALPN `kt/helper/1`); signed puts; load-scaled proof of work for new slots (refreshes free); per-topic and young-topic caps; eviction by least recent refresh; session start for restart detection. `HelperMailbox` client (plugs into the mailbox interface) with local reliability records (reachability, latency, withholding, restarts, exclusion). Tested: a stranger's helper carries changes between members who are never online together
 - [x] Helper replication (fan-out lists, forwarded signed puts), handoff before going offline, declared evictions
@@ -102,8 +104,7 @@
 - [x] Exports: Markdown (Obsidian Tasks format) and sealed `.tasklist` files (re-import starts a new list from the current state); `KtNode.export_markdown / export_list_file / import_list_file`; Export button (Android: Markdown via the share sheet; desktop: `.md` + `.tasklist` side by side)
 - [ ] `.tasklist` in the Android UI (share via FileProvider, open to import)
 - [x] Android backup verified on the emulator (`scripts/android-backup-test.sh`, local transport): 5 KB backed up (only the sealed file), restored at reinstall, first launch restored the list, a new daily backup written
-- [ ] Block Store (`play` flavor; needs Play Services, so not on the test tablet)
-- [ ] Google Drive (opt-in)
+- [ ] ~~Block Store~~, ~~Google Drive~~: deferred (2026-09-25, DECIDED): backups only matter for sole members who lose their device
 - [ ] The old device stays a member after a restore: offer to remove it (lost vs. reset is the user's call)
 
 ## Current state
@@ -111,8 +112,7 @@
 - Release builds with R8: play 10.3 MB, foss 10.6 MB download, verified running (bundletool 1.18.3 in `~/tools`). Gradle tasks are now per flavor (`assemblePlayDebug`, `bundlePlayRelease`, ...).
 
 ## Next action
-1. Block Store (play flavor; needs a decision on sealing backups with a Block Store key, and a device with Play Services).
-2. Parser hardening/fuzzing (DESIGN §9), n0 DNS option (M2).
+1. The remaining unchecked items above (most need hosting, a real camera, or are deferred).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).

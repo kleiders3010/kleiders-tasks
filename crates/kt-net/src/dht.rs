@@ -233,3 +233,22 @@ impl DhtDiscovery {
 fn now_secs() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
 }
+
+/// Fuzzing (DESIGN §9): DHT values are written by anyone.
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    #[test]
+    fn helper_refs() {
+        let key = iroh::SecretKey::from_bytes(&[6; 32]);
+        let me = crate::helper::HelperRef { endpoint: *key.public().as_bytes(), ips: vec!["192.0.2.3:1".parse().unwrap()], relays: vec![] };
+        let sig = key.sign(&ref_message(&me, 20_000)).to_bytes().to_vec();
+        let seeds = vec![postcard::to_stdvec(&vec![SignedRef { helper: me, day: 20_000, sig }]).unwrap()];
+        kt_fuzz::run("dht-refs", &seeds, 2.0, |b| {
+            for r in postcard::from_bytes::<Vec<SignedRef>>(b).unwrap_or_default() {
+                let _ = verified(&r);
+            }
+        });
+    }
+}

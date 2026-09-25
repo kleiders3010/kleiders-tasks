@@ -80,9 +80,20 @@ impl Envelope {
             return Err(Error::Invalid("inner peer must be the sender's bound PeerID".into()));
         }
         let inner_bytes = wire::encode(INNER_TAG, VERSION, inner)?;
-        let sealed = crypto::seal(&env_key(epoch_key, &inner.group), &aad(&epoch, &me.id()), &inner_bytes);
+        Envelope::seal_bytes(me, epoch, epoch_key, &inner.group, &inner_bytes)
+    }
+
+    /// Seal already-encoded inner bytes (also used by the fuzz tests to reach the parser
+    /// behind the encryption).
+    pub fn seal_bytes(me: &DeviceIdentity, epoch: EpochId, epoch_key: &SymKey, group: &GroupId, inner_bytes: &[u8]) -> Result<Envelope> {
+        let sealed = crypto::seal(&env_key(epoch_key, group), &aad(&epoch, &me.id()), inner_bytes);
         let sig = me.sign(&signed_bytes(&epoch, &me.id(), &sealed)).to_vec();
         Ok(Envelope { epoch, sender: me.id(), sealed, sig })
+    }
+
+    /// Decrypt without checks (fuzz seeds only; [`Envelope::open`] is the real path).
+    pub fn open_bytes(&self, group: &GroupId, epoch_key: &SymKey) -> Result<Vec<u8>> {
+        Ok(crypto::open(&env_key(epoch_key, group), &aad(&self.epoch, &self.sender), &self.sealed)?)
     }
 
     /// Verify and open an envelope for `group`, using the epoch graph and the epoch key.

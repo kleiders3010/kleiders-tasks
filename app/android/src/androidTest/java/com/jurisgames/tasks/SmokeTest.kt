@@ -1,9 +1,9 @@
 package com.jurisgames.tasks
 
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -26,8 +26,11 @@ class SmokeTest {
         rule.onNodeWithTag("newtask").performTextInput("milk")
         rule.onNodeWithTag("addtask").performClick()
         rule.waitUntil(5_000) { rule.onAllNodesWithTagExists("task-milk") }
-        rule.onNodeWithTag("task-milk").assertIsDisplayed()
-        rule.onNodeWithTag("done-milk").performClick()
+        // Small screens: the keyboard may cover the new task, so check it exists and scroll to it.
+        rule.onNodeWithTag("task-milk").assertExists()
+        rule.onNodeWithTag("done-milk").performScrollTo().performClick()
+        // iroh's DNS resolver and network monitor can reach Android (kt-ffi src/android.rs).
+        check(com.jurisgames.tasks.core.androidContextReady()) { "Android context registered" }
     }
 }
 

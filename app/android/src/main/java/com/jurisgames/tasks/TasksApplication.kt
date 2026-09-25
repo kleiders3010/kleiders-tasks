@@ -19,7 +19,14 @@ class TasksApplication : Application() {
     val node: KtNode
         @Synchronized get() = current ?: open(null).also { current = it }
 
+    /** Registers the app Context with the Rust side (src/android.rs in kt-ffi). */
+    private external fun initAndroidContext(context: android.content.Context)
+
     private fun open(bytes: ByteArray?): KtNode {
+        // Same library JNA uses; loading it this way lets it see the app Context, which
+        // iroh needs for the system DNS servers and network changes.
+        System.loadLibrary("kt_ffi")
+        initAndroidContext(this)
         val identity = File(noBackupFilesDir, "identity") // never backed up (D1)
         val data = File(filesDir, "data") // not backed up either: rebuilt from the backup file
         identity.mkdirs()

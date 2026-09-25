@@ -44,8 +44,11 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct P2pConfig {
     /// Custom relays (helper / select relays), e.g. "https://203.0.113.5".
     pub relays: Vec<String>,
-    /// Also use n0's public relays (best-effort, D50).
+    /// Also use n0's public relays (best-effort, D50), next to our own.
     pub n0_relays: bool,
+    /// Also publish and look up addresses through n0's DNS (best-effort, DESIGN §6: the
+    /// third discovery provider next to Nostr slots and the Mainline DHT).
+    pub n0_dns: bool,
     /// Bind address; `None` = all interfaces on a random port. Tests use 127.0.0.1:0.
     pub bind: Option<SocketAddr>,
     /// Ask the router for a port mapping (UPnP / NAT-PMP / PCP).
@@ -179,27 +182,34 @@ impl P2p {
             let r = r.lock().expect("replica lock");
             kt_engine::crypto::derive(&r.identity().secret().to_bytes(), "kt/iroh-endpoint/v1", b"").0
         };
-        let relay_mode = if cfg.n0_relays {
-            RelayMode::Default
-        } else {
-            let mut cfgs = Vec::new();
-            for r in &cfg.relays {
-                let u: RelayUrl = r.parse().map_err(|e| format!("bad relay url {r}: {e}"))?;
-                let mut c = iroh::RelayConfig::new(u, None);
-                if let Some(t) = &cfg.relay_token {
-                    c = c.with_auth_token(t);
-                }
+        let mut cfgs = Vec::new();
+        if cfg.n0_relays {
+            // n0's public relays as one best-effort layer among ours (D50), never alone:
+            // helper relays still come and go at runtime.
+            use iroh::defaults::prod::*;
+            for c in [default_na_east_relay(), default_na_west_relay(), default_eu_relay(), default_ap_relay()] {
                 cfgs.push(Arc::new(c));
             }
-            // An empty custom map (not Disabled) so relays can be added at runtime (E10).
-            RelayMode::Custom(RelayMap::from_iter(cfgs))
-        };
+        }
+        for r in &cfg.relays {
+            let u: RelayUrl = r.parse().map_err(|e| format!("bad relay url {r}: {e}"))?;
+            let mut c = iroh::RelayConfig::new(u, None);
+            if let Some(t) = &cfg.relay_token {
+                c = c.with_auth_token(t);
+            }
+            cfgs.push(Arc::new(c));
+        }
+        // A custom map (not Disabled, possibly empty) so relays can be added at runtime (E10).
+        let relay_mode = RelayMode::Custom(RelayMap::from_iter(cfgs));
         let mut b = Endpoint::builder(presets::Minimal)
             .secret_key(SecretKey::from_bytes(&seed))
             .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec()])
             .relay_mode(relay_mode);
         if !cfg.portmap {
             b = b.portmapper_config(PortmapperConfig::Disabled);
+        }
+        if cfg.n0_dns {
+            b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns()).address_lookup(iroh::address_lookup::DnsAddressLookup::n0_dns());
         }
         if cfg.relay_only {
             b = b.clear_ip_transports();
@@ -501,5 +511,31 @@ impl P2p {
             c.close(0u32.into(), b"bye");
         }
         let _ = tokio::time::timeout(Duration::from_secs(3), self.ep.close()).await;
+    }
+}
+
+/// Fuzzing (DESIGN §9): frames from any peer that connects.
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    #[test]
+    fn frames_and_addresses() {
+        let slot = || WireSlot { topic: [1; 32], writer: [2; 32], version: 3, blob: b"sealed".to_vec() };
+        let w = WhereData { endpoint: *iroh::SecretKey::from_bytes(&[5; 32]).public().as_bytes(), relays: vec!["https://relay.example/".into()], ips: vec!["192.0.2.9:7".parse().unwrap()] };
+        let seeds = vec![
+            postcard::to_stdvec(&Hello { topics: vec![[1; 32]], have: vec![([1; 32], [2; 32], 3)], proof: Some(b"proof".to_vec()), join: None }).unwrap(),
+            postcard::to_stdvec(&Reply { slots: vec![slot()], have: vec![] }).unwrap(),
+            postcard::to_stdvec(&Push { slots: vec![slot(), slot()] }).unwrap(),
+            postcard::to_stdvec(&Ack { applied: 2 }).unwrap(),
+            postcard::to_stdvec(&w).unwrap(),
+        ];
+        kt_fuzz::run("p2p-frames", &seeds, 2.0, |b| {
+            let _ = postcard::from_bytes::<Hello>(b);
+            let _ = postcard::from_bytes::<Reply>(b).map(|r| r.slots.into_iter().map(SlotRead::from).count());
+            let _ = postcard::from_bytes::<Push>(b);
+            let _ = postcard::from_bytes::<Ack>(b);
+            let _ = postcard::from_bytes::<WhereData>(b).ok().and_then(|w| w.to_addr());
+        });
     }
 }

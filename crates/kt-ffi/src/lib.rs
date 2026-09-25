@@ -28,6 +28,9 @@ use kt_tasks::app::{App, ListInfo};
 
 uniffi::setup_scaffolding!();
 
+#[cfg(target_os = "android")]
+mod android;
+
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum KtError {
     #[error("{msg}")]
@@ -201,6 +204,16 @@ pub struct QrMatrix {
     pub size: u32,
     /// Row by row, `size * size` entries; true = dark.
     pub dark: Vec<bool>,
+}
+
+/// Android: is the app Context registered for iroh's DNS resolver and network monitor?
+/// (Always true elsewhere.)
+#[uniffi::export]
+pub fn android_context_ready() -> bool {
+    #[cfg(target_os = "android")]
+    return android::context_ready();
+    #[cfg(not(target_os = "android"))]
+    true
 }
 
 /// Encode text (a share link) as a QR code.
@@ -479,6 +492,9 @@ impl KtNode {
                     bind: (!options.bind.is_empty()).then(|| options.bind.parse().ok()).flatten(),
                     portmap: options.bind.is_empty(),
                     helper,
+                    // Best-effort public layers (D50), off for loopback tests.
+                    n0_relays: options.bind.is_empty(),
+                    n0_dns: options.bind.is_empty(),
                     ..Default::default()
                 };
                 if let Ok(p) = P2p::start(syncer.clone(), cfg).await {

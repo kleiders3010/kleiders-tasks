@@ -34,6 +34,7 @@ pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
 pub mod backup;
 pub mod handover;
+mod fuzzing;
 mod compaction;
 mod slots;
 pub use compaction::CompactionPolicy;

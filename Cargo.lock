@@ -2434,6 +2434,7 @@ dependencies = [
  "ed25519-dalek 2.2.0",
  "hex",
  "hkdf",
+ "kt-fuzz",
  "loro",
  "postcard",
  "rand 0.8.5",
@@ -2450,10 +2451,12 @@ name = "kt-ffi"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "jni-sys 0.3.1",
  "kt-engine",
  "kt-net",
  "kt-tasks",
  "loro",
+ "ndk-context",
  "qrcode",
  "serde",
  "thiserror 2.0.21",
@@ -2461,6 +2464,10 @@ dependencies = [
  "tracing",
  "uniffi",
 ]
+
+[[package]]
+name = "kt-fuzz"
+version = "0.1.0"
 
 [[package]]
 name = "kt-net"
@@ -2474,6 +2481,7 @@ dependencies = [
  "iroh",
  "iroh-relay",
  "kt-engine",
+ "kt-fuzz",
  "loro",
  "mainline",
  "nostr",
@@ -2494,6 +2502,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "kt-engine",
+ "kt-fuzz",
  "loro",
  "rand 0.8.5",
  "serde",

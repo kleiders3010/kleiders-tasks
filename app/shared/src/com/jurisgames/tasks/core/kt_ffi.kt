@@ -697,6 +697,8 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_kt_ffi_checksum_func_android_context_ready(
+    ): Int
     external fun uniffi_kt_ffi_checksum_func_qr_matrix(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktlistener_on_change(
@@ -902,6 +904,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_func_android_context_ready(uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_kt_ffi_fn_func_qr_matrix(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_kt_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1023,6 +1027,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_kt_ffi_checksum_func_android_context_ready() and 0xFFFF) != 19053) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_func_qr_matrix() and 0xFFFF) != 37680) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -4239,6 +4246,20 @@ public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<Task
         }
     }
 }
+        /**
+         * Android: is the app Context registered for iroh's DNS resolver and network monitor?
+         * (Always true elsewhere.)
+         */ fun `androidContextReady`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_android_context_ready(
+    
+        _status)
+}
+    )
+    }
+    
+
         /**
          * Encode text (a share link) as a QR code.
          */

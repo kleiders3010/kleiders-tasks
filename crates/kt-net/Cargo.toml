@@ -33,6 +33,9 @@ serde_json.workspace = true
 postcard.workspace = true
 
 [dev-dependencies]
+kt-fuzz = { path = "../kt-fuzz" }
+postcard.workspace = true
+hex.workspace = true
 rustls.workspace = true
 iroh.workspace = true
 blake3.workspace = true

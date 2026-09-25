@@ -942,3 +942,25 @@ mod tests {
         assert!(encode_chunks(&vec![0u8; CHUNK_MAX * MAX_CHUNKS + 1], 1).is_none());
     }
 }
+
+/// Fuzzing (DESIGN §9): event contents from any relay.
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    #[test]
+    fn chunks() {
+        let blob: Vec<u8> = (0..100_000u32).map(|i| (i * 7) as u8).collect();
+        let parts = encode_chunks(&blob, 4).unwrap();
+        let seeds: Vec<Vec<u8>> = parts.iter().map(|s| s.clone().into_bytes()).collect();
+        kt_fuzz::run("nostr-chunk", &seeds, 2.0, |b| {
+            let s = String::from_utf8_lossy(b);
+            if let Some(c) = decode_chunk(&s) {
+                // A hostile chunk mixed with the real ones.
+                let mut all: Vec<Chunk> = parts.iter().filter_map(|p| decode_chunk(p)).collect();
+                all.push(c);
+                let _ = assemble(all);
+            }
+        });
+    }
+}

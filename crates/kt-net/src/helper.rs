@@ -953,3 +953,69 @@ mod tests {
         assert!(h.get(&[t], &[(t, w, 2)]).is_empty());
     }
 }
+
+/// Fuzzing (DESIGN §9): requests from strangers, answers from helpers, and the disk copy.
+#[cfg(test)]
+mod fuzz_tests {
+    use super::*;
+
+    fn signed(topic: [u8; 32], seed: [u8; 32], version: u64, blob: &[u8]) -> SignedPut {
+        let key = writer_key(&seed);
+        let sig = key.sign(&put_message(&topic, version, blob)).to_bytes().to_vec();
+        SignedPut { topic, writer: *key.public().as_bytes(), version, blob: blob.to_vec(), sig, nonce: 0 }
+    }
+
+    fn href() -> HelperRef {
+        HelperRef { endpoint: [3; 32], ips: vec!["192.0.2.1:4444".parse().unwrap()], relays: vec!["https://relay.example/".into()] }
+    }
+
+    #[test]
+    fn requests_and_responses() {
+        let store = HelperStore::new(HelperLimits::default());
+        let put = signed([1; 32], [2; 32], 1, b"sealed slot");
+        let seeds = vec![
+            postcard::to_stdvec(&Request::Put { put: put.clone(), fanout: vec![href()] }).unwrap(),
+            postcard::to_stdvec(&Request::Get { topics: vec![[1; 32]], have: vec![([1; 32], put.writer, 0)] }).unwrap(),
+            postcard::to_stdvec(&Request::Hello(href())).unwrap(),
+            postcard::to_stdvec(&Request::Info).unwrap(),
+            postcard::to_stdvec(&Response::Slots(vec![(([1; 32], put.writer), 1, b"x".to_vec())], vec![([1; 32], [2; 32])])).unwrap(),
+            postcard::to_stdvec(&Response::Peers(vec![href()])).unwrap(),
+            postcard::to_stdvec(&Response::Info(store.info())).unwrap(),
+        ];
+        kt_fuzz::run("helper-frames", &seeds, 2.0, |b| {
+            if let Ok(req) = postcard::from_bytes::<Request>(b) {
+                match req {
+                    Request::Put { put, fanout } => {
+                        let _ = store.put_signed(put, fanout);
+                    }
+                    Request::Get { topics, have } => {
+                        let _ = store.get(&topics, &have);
+                    }
+                    Request::Hello(h) => store.learn_peer(h),
+                    Request::Info | Request::Peers => {}
+                }
+            }
+            if let Ok(Response::Peers(ps)) = postcard::from_bytes::<Response>(b) {
+                for p in ps {
+                    let _ = p.to_addr();
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn disk_copy() {
+        let dir = std::env::temp_dir().join(format!("kt-fuzz-disk-{}-{}", std::process::id(), rand::random::<u32>()));
+        let key = kt_engine::crypto::SymKey([9; 32]);
+        let limits = || HelperLimits { disk: Some(DiskConfig { dir: dir.clone(), key: key.clone() }), ..HelperLimits::default() };
+        let put = signed([1; 32], [2; 32], 1, b"sealed slot");
+        let entry = Entry { put: put.clone(), refreshed: now_ms(), set: vec![href()], topic_first_seen: now_ms() };
+        let plain = postcard::to_stdvec(&entry).unwrap();
+        let file = entry_file(&dir, &(put.topic, put.writer));
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        kt_fuzz::run("helper-disk", &[plain], 0.2, |p| {
+            let _ = std::fs::write(&file, kt_engine::crypto::seal(&key, DISK_AAD, p));
+            let _ = HelperStore::new(limits());
+        });
+    }
+}
