@@ -178,8 +178,15 @@ impl Replica {
     /// outsiders can't pre-position fake helpers for a group (§7a).
     pub fn group_point(&self, g: &GroupId, day: u32) -> Option<[u8; 32]> {
         let state = self.groups.get(g)?;
-        let head = state.epochs.working_head()?;
-        let key = state.keys.get(&head)?;
+        // Members: the working head's key. A joiner without the epoch records yet: the key
+        // its invite carried (the same epoch, unless the group rotated since).
+        let key = match state.epochs.working_head().and_then(|h| state.keys.get(&h)) {
+            Some(k) => k,
+            None => {
+                let p = self.pending_joins().into_iter().find(|p| p.group == *g)?;
+                state.keys.get(&p.epoch)?
+            }
+        };
         let mut m = key.0.to_vec();
         m.extend_from_slice(&day.to_le_bytes());
         Some(crypto::hash("kt/helper-point/v1", &m))

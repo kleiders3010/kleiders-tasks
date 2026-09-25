@@ -383,6 +383,27 @@ impl Replica {
     }
 
     /// Our signed join request for `g`, to hand to a member directly (P2P).
+    /// Add endpoints where a pending join should also look (e.g. the helpers closest to
+    /// the group's daily point, when the invite's hints are gone). Deduplicated, bounded.
+    pub fn add_join_hints(&mut self, g: &GroupId, layer: &str, endpoints: Vec<String>) -> Result<usize> {
+        let mut all = self.pending_joins();
+        let Some(p) = all.iter_mut().find(|p| p.group == *g) else { return Ok(0) };
+        let before = p.hints.len();
+        for e in endpoints {
+            if p.hints.len() >= 32 {
+                break;
+            }
+            if !p.hints.iter().any(|(l, x)| l == layer && *x == e) {
+                p.hints.push((layer.to_string(), e));
+            }
+        }
+        let added = p.hints.len() - before;
+        if added > 0 {
+            self.save_pending(&all)?;
+        }
+        Ok(added)
+    }
+
     pub fn pending_join_request(&self, g: &GroupId) -> Option<Vec<u8>> {
         let p = self.pending_joins().into_iter().find(|p| p.group == *g)?;
         self.join_request(&p).ok()

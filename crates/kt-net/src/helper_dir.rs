@@ -347,6 +347,19 @@ pub async fn maintain_with_dht(
     report.relays_in_use = hmb.p2p().sync_helper_relays(relays).await;
     let replica = syncer.replica();
     let day = today();
+    // Groups we're joining: besides the invite's hints, the helpers closest to the group's
+    // secret daily point (the same rule members use for their set, §7a), so a join still
+    // finds the group's helpers when the hinted ones are gone.
+    let joining: Vec<(GroupId, Option<[u8; 32]>)> = {
+        let r = replica.lock().expect("replica lock");
+        r.pending_joins().into_iter().map(|p| (p.group, r.group_point(&p.group, day))).collect()
+    };
+    for (g, point) in joining {
+        if let Some(point) = point {
+            let near: Vec<String> = dir.ordered(hmb, Some(point)).iter().take(HELPER_SET).map(encode_ref).collect();
+            let _ = replica.lock().expect("replica lock").add_join_hints(&g, LAYER, near);
+        }
+    }
     let groups: Vec<(GroupId, Option<Vec<String>>, Option<[u8; 32]>)> = {
         let r = replica.lock().expect("replica lock");
         let me = r.device_id();
