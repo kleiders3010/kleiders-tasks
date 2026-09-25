@@ -31,6 +31,22 @@ fn now_ms() -> u64 {
 
 /// Rewrite an unchanged slot after this long (mailboxes may prune old data).
 pub const REFRESH: Duration = Duration::from_secs(3 * 24 * 3600);
+/// Writes are where data can be lost without anyone knowing, so a layer counts as done
+/// only when at least this many of its copies landed (all of them if fewer were tried).
+pub const WRITE_QUORUM: usize = 2;
+/// Below quorum: try that layer again after this long (not every round: relays ban
+/// clients that republish constantly).
+pub const PARTIAL_RETRY: Duration = Duration::from_secs(600);
+
+/// When a write should count as made: now at quorum, or backdated so it comes due again
+/// after [`PARTIAL_RETRY`] when it fell short.
+fn written_at(now: u64, stored: usize, tried: usize) -> u64 {
+    if stored >= tried.min(WRITE_QUORUM) {
+        now
+    } else {
+        now.saturating_sub(REFRESH.as_secs()).saturating_add(PARTIAL_RETRY.as_secs())
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WriteReport {
@@ -194,9 +210,9 @@ impl Syncer {
             for (mi, o) in due.iter().zip(outcomes) {
                 let key = (*mi, t.topic, t.writer_seed);
                 match o {
-                    WriteOutcome::Stored { .. } => {
+                    WriteOutcome::Stored { stored, tried } => {
                         report.written += 1;
-                        self.written.lock().expect("lock").insert(key, Written { fingerprint: fp, at: now_secs() });
+                        self.written.lock().expect("lock").insert(key, Written { fingerprint: fp, at: written_at(now_secs(), stored, tried) });
                         self.lost.lock().expect("lock").remove(&key);
                     }
                     WriteOutcome::Deferred { .. } => report.deferred += 1,
@@ -377,5 +393,19 @@ impl Syncer {
                 _ = stop.changed() => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod quorum_tests {
+    use super::*;
+
+    #[test]
+    fn a_layer_is_done_only_at_quorum() {
+        let now = 10 * REFRESH.as_secs();
+        let due_after = |at: u64| at + REFRESH.as_secs() - now; // seconds until due again
+        assert_eq!(written_at(now, 2, 3), now, "2 of 3 relays: done");
+        assert_eq!(written_at(now, 1, 1), now, "the only one tried: done");
+        assert_eq!(due_after(written_at(now, 1, 3)), PARTIAL_RETRY.as_secs(), "1 of 3: again in 10 minutes");
     }
 }

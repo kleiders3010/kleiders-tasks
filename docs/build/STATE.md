@@ -62,6 +62,9 @@
 - [x] Operator manifest (`kt-net/src/manifest.rs`): signed with a separate operator key, add-only merge with the baseline, no downgrade, last good copy persisted; fetch over HTTPS and Nostr (kind 35712, any author, only the signature counts)
 - [x] Operator key (2026-09-25): Ed25519, sealed with a random password (Argon2id + XChaCha20) by `kt-operator` (`kt-cli/src/operator.rs`); password in Credential Manager (`jurisgames-operator-key`) and the owner's password manager; sealed key backed up in the private `jurisgames-signing-backup` repo; public key in `manifest::OPERATOR_PUBLIC_KEY`
 - [ ] Operator manifest in the apps: ship the baseline, fetch from apps.jurisgames.com / the public repo / Nostr
+- [x] Cloud mailbox (`cloud/mailbox-worker`, `kt-net/src/cloud.rs`): Cloudflare Worker + SQLite Durable Objects, helper rules, always written, reads by revision and helper health; tested against the local simulator (`KT_CLOUD_URL=http://127.0.0.1:8787 cargo test -p kt-net --test cloud_mailbox`)
+- [ ] Cloud mailbox deployed at mailbox.jurisgames.com (needs `npx wrangler login` by the owner, then `npm run deploy` in `cloud/mailbox-worker`)
+- [x] Write quorum: a layer counts as written only when 2 copies landed (or all tried); otherwise retried every 10 minutes
 
 ### M3: Sharing
 - [x] Invites, engine side (`kt-engine/src/invite.rs`, `replica/invites.rs`): curated 8-word codes (1,106 words, 80.9 bits; removals in `crates/kt-engine/data/invite_words_removed.txt`), Argon2id date-salted lookup/record keys, sealed records carrying the current epoch key, open invites shared with members in slots (any member re-posts and accepts), signed join requests in join slots, answers under the joiner's epoch, multi-use, cancel, closed by removals/rotations. Tests: `kt-engine/tests/invites.rs`

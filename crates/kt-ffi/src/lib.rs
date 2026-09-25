@@ -855,6 +855,14 @@ impl KtNode {
                     p.publish_whereabouts();
                     let hmb = Arc::new(HelperMailbox::new(p.clone(), vec![]));
                     syncer.add_mailbox(hmb.clone() as Arc<dyn Mailbox>);
+                    // The developer-run cloud mailbox (optional capacity, D56): real networking
+                    // only, never from loopback tests. Reads follow helper health.
+                    if options.bind.is_empty() {
+                        if let Some(c) = kt_net::cloud::CloudMailbox::new(kt_net::cloud::DEFAULT_URL, kt_net::cloud::CloudMode::Always) {
+                            c.set_helpers(hmb.clone());
+                            syncer.add_mailbox(Arc::new(c) as Arc<dyn Mailbox>);
+                        }
+                    }
                     kt_net::helper_dir::install_resolver(&syncer, &hmb);
                     helpers = Some((hmb, HelperDirectory::new(Some(data.join("helpers.dir")))));
                     p2p = Some(p);

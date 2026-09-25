@@ -732,6 +732,12 @@ impl HelperMailbox {
         &self.p2p
     }
 
+    /// Helpers for this topic that are working as far as this device knows (reached
+    /// before, not failing). The cloud mailbox reads more often when this is low.
+    pub fn healthy_helpers(&self, topic: &[u8; 32]) -> usize {
+        self.ranked(topic).iter().filter(|h| !self.is_failing(&h.id) && self.merged(&h.id).is_some_and(|r| r.reachable > 0)).count()
+    }
+
     /// Whether this device's records say a helper isn't working.
     pub fn is_failing(&self, id: &EndpointId) -> bool {
         let own_streak = self.records.lock().expect("lock").get(id).is_some_and(|r| r.unreachable_in_a_row >= 3);

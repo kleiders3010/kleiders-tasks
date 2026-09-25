@@ -26,6 +26,7 @@ reqwest.workspace = true
 mainline.workspace = true
 rand.workspace = true
 hex.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 blake3.workspace = true
 serde.workspace = true

@@ -6,6 +6,7 @@
 
 pub mod blobs;
 pub mod blossom;
+pub mod cloud;
 pub mod dht;
 pub mod helper;
 pub mod health;
