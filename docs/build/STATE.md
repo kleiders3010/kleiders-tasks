@@ -69,7 +69,8 @@
 - [x] Device-linking confirmation screen ("This will join Alex's account: Pixel 7 · 1 list (Groceries). The list on this device will be added to it.")
 - [x] Link and QR wrappers (`kt-net` `share_url` / `parse_shared`, `qr_matrix` via the `qrcode` crate, MIT/Apache): `https://jurisgames.com/join#words` for invites, `/link#words` for device links, `~addresses` of the sharing device for a direct connection; join and link accept words or links; QR in the invite and link dialogs; Share link (Android share sheet, desktop clipboard); Android opens these links into the right dialog. Tests: `kt-net/tests/share_links.rs`, desktop tests
 - [ ] jurisgames.com: the join page and `/.well-known/assetlinks.json` (needs hosting; until then Android asks which app opens the link)
-- [ ] QR scanning (Play code scanner / camera in `foss`)
+- [x] QR scanning and store flavors (`play` / `foss`): play uses Google's code scanner (no camera permission), foss its own CameraX screen with ZXing 3.5.4 (camera asked only when scanning); "Scan QR code" in the join and link dialogs. Tests: `QrDecodeTest` (foss decoder reads our own QR from a synthetic frame); play flavor passes the smoke, backup, notification and widget tests. Downloads with R8: play 10.3 MB, foss 10.6 MB (arm64)
+- [ ] Scanning with a real camera (not possible headless; needs a device in hand)
 - [x] Device linking, engine side: link codes (separate derivation domain + record kind), refused on the join path with a plain explanation, reusable until expiry, `DeviceJoined { via_link }` event for the "New device linked · Undo" alert
 - [x] Device linking, app side (`kt-tasks/src/app/linking.rs`, engine `replica/handover.rs`): link codes advertise the account summary; the linking device adopts the account once let in (own lists copied in, other groups kept, old personal group dropped); every device keeps the account's other devices in all its groups (groups handed over through the personal group's slots; removals respected); device names; "New device linked · Undo" on every device from the personal group's epochs; Undo removes from the account and every group. Tests: `kt-tasks/tests/linking.rs`, desktop UI `DesktopLinkTest` (two nodes over a loopback relay)
 - [x] A device removed from its account (Undo) falls back to an account of its own, with copies of the account's lists it had; the groups it was removed from are dropped
@@ -106,10 +107,10 @@
 
 ## Current state
 - **M4/M5 nearly done (2026-09-25).** Done since M4 started: backups and restore, exports, device linking (app side, with handovers and Undo), notifications (changes and joins), widget, tray and autostart, share links and QR, settings. Rust suite, desktop UI tests (smoke, link, restore, settings, autostart) and emulator tests (smoke, backup round trip, notifications, widget) green.
-- Release build with R8: 10.1 MB download, verified running (bundletool 1.18.3 in `~/tools`).
+- Release builds with R8: play 10.3 MB, foss 10.6 MB download, verified running (bundletool 1.18.3 in `~/tools`). Gradle tasks are now per flavor (`assemblePlayDebug`, `bundlePlayRelease`, ...).
 
 ## Next action
-1. M4 remainder: QR scanning (play/foss flavors), update checks (need the hosted manifest).
+1. M4 remainder: update checks (need the hosted manifest), Block Store (play flavor).
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).

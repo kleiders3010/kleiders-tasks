@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
             }
             TasksApp(node, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
-            }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
+            }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
                 // Markdown through the share sheet (Obsidian, notes apps, email).
                 val send = Intent(Intent.ACTION_SEND).setType("text/markdown")
                     .putExtra(Intent.EXTRA_SUBJECT, l.name)

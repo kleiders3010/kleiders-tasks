@@ -52,6 +52,7 @@ fun TasksApp(
     onShare: ((String) -> Unit)? = null,
     openedCode: String? = null,
     onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)? = null,
+    onScan: ((onResult: (String) -> Unit) -> Unit)? = null,
 ) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
@@ -68,7 +69,7 @@ fun TasksApp(
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
-                ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onChanged = { version++ }, onOpen = { open = it })
+                ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onScan, onChanged = { version++ }, onOpen = { open = it })
             } else {
                 TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })
             }
@@ -84,6 +85,7 @@ private fun ListsScreen(
     onShare: ((String) -> Unit)?,
     openedCode: String?,
     onSettings: ((com.jurisgames.tasks.core.Settings) -> Unit)?,
+    onScan: ((onResult: (String) -> Unit) -> Unit)?,
     onChanged: () -> Unit,
     onOpen: (ListItem) -> Unit,
 ) {
@@ -278,6 +280,7 @@ private fun ListsScreen(
             text = {
                 Column {
                     OutlinedTextField(words, { words = it; preview = null }, label = { Text("8 words or the link from your other device") }, modifier = Modifier.testTag("linkThisWords"))
+                    if (onScan != null) TextButton(onClick = { onScan { words = it; preview = null } }, modifier = Modifier.testTag("scanLink")) { Text("Scan QR code") }
                     preview?.let { Text(it, modifier = Modifier.testTag("linkPreview")) }
                     if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("linkResult"))
                 }
@@ -308,6 +311,7 @@ private fun ListsScreen(
             text = {
                 Column {
                     OutlinedTextField(words, { words = it }, label = { Text("8 words (3 letters each is enough) or a link") }, modifier = Modifier.testTag("joinWords"))
+                    if (onScan != null) TextButton(onClick = { onScan { words = it } }, modifier = Modifier.testTag("scanJoin")) { Text("Scan QR code") }
                     if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("joinResult"))
                 }
             },
