@@ -122,7 +122,11 @@ fun main(args: Array<String>) {
         Window(onCloseRequest = {
             if (node.settings().syncInBackground) visible = false else { node.stopLive(); node.syncNow(); exitApplication() }
         }, visible = visible, title = "Tasks") {
-            TasksApp(node, onImport = {
+            val required = remember(node) {
+                val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
+                runCatching { node.requiredUpdate(VERSION_CODE, channel) }.getOrNull()
+            }
+            TasksApp(node, required = required, onImport = {
                 val dialog = FileDialog(null as Frame?, "Import a list file", FileDialog.LOAD).apply { file = "*.tasklist"; isVisible = true }
                 dialog.file?.let { f ->
                     runCatching { node.importListFile(null, File(dialog.directory, f).readBytes()) }

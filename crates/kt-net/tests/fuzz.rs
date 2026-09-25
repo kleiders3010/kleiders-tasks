@@ -35,9 +35,9 @@ fn operator_manifest() {
     use kt_net::manifest::{sign, verify, Manifest, ManifestBody};
     let op = kt_engine::crypto::DeviceSecret::generate();
     let op_pub = op.public().sign;
-    let body = ManifestBody { version: 2, issued_ms: 1, nostr_relays: vec![], iroh_relays: vec![], helpers: vec![] };
+    let body = ManifestBody { version: 2, issued_ms: 1, ..Default::default() };
     let signed = sign(&body, &op);
-    let m = Manifest::new(op_pub, ManifestBody { version: 1, issued_ms: 0, nostr_relays: vec![], iroh_relays: vec![], helpers: vec![] }, None);
+    let m = Manifest::new(op_pub, ManifestBody { version: 1, ..Default::default() }, None);
     kt_fuzz::run("operator-manifest", &[signed], 2.0, |b| {
         let _ = verify(b, &op_pub);
         let _ = m.consider(b);

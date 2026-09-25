@@ -79,3 +79,24 @@ async fn blossom_layer_round_trip() {
     assert_eq!(kt_engine::blobs::open(&r, &got).unwrap().len() as u64, r.size);
     assert!(b.get(&[1; 32]).await.is_none());
 }
+
+/// Discovery as devices run it, against real relays: rank the servers Nostr users list,
+/// try the top new ones (each trial is one small upload, read back, deleted).
+#[tokio::test]
+#[ignore]
+async fn discovery_finds_working_servers() {
+    let relays: Vec<_> = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"].iter().map(|u| kt_net::nostr::RelayConn::new(u, kt_net::nostr::NostrPolicy::default())).collect();
+    let mut events = Vec::new();
+    for r in &relays {
+        let f = Filter::new().kind(Kind::Custom(kt_net::blossom::SERVER_LIST_KIND)).limit(300);
+        events.extend(r.query(vec![f]).await.unwrap_or_default());
+    }
+    let ranked = kt_net::blossom::rank_candidates(&events);
+    println!("{} server lists, top candidates: {:?}", events.len(), ranked.iter().take(12).collect::<Vec<_>>());
+    let b = kt_net::blossom::Blossom::seeded().unwrap();
+    let d = kt_net::blossom::BlossomDirectory::new(None);
+    println!("will try: {:?}", d.fresh(ranked.clone(), &b.servers()));
+    let passed = d.discover(&b, &relays).await;
+    println!("passed: {passed:?}");
+    assert!(!events.is_empty(), "relays returned server lists");
+}

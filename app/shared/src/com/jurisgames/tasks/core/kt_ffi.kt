@@ -815,6 +815,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_replaced_device_groups(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_required_update(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_device_state(
@@ -971,6 +973,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_replaced_device_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_kt_ffi_fn_method_ktnode_required_update(`ptr`: Long,`version`: Long,`channel`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,`constrained`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1291,6 +1295,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_replaced_device_groups() and 0xFFFF) != 27855) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_required_update() and 0xFFFF) != 52608) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
@@ -2723,6 +2730,12 @@ public interface KtNodeInterface {
     fun `replacedDeviceGroups`(): kotlin.UInt
     
     /**
+     * Why this build must update, if the signed operator manifest says so (never from peer
+     * data). `channel` as for [`KtNode::check_update`].
+     */
+    fun `requiredUpdate`(`version`: kotlin.ULong, `channel`: kotlin.String): kotlin.String?
+    
+    /**
      * Set when this node was opened from a backup.
      */
     fun `restored`(): RestoreInfo?
@@ -3490,6 +3503,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_replaced_device_groups(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Why this build must update, if the signed operator manifest says so (never from peer
+     * data). `channel` as for [`KtNode::check_update`].
+     */override fun `requiredUpdate`(`version`: kotlin.ULong, `channel`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_required_update(
+        it,
+        
+        FfiConverterULong.lower(`version`),
+        FfiConverterString.lower(`channel`),_status)
 }
     }
     )

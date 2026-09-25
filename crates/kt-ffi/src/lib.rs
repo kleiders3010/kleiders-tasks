@@ -530,7 +530,72 @@ struct Net {
     dht: Option<Arc<DhtDiscovery>>,
     /// Public Blossom servers for attachments (best effort; off for loopback tests).
     blossom: Option<kt_net::blossom::Blossom>,
+    /// The operator manifest (off for loopback tests).
+    manifest: Option<Arc<kt_net::manifest::Manifest>>,
+    /// Cloud mailboxes in use, by URL.
+    clouds: Mutex<std::collections::HashMap<String, Arc<kt_net::cloud::CloudMailbox>>>,
+    /// Blossom servers found and verified by this device (beyond the manifest's).
+    blossom_dir: Option<kt_net::blossom::BlossomDirectory>,
 }
+
+impl Net {
+    /// Use what the manifest lists (baseline ∪ the newest signed copy): add cloud mailboxes
+    /// not yet in use, set their mode, and the Blossom servers.
+    fn apply_manifest(&self) {
+        let Some(m) = &self.manifest else { return };
+        let e = m.effective();
+        let mode = e.cloud_mode.unwrap_or(kt_net::cloud::CloudMode::Always);
+        let mut clouds = self.clouds.lock().expect("lock");
+        for w in &e.cloud_mailboxes {
+            if !w.item.starts_with("https://") || clouds.contains_key(&w.item) {
+                continue;
+            }
+            if let Some(c) = kt_net::cloud::CloudMailbox::new(&w.item, mode) {
+                let c = Arc::new(c);
+                if let Some((h, _)) = &self.helpers {
+                    c.set_helpers(h.clone());
+                }
+                self.syncer.add_mailbox(c.clone() as Arc<dyn Mailbox>);
+                clouds.insert(w.item.clone(), c);
+            }
+        }
+        for c in clouds.values() {
+            c.set_mode(mode);
+        }
+        if let Some(b) = &self.blossom {
+            // The manifest's first (weighted), then the ones this device discovered.
+            let mut servers: Vec<String> = e.blossom_servers.iter().filter(|w| w.item.starts_with("https://")).map(|w| w.item.clone()).collect();
+            for s in self.blossom_dir.as_ref().map(|d| d.verified()).unwrap_or_default() {
+                if !servers.contains(&s) {
+                    servers.push(s);
+                }
+            }
+            b.set_servers(servers);
+        }
+    }
+
+    /// Daily: fetch the manifest from every source (HTTPS, Nostr); apply it if it changed.
+    async fn refresh_manifest(&self, last: &Mutex<Option<std::time::Instant>>) {
+        let Some(m) = &self.manifest else { return };
+        if last.lock().expect("lock").is_some_and(|t| t.elapsed() < MANIFEST_EVERY) {
+            return;
+        }
+        *last.lock().expect("lock") = Some(std::time::Instant::now());
+        let mut n = m.fetch_http(&kt_net::manifest::MANIFEST_URLS).await;
+        let conns: Vec<_> = self.relays.ordered(&self.nostr).into_iter().take(3).map(|u| self.nostr.conn(&u)).collect();
+        n += m.fetch_nostr(&conns).await;
+        // Blossom servers published on Nostr (weekly, a few trials at a time).
+        if let (Some(b), Some(d)) = (&self.blossom, &self.blossom_dir) {
+            n += d.discover(b, &conns).await.len();
+        }
+        if n > 0 {
+            self.apply_manifest();
+        }
+    }
+}
+
+/// How often devices look for a newer operator manifest.
+const MANIFEST_EVERY: Duration = Duration::from_secs(24 * 3600);
 
 #[derive(uniffi::Object)]
 pub struct KtNode {
@@ -556,6 +621,8 @@ pub struct KtNode {
     first_round: std::sync::atomic::AtomicBool,
     /// The last [`ROUND_LOG`] rounds (diagnostics).
     rounds: Mutex<std::collections::VecDeque<RoundLog>>,
+    /// When the operator manifest was last fetched.
+    manifest_checked: Mutex<Option<std::time::Instant>>,
     /// Real networking (not a loopback test node).
     lan_enabled: bool,
     /// Desktops: the relay run for others (D51), when the setting is on.
@@ -719,6 +786,7 @@ impl KtNode {
 
     async fn round_inner(&self) -> SyncReport {
         let net = &self.net;
+        net.refresh_manifest(&self.manifest_checked).await;
         // First, so a new recovery invite goes out with this same round.
         self.backup_if_due();
         kt_net::relays::maintain(&net.syncer, &net.nostr, &net.relays).await;
@@ -855,23 +923,21 @@ impl KtNode {
                     p.publish_whereabouts();
                     let hmb = Arc::new(HelperMailbox::new(p.clone(), vec![]));
                     syncer.add_mailbox(hmb.clone() as Arc<dyn Mailbox>);
-                    // The developer-run cloud mailbox (optional capacity, D56): real networking
-                    // only, never from loopback tests. Reads follow helper health.
-                    if options.bind.is_empty() {
-                        if let Some(c) = kt_net::cloud::CloudMailbox::new(kt_net::cloud::DEFAULT_URL, kt_net::cloud::CloudMode::Always) {
-                            c.set_helpers(hmb.clone());
-                            syncer.add_mailbox(Arc::new(c) as Arc<dyn Mailbox>);
-                        }
-                    }
                     kt_net::helper_dir::install_resolver(&syncer, &hmb);
                     helpers = Some((hmb, HelperDirectory::new(Some(data.join("helpers.dir")))));
                     p2p = Some(p);
                 }
             }
             let dht = if options.dht { DhtDiscovery::with_cache(replica.clone(), data.join("dht_nodes.txt"), None).ok().map(Arc::new) } else { None };
-            // Public Blossom servers only with real networking (never from loopback tests).
-            let blossom = if options.bind.is_empty() { kt_net::blossom::Blossom::seeded() } else { None };
-            Net { syncer, nostr, relays, p2p, helpers, dht, blossom }
+            // The operator manifest (D56) and what it lists: developer-run cloud mailboxes and
+            // Blossom servers. Real networking only, never from loopback tests.
+            let real = options.bind.is_empty();
+            let manifest = real.then(|| Arc::new(kt_net::manifest::Manifest::new(kt_net::manifest::OPERATOR_PUBLIC_KEY, kt_net::manifest::baseline(), Some(data.join("operator.manifest")))));
+            let blossom = if real { kt_net::blossom::Blossom::new(Vec::new()) } else { None };
+            let blossom_dir = real.then(|| kt_net::blossom::BlossomDirectory::new(Some(data.join("blossom.dir"))));
+            let net = Net { syncer, nostr, relays, p2p, helpers, dht, blossom, manifest, clouds: Mutex::new(std::collections::HashMap::new()), blossom_dir };
+            net.apply_manifest();
+            net
         });
         if !options.device_name.is_empty() {
             let _ = app.set_device_name(&options.device_name);
@@ -894,6 +960,7 @@ impl KtNode {
             lan: Mutex::new(None),
             first_round: std::sync::atomic::AtomicBool::new(false),
             rounds: Mutex::new(std::collections::VecDeque::new()),
+            manifest_checked: Mutex::new(None),
             lan_enabled: options.bind.is_empty(),
             #[cfg(feature = "desktop")]
             relay_for_others: tokio::sync::Mutex::new(None),
@@ -1447,6 +1514,12 @@ impl KtNode {
             .collect();
         v.sort_by(|a, b| a.url.cmp(&b.url));
         v
+    }
+
+    /// Why this build must update, if the signed operator manifest says so (never from peer
+    /// data). `channel` as for [`KtNode::check_update`].
+    pub fn required_update(&self, version: u64, channel: String) -> Option<String> {
+        self.net.manifest.as_ref()?.required_update(&channel, version)
     }
 
     /// Everything the hidden diagnostics screen shows (and "Export log" writes out).

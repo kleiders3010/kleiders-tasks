@@ -2423,6 +2423,7 @@ dependencies = [
  "kt-tasks",
  "loro",
  "rand 0.8.5",
+ "serde_json",
  "tokio",
  "zeroize",
 ]

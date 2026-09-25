@@ -60,3 +60,16 @@ async fn manifest_over_http() {
     assert_eq!(m.fetch_http(&[&url, "http://127.0.0.1:9/nothing"]).await, 1);
     assert_eq!(m.version(), 7);
 }
+
+/// The published manifest, fetched the way devices do and checked against the real key
+/// (network; run on request: `cargo test -p kt-net --test manifest_fetch -- --ignored`).
+#[tokio::test]
+#[ignore]
+async fn the_published_manifest_verifies() {
+    for url in kt_net::manifest::MANIFEST_URLS {
+        let m = kt_net::manifest::Manifest::new(kt_net::manifest::OPERATOR_PUBLIC_KEY, ManifestBody::default(), None);
+        assert_eq!(m.fetch_http(&[url]).await, 1, "{url}");
+        let e = m.effective();
+        assert!(e.cloud_mailboxes.iter().any(|w| w.item == kt_net::cloud::DEFAULT_URL), "{url}: {e:?}");
+    }
+}

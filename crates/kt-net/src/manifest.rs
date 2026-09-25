@@ -34,6 +34,7 @@ pub struct Weighted<T> {
     pub weight: u16,
 }
 
+/// Format 2 (format 1 is still read: the fields below `helpers` default to empty).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManifestBody {
     /// Monotonic; a lower version never replaces a higher one.
@@ -43,6 +44,53 @@ pub struct ManifestBody {
     pub iroh_relays: Vec<Weighted<String>>,
     /// Helper / select nodes by iroh endpoint ID.
     pub helpers: Vec<Weighted<[u8; 32]>>,
+    /// Developer-run slot stores ([`crate::cloud`]).
+    #[serde(default)]
+    pub cloud_mailboxes: Vec<Weighted<String>>,
+    /// How devices use them (none given: the baseline's).
+    #[serde(default)]
+    pub cloud_mode: Option<crate::cloud::CloudMode>,
+    /// Blossom servers for attachments ([`crate::blossom`]).
+    #[serde(default)]
+    pub blossom_servers: Vec<Weighted<String>>,
+    /// Versions that must update (security fixes, DESIGN principle 8): only ever from this
+    /// signed file or Play's update priority, never from peer data.
+    #[serde(default)]
+    pub required: Vec<RequiredUpdate>,
+}
+
+/// "Builds on `channel` below `below_version` must update."
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequiredUpdate {
+    /// As in the update manifest: "play", "apk", "windows", "linux".
+    pub channel: String,
+    pub below_version: u64,
+    /// Shown to the user, e.g. "fixes a security problem".
+    pub reason: String,
+}
+
+/// Format 1, still read.
+#[derive(Deserialize)]
+struct ManifestBodyV1 {
+    version: u64,
+    issued_ms: u64,
+    nostr_relays: Vec<Weighted<String>>,
+    iroh_relays: Vec<Weighted<String>>,
+    helpers: Vec<Weighted<[u8; 32]>>,
+}
+
+/// Where devices fetch the manifest (all are tried; only the signature counts).
+pub const MANIFEST_URLS: [&str; 2] = ["https://apps.jurisgames.com/operator.bin", "https://raw.githubusercontent.com/kleiders3010/jurisgames/main/operator.bin"];
+
+/// What the app ships with: the cloud mailbox and the Blossom seed servers. Anything the
+/// operator publishes later only adds to this.
+pub fn baseline() -> ManifestBody {
+    ManifestBody {
+        cloud_mailboxes: vec![Weighted { item: crate::cloud::DEFAULT_URL.into(), weight: 100 }],
+        cloud_mode: Some(crate::cloud::CloudMode::Always),
+        blossom_servers: crate::blossom::SEED_SERVERS.iter().map(|s| Weighted { item: s.to_string(), weight: 10 }).collect(),
+        ..Default::default()
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,7 +101,7 @@ struct Signed {
 
 /// Sign a manifest (operator tooling only; the key never ships in the app).
 pub fn sign(body: &ManifestBody, operator: &crypto::DeviceSecret) -> Vec<u8> {
-    let b = kt_engine::wire::encode(TAG, 1, body).expect("encodable");
+    let b = kt_engine::wire::encode(TAG, 2, body).expect("encodable");
     let sig = operator.sign(&b).to_vec();
     postcard::to_stdvec(&Signed { body: b, sig }).expect("encodable")
 }
@@ -66,7 +114,13 @@ pub fn verify(bytes: &[u8], operator_pub: &[u8; 32]) -> Result<ManifestBody, Str
     let s: Signed = postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
     let sig: [u8; 64] = s.sig.as_slice().try_into().map_err(|_| "bad signature length".to_string())?;
     crypto::verify(operator_pub, &s.body, &sig).map_err(|e| e.to_string())?;
-    Ok(kt_engine::wire::decode(TAG, 1, &s.body).map_err(|e| e.to_string())?.1)
+    match s.body.get(2..4) {
+        Some([1, 0]) => {
+            let v1: ManifestBodyV1 = kt_engine::wire::decode(TAG, 1, &s.body).map_err(|e| e.to_string())?.1;
+            Ok(ManifestBody { version: v1.version, issued_ms: v1.issued_ms, nostr_relays: v1.nostr_relays, iroh_relays: v1.iroh_relays, helpers: v1.helpers, ..Default::default() })
+        }
+        _ => Ok(kt_engine::wire::decode(TAG, 2, &s.body).map_err(|e| e.to_string())?.1),
+    }
 }
 
 /// The app's view: shipped baseline plus the newest valid manifest seen.
@@ -126,7 +180,16 @@ impl Manifest {
             nostr_relays: merge(&self.baseline.nostr_relays, &cur.nostr_relays),
             iroh_relays: merge(&self.baseline.iroh_relays, &cur.iroh_relays),
             helpers: merge(&self.baseline.helpers, &cur.helpers),
+            cloud_mailboxes: merge(&self.baseline.cloud_mailboxes, &cur.cloud_mailboxes),
+            cloud_mode: cur.cloud_mode.or(self.baseline.cloud_mode),
+            blossom_servers: merge(&self.baseline.blossom_servers, &cur.blossom_servers),
+            required: cur.required.clone(),
         }
+    }
+
+    /// The reason this build must update, if the manifest says so.
+    pub fn required_update(&self, channel: &str, version: u64) -> Option<String> {
+        self.effective().required.into_iter().find(|r| r.channel == channel && version < r.below_version).map(|r| r.reason)
     }
 
     /// Fetch from HTTPS sources; every source is tried, failures are ignored.
@@ -183,7 +246,42 @@ mod tests {
             nostr_relays: vec![Weighted { item: relay.into(), weight: 5 }],
             iroh_relays: vec![],
             helpers: vec![Weighted { item: [7; 32], weight: 9 }],
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn format_1_still_reads_and_format_2_adds() {
+        let op = crypto::DeviceSecret::generate();
+        // A format-1 manifest, as the tool wrote them before.
+        #[derive(Serialize)]
+        struct V1 {
+            version: u64,
+            issued_ms: u64,
+            nostr_relays: Vec<Weighted<String>>,
+            iroh_relays: Vec<Weighted<String>>,
+            helpers: Vec<Weighted<[u8; 32]>>,
+        }
+        let b = kt_engine::wire::encode(TAG, 1, &V1 { version: 4, issued_ms: 1, nostr_relays: vec![], iroh_relays: vec![], helpers: vec![] }).unwrap();
+        let signed = postcard::to_stdvec(&Signed { sig: op.sign(&b).to_vec(), body: b }).unwrap();
+        assert_eq!(verify(&signed, &op.public().sign).unwrap().version, 4);
+
+        let m = Manifest::new(op.public().sign, baseline(), None);
+        assert_eq!(m.effective().cloud_mailboxes[0].item, crate::cloud::DEFAULT_URL, "baseline ships the cloud mailbox");
+        let v2 = ManifestBody {
+            version: 5,
+            cloud_mode: Some(crate::cloud::CloudMode::WhenHelpersWeak),
+            cloud_mailboxes: vec![Weighted { item: "https://second.example".into(), weight: 50 }],
+            required: vec![RequiredUpdate { channel: "play".into(), below_version: 7, reason: "fixes a security problem".into() }],
+            ..Default::default()
+        };
+        assert!(m.consider(&sign(&v2, &op)));
+        let e = m.effective();
+        assert_eq!(e.cloud_mailboxes.len(), 2, "adds, never removes");
+        assert_eq!(e.cloud_mode, Some(crate::cloud::CloudMode::WhenHelpersWeak));
+        assert_eq!(m.required_update("play", 6).as_deref(), Some("fixes a security problem"));
+        assert_eq!(m.required_update("play", 7), None);
+        assert_eq!(m.required_update("github", 1), None);
     }
 
     #[test]

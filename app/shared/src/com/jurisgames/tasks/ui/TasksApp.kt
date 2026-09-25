@@ -56,6 +56,8 @@ fun TasksApp(
     onImport: (() -> Unit)? = null,
     update: com.jurisgames.tasks.core.UpdateItem? = null,
     onUpdate: ((String) -> Unit)? = null,
+    /** Why this build must update (signed operator manifest only, never peer data). */
+    required: String? = null,
     /** Android 12+: wallpaper colors (Material You), for light or dark. */
     dynamicScheme: ((Boolean) -> androidx.compose.material3.ColorScheme?)? = null,
 ) {
@@ -74,7 +76,13 @@ fun TasksApp(
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
-                if (update != null && onUpdate != null) {
+                if (required != null) {
+                    // Placeholder look (UX pending): stays until this build is updated.
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Update required: $required", color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f).testTag("required"))
+                        if (onUpdate != null) TextButton(onClick = { onUpdate(update?.link ?: "https://apps.jurisgames.com/") }, modifier = Modifier.testTag("requiredGo")) { Text("Update") }
+                    }
+                } else if (update != null && onUpdate != null) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         // Principle 8: newer data seen -> say why (text built in; the link only ever
                         // comes from our own update manifest).

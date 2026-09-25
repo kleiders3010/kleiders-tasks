@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
             }
             TasksApp(node, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
-            }, update = update.value, onUpdate = { link ->
+            }, update = update.value, required = required.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
             }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
                 // Both formats at once: readable Markdown as text (Obsidian, notes apps,
@@ -123,6 +123,9 @@ class MainActivity : ComponentActivity() {
     /** The invite or device link that opened the app, if any. */
     private val opened = mutableStateOf<String?>(null)
 
+    /** Why this build must update (from the signed operator manifest), if it must. */
+    private val required = mutableStateOf<String?>(null)
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         opened.value = intent.dataString
@@ -172,6 +175,8 @@ class MainActivity : ComponentActivity() {
         askForNotificationsWhenShared()
         askForExactAlarmsIfNeeded()
         checkForUpdate()
+        val current = packageManager.getPackageInfo(packageName, 0).longVersionCode.toULong()
+        required.value = runCatching { app.node.requiredUpdate(current, Store.UPDATE_CHANNEL) }.getOrNull()
     }
 
     /** Asked the first time it's relevant: once this device is in a shared group (§12). */

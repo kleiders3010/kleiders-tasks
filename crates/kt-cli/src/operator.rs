@@ -7,6 +7,9 @@
 //!
 //! - `kt-operator new <keyfile>`: make a key (refuses to overwrite); prints the public key
 //! - `kt-operator pub <keyfile>`: print the public key (checks the password)
+//! - `kt-operator sign-manifest <keyfile> <manifest.json> <out.bin>`: sign an operator
+//!   manifest (JSON of `kt_net::manifest::ManifestBody`); checks it against the key's
+//!   public half and the app's built-in operator key before writing
 
 use std::path::Path;
 
@@ -79,7 +82,21 @@ fn run() -> Result<()> {
             let secret = open_key(&std::fs::read(file)?, &password()?)?;
             println!("{}", hex::encode(secret.public().sign));
         }
-        _ => bail!("usage: kt-operator new <keyfile> | kt-operator pub <keyfile>   (password in KT_PW)"),
+        [cmd, file, json, out] if cmd == "sign-manifest" => {
+            let secret = open_key(&std::fs::read(file)?, &password()?)?;
+            if secret.public().sign != kt_net::manifest::OPERATOR_PUBLIC_KEY {
+                bail!("this key isn't the one the app trusts");
+            }
+            let body: kt_net::manifest::ManifestBody = serde_json::from_slice(&std::fs::read(json)?).context("reading the manifest JSON")?;
+            let signed = kt_net::manifest::sign(&body, &secret);
+            let back = kt_net::manifest::verify(&signed, &kt_net::manifest::OPERATOR_PUBLIC_KEY).map_err(|e| anyhow!(e))?;
+            if back != body {
+                bail!("the signed manifest didn't read back the same");
+            }
+            kt_engine::storage::write_atomic(Path::new(out), &signed).context("writing the signed manifest")?;
+            println!("signed manifest version {} ({} bytes)", body.version, signed.len());
+        }
+        _ => bail!("usage: kt-operator new <keyfile> | pub <keyfile> | sign-manifest <keyfile> <manifest.json> <out.bin>   (password in KT_PW)"),
     }
     Ok(())
 }
