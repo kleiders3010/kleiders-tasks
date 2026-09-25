@@ -171,6 +171,49 @@ pub struct P2pReport {
     pub received: ReadReport,
 }
 
+/// An endpoint builder with this device's network settings: relay map (n0's as one layer,
+/// then the custom relays), TLS verifier with pinned helper keys, port mapping, n0 DNS and
+/// bind address. Shared by the real endpoint and the measurement-only extra endpoints
+/// ([`crate::measure`]), so both keep exactly the same connections.
+pub(crate) fn endpoint_builder(cfg: &P2pConfig, secret: SecretKey, pins: crate::relay_tls::Pins, alpns: Vec<Vec<u8>>) -> Result<iroh::endpoint::Builder, String> {
+    let mut cfgs = Vec::new();
+    if cfg.n0_relays {
+        // n0's public relays as one best-effort layer among ours (D50), never alone:
+        // helper relays still come and go at runtime.
+        use iroh::defaults::prod::*;
+        for c in [default_na_east_relay(), default_na_west_relay(), default_eu_relay(), default_ap_relay()] {
+            cfgs.push(Arc::new(c));
+        }
+    }
+    for r in &cfg.relays {
+        let u: RelayUrl = r.parse().map_err(|e| format!("bad relay url {r}: {e}"))?;
+        let mut c = iroh::RelayConfig::new(u, None);
+        if let Some(t) = &cfg.relay_token {
+            c = c.with_auth_token(t);
+        }
+        cfgs.push(Arc::new(c));
+    }
+    // A custom map (not Disabled, possibly empty) so relays can be added at runtime (E10).
+    let relay_mode = RelayMode::Custom(RelayMap::from_iter(cfgs));
+    let mut b = Endpoint::builder(presets::Minimal)
+        .ca_tls_config(crate::relay_tls::ca_tls_config(pins))
+        .secret_key(secret)
+        .alpns(alpns)
+        .relay_mode(relay_mode);
+    if !cfg.portmap {
+        b = b.portmapper_config(PortmapperConfig::Disabled);
+    }
+    if cfg.n0_dns {
+        b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns()).address_lookup(iroh::address_lookup::DnsAddressLookup::n0_dns());
+    }
+    if cfg.relay_only {
+        b = b.clear_ip_transports();
+    } else if let Some(a) = cfg.bind {
+        b = b.clear_ip_transports().bind_addr(a).map_err(|e| e.to_string())?;
+    }
+    Ok(b)
+}
+
 pub struct P2p {
     ep: Endpoint,
     syncer: Arc<Syncer>,
@@ -193,6 +236,8 @@ pub struct P2p {
     invites: Mutex<HashMap<[u8; 32], Vec<u8>>>,
     /// This device's blobs, served by ID.
     blob_store: Mutex<Option<kt_engine::blobs::BlobStore>>,
+    /// The settings it was started with (measurement-only extra endpoints copy them).
+    cfg: P2pConfig,
 }
 
 impl P2p {
@@ -204,44 +249,12 @@ impl P2p {
             let r = r.lock().expect("replica lock");
             kt_engine::crypto::derive(&r.identity().secret().to_bytes(), "kt/iroh-endpoint/v1", b"").0
         };
-        let mut cfgs = Vec::new();
-        if cfg.n0_relays {
-            // n0's public relays as one best-effort layer among ours (D50), never alone:
-            // helper relays still come and go at runtime.
-            use iroh::defaults::prod::*;
-            for c in [default_na_east_relay(), default_na_west_relay(), default_eu_relay(), default_ap_relay()] {
-                cfgs.push(Arc::new(c));
-            }
-        }
-        for r in &cfg.relays {
-            let u: RelayUrl = r.parse().map_err(|e| format!("bad relay url {r}: {e}"))?;
-            let mut c = iroh::RelayConfig::new(u, None);
-            if let Some(t) = &cfg.relay_token {
-                c = c.with_auth_token(t);
-            }
-            cfgs.push(Arc::new(c));
-        }
-        // A custom map (not Disabled, possibly empty) so relays can be added at runtime (E10).
-        let relay_mode = RelayMode::Custom(RelayMap::from_iter(cfgs));
         let pins: crate::relay_tls::Pins = Default::default();
-        let mut b = Endpoint::builder(presets::Minimal)
-            .ca_tls_config(crate::relay_tls::ca_tls_config(pins.clone()))
-            .secret_key(SecretKey::from_bytes(&seed))
-            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec(), BLOB_ALPN.to_vec()])
-            .relay_mode(relay_mode);
-        if !cfg.portmap {
-            b = b.portmapper_config(PortmapperConfig::Disabled);
-        }
-        if cfg.n0_dns {
-            b = b.address_lookup(iroh::address_lookup::PkarrPublisher::n0_dns()).address_lookup(iroh::address_lookup::DnsAddressLookup::n0_dns());
-        }
-        if cfg.relay_only {
-            b = b.clear_ip_transports();
-        } else if let Some(a) = cfg.bind {
-            b = b.clear_ip_transports().bind_addr(a).map_err(|e| e.to_string())?;
-        }
+        let alpns = vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec(), BLOB_ALPN.to_vec()];
+        let b = endpoint_builder(&cfg, SecretKey::from_bytes(&seed), pins.clone(), alpns)?;
         let ep = b.bind().await.map_err(|e| e.to_string())?;
         let helper = cfg.helper.clone().map(crate::helper::HelperStore::new);
+        let cfg = P2pConfig { helper: None, ..cfg };
         let p = Arc::new(P2p {
             ep,
             syncer,
@@ -255,6 +268,7 @@ impl P2p {
             helping: std::sync::atomic::AtomicBool::new(true),
             invites: Mutex::new(HashMap::new()),
             blob_store: Mutex::new(None),
+            cfg,
         });
         let acc = p.clone();
         tokio::spawn(async move { acc.accept_loop().await });
@@ -478,6 +492,16 @@ impl P2p {
     /// Helper relays currently in use.
     pub fn helper_relays(&self) -> Vec<String> {
         self.used_relays.lock().expect("lock").keys().cloned().collect()
+    }
+
+    /// Helper relays in use with their pinned keys.
+    pub fn helper_relay_keys(&self) -> Vec<(String, [u8; 32])> {
+        self.used_relays.lock().expect("lock").iter().map(|(u, (k, _))| (u.clone(), *k)).collect()
+    }
+
+    /// The settings this endpoint was started with (without the helper store).
+    pub fn config(&self) -> &P2pConfig {
+        &self.cfg
     }
 
     /// Our DHT node's reachable address (`DhtDiscovery::entry_point`), shared with members.

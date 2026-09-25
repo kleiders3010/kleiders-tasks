@@ -19,6 +19,8 @@ pub mod lan;
 pub mod live;
 pub mod mailbox;
 pub mod manifest;
+/// Measurement only (D23): extra idle endpoints to price a per-group network identity.
+pub mod measure;
 pub mod nostr;
 pub mod p2p;
 #[cfg(feature = "relay-server")]
