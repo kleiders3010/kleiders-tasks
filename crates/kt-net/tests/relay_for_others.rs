@@ -117,3 +117,24 @@ async fn phones_find_a_desktop_relay_and_sync_through_it() {
     rfo.stop(&desk).await;
     assert_eq!(desk.helper_ref().unwrap().relay, None);
 }
+
+/// Helper relays are probed before use: a dead one and an impostor (a real relay whose
+/// key doesn't match the pin) are skipped, and the next candidate takes their place.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn unreachable_or_impostor_relays_are_skipped() {
+    use kt_net::helper_relay::{HelperRelay, HelperRelayConfig};
+    let genuine_secret = [31u8; 32];
+    let genuine_key = *iroh::SecretKey::from_bytes(&genuine_secret).public().as_bytes();
+    let genuine = HelperRelay::start(HelperRelayConfig { tls_secret: Some(genuine_secret), ..Default::default() }).await.unwrap();
+    let impostor = HelperRelay::start(HelperRelayConfig { tls_secret: Some([32u8; 32]), ..Default::default() }).await.unwrap();
+    let nostr_relay = TestRelay::start(None).await.unwrap();
+    let ph = phone(replica("probe"), &nostr_relay.url()).await;
+    let dead = ("https://127.0.0.1:9".to_string(), [33u8; 32]);
+    let fake = (impostor.url().unwrap(), genuine_key); // claims the genuine helper's key
+    let real = (genuine.url().unwrap(), genuine_key);
+    let used = ph.p.sync_helper_relays(vec![dead, fake, real.clone()], 1).await;
+    assert_eq!(used, 1);
+    assert_eq!(ph.p.helper_relays(), vec![real.0.clone()], "only the genuine relay is used");
+    tokio::time::timeout(Duration::from_secs(10), ph.p.endpoint().online()).await.expect("online through it");
+}
+

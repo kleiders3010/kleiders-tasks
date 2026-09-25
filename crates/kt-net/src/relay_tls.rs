@@ -91,6 +91,21 @@ pub fn ca_tls_config(pins: Pins) -> iroh::tls::CaTlsConfig {
     }))
 }
 
+/// A rustls client configuration with the same verifier (for probing helper relays).
+pub fn client_config(pins: Pins) -> rustls::ClientConfig {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let mut roots = rustls::RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let standard = WebPkiServerVerifier::builder_with_provider(Arc::new(roots), provider.clone()).build().expect("webpki roots");
+    let verifier = Arc::new(PinnedVerifier { standard, pins, provider: provider.clone() });
+    rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .expect("protocol versions")
+        .dangerous()
+        .with_custom_certificate_verifier(verifier)
+        .with_no_client_auth()
+}
+
 /// A helper relay's certificate and key: self-signed with its endpoint key (Ed25519).
 #[cfg(feature = "relay-server")]
 pub fn self_signed_cert(secret: &[u8; 32]) -> Result<(CertificateDer<'static>, rustls::pki_types::PrivateKeyDer<'static>), String> {

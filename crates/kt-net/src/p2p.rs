@@ -39,6 +39,10 @@ pub const ALPN: &[u8] = b"kt/slots/1";
 pub const INVITE_ALPN: &[u8] = b"kt/invite/1";
 const MAX_FRAME: usize = 32 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Helper relays in use are probed again this often.
+pub const RELAY_RECHECK: Duration = Duration::from_secs(600);
+/// How long an unreachable helper relay is skipped before being tried again.
+pub const RELAY_DEAD_FOR: Duration = Duration::from_secs(6 * 3600);
 
 #[derive(Clone, Debug, Default)]
 pub struct P2pConfig {
@@ -176,8 +180,10 @@ pub struct P2p {
     own_relay: Mutex<Option<String>>,
     /// Our DHT node, when publicly reachable (shared with members in whereabouts).
     dht_entry: Mutex<Option<SocketAddr>>,
-    /// Helper relays this endpoint currently uses (URL -> key).
-    used_relays: Mutex<HashMap<String, [u8; 32]>>,
+    /// Helper relays this endpoint currently uses (URL -> key, when last probed).
+    used_relays: Mutex<HashMap<String, ([u8; 32], std::time::Instant)>>,
+    /// Helper relays that didn't answer a probe (URL -> until when skipped).
+    dead_relays: Mutex<HashMap<String, std::time::Instant>>,
     /// Helping right now (a phone helps only on Wi-Fi, and by default while charging or
     /// open: the store stays, serving pauses).
     helping: std::sync::atomic::AtomicBool,
@@ -241,6 +247,7 @@ impl P2p {
             own_relay: Mutex::new(None),
             dht_entry: Mutex::new(None),
             used_relays: Mutex::new(HashMap::new()),
+            dead_relays: Mutex::new(HashMap::new()),
             helping: std::sync::atomic::AtomicBool::new(true),
             invites: Mutex::new(HashMap::new()),
         });
@@ -386,22 +393,64 @@ impl P2p {
         self.ep.addr().addrs.iter().any(|a| matches!(a, TransportAddr::Relay(_)))
     }
 
-    /// Use exactly these helper relays (URL, key): new ones are added, dropped ones removed.
-    /// Returns how many are in use.
-    pub async fn sync_helper_relays(&self, wanted: Vec<(String, [u8; 32])>) -> usize {
-        let current: HashMap<String, [u8; 32]> = self.used_relays.lock().expect("lock").clone();
-        for (url, _) in current.iter().filter(|(u, _)| !wanted.iter().any(|(w, _)| w == *u)) {
-            self.drop_helper_relay(url).await;
-        }
-        let mut now = HashMap::new();
-        for (url, key) in wanted {
-            if current.get(&url) == Some(&key) || self.use_helper_relay(&url, key).await.is_ok() {
-                now.insert(url, key);
+    /// Is a helper relay reachable right now? An HTTPS `GET /ping` (the relay protocol's
+    /// probe), verified against the helper's pinned key: an outside-in check.
+    pub async fn probe_helper_relay(&self, url: &str, key: [u8; 32]) -> bool {
+        let Ok(u) = url.parse::<RelayUrl>() else { return false };
+        let Some(ip) = u.host_str().and_then(|h| h.trim_start_matches('[').trim_end_matches(']').parse::<std::net::IpAddr>().ok()) else { return false };
+        self.pins.write().expect("pins lock").insert(ip, key);
+        let Ok(client) = reqwest::Client::builder()
+            .use_preconfigured_tls(crate::relay_tls::client_config(self.pins.clone()))
+            .timeout(Duration::from_secs(5))
+            .build()
+        else {
+            return false;
+        };
+        let ping = format!("{}/ping", url.trim_end_matches('/'));
+        client.get(ping).send().await.is_ok_and(|r| r.status().is_success())
+    }
+
+    /// Use up to `max` of these helper relays (URL, key, best first), each probed first
+    /// (and re-probed every [`RELAY_RECHECK`]); one that doesn't answer is skipped for
+    /// [`RELAY_DEAD_FOR`] and the next candidate takes its place. Returns how many are in use.
+    pub async fn sync_helper_relays(&self, candidates: Vec<(String, [u8; 32])>, max: usize) -> usize {
+        let now = std::time::Instant::now();
+        let current = self.used_relays.lock().expect("lock").clone();
+        self.dead_relays.lock().expect("lock").retain(|_, until| *until > now);
+        let mut next: HashMap<String, ([u8; 32], std::time::Instant)> = HashMap::new();
+        for (url, key) in candidates {
+            if next.len() >= max {
+                break;
+            }
+            if self.dead_relays.lock().expect("lock").contains_key(&url) {
+                continue;
+            }
+            let fresh = current.get(&url).is_some_and(|(k, checked)| *k == key && now.duration_since(*checked) < RELAY_RECHECK);
+            if fresh {
+                let v = current[&url];
+                next.insert(url, v);
+                continue;
+            }
+            if self.probe_helper_relay(&url, key).await {
+                if !current.get(&url).is_some_and(|(k, _)| *k == key) && self.use_helper_relay(&url, key).await.is_err() {
+                    continue;
+                }
+                next.insert(url, (key, now));
+            } else {
+                self.dead_relays.lock().expect("lock").insert(url, now + RELAY_DEAD_FOR);
             }
         }
-        let n = now.len();
-        *self.used_relays.lock().expect("lock") = now;
+        for url in current.keys().filter(|u| !next.contains_key(*u)) {
+            self.drop_helper_relay(url).await;
+        }
+        let n = next.len();
+        *self.used_relays.lock().expect("lock") = next;
         n
+    }
+
+    /// Helper relays currently in use.
+    pub fn helper_relays(&self) -> Vec<String> {
+        self.used_relays.lock().expect("lock").keys().cloned().collect()
     }
 
     /// Our DHT node's reachable address (`DhtDiscovery::entry_point`), shared with members.

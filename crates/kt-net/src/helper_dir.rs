@@ -342,9 +342,9 @@ pub async fn maintain_with_dht(
         .into_iter()
         .filter(|h| h.endpoint != me)
         .filter_map(|h| h.relay.clone().map(|u| (u, h.endpoint)))
-        .take(HELPER_RELAYS)
+        .take(HELPER_RELAYS * 3) // spares, for relays that turn out unreachable
         .collect();
-    report.relays_in_use = hmb.p2p().sync_helper_relays(relays).await;
+    report.relays_in_use = hmb.p2p().sync_helper_relays(relays, HELPER_RELAYS).await;
     let replica = syncer.replica();
     let day = today();
     // Groups we're joining: besides the invite's hints, the helpers closest to the group's
