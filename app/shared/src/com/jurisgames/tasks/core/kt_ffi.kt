@@ -715,9 +715,17 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_display_name(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_export_list_file(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_export_markdown(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_groups(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_import_list_file(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_invite(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_is_pristine(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_join_code(
     ): Int
@@ -726,6 +734,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_rename_task(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_display_name(
     ): Int
@@ -741,7 +751,11 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_tasks(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_write_backup(
+    ): Int
     external fun uniffi_kt_ffi_checksum_constructor_ktnode_open(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_constructor_ktnode_open_restoring(
     ): Int
     external fun ffi_kt_ffi_uniffi_contract_version(
     ): Int
@@ -778,6 +792,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_constructor_ktnode_open(`identityDir`: RustBuffer.ByValue,`dataDir`: RustBuffer.ByValue,`workerPath`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_kt_ffi_fn_constructor_ktnode_open_restoring(`identityDir`: RustBuffer.ByValue,`dataDir`: RustBuffer.ByValue,`workerPath`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
     external fun uniffi_kt_ffi_fn_method_ktnode_add_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,`parentId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_complete_word(`ptr`: Long,`prefix`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -794,10 +810,18 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_display_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_export_list_file(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_export_markdown(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_import_list_file(`ptr`: Long,`groupId`: RustBuffer.ByValue,`file`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_invite(`ptr`: Long,`groupId`: RustBuffer.ByValue,`days`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_is_pristine(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_join_code(`ptr`: Long,`words`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_lists(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -806,6 +830,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_rename_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_set_display_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_done(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`done`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -820,6 +846,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_tasks(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun ffi_kt_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_kt_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -966,10 +994,22 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_display_name() and 0xFFFF) != 16726) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_export_list_file() and 0xFFFF) != 7953) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_export_markdown() and 0xFFFF) != 59735) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_groups() and 0xFFFF) != 61646) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_import_list_file() and 0xFFFF) != 5518) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_invite() and 0xFFFF) != 24950) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_is_pristine() and 0xFFFF) != 50454) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_join_code() and 0xFFFF) != 57120) {
@@ -984,6 +1024,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_rename_task() and 0xFFFF) != 12754) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_display_name() and 0xFFFF) != 11119) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -996,7 +1039,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_start_live() and 0xFFFF) != 63714) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_stop_live() and 0xFFFF) != 62328) {
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_stop_live() and 0xFFFF) != 59408) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_sync_now() and 0xFFFF) != 14869) {
@@ -1005,7 +1048,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_tasks() and 0xFFFF) != 31507) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_write_backup() and 0xFFFF) != 29557) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_constructor_ktnode_open() and 0xFFFF) != 17990) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_constructor_ktnode_open_restoring() and 0xFFFF) != 41847) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1319,6 +1368,25 @@ public object FfiConverterString: FfiConverter<String, RustBuffer.ByValue> {
         val byteBuf = toUtf8(value)
         buf.putInt(byteBuf.limit())
         buf.put(byteBuf)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
+    override fun read(buf: ByteBuffer): ByteArray {
+        val len = buf.getInt()
+        val byteArr = ByteArray(len)
+        buf.get(byteArr)
+        return byteArr
+    }
+    override fun allocationSize(value: ByteArray): ULong {
+        return 4UL + value.size.toULong()
+    }
+    override fun write(value: ByteArray, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        buf.put(value)
     }
 }
 
@@ -1757,12 +1825,32 @@ public interface KtNodeInterface {
     
     fun `displayName`(): kotlin.String
     
+    /**
+     * The list as a sealed `.tasklist` file (with history; re-importable).
+     */
+    fun `exportListFile`(`listId`: kotlin.String): kotlin.ByteArray
+    
+    /**
+     * The list as Markdown (Obsidian Tasks format).
+     */
+    fun `exportMarkdown`(`listId`: kotlin.String): kotlin.String
+    
     fun `groups`(): List<GroupItem>
+    
+    /**
+     * Import a `.tasklist` file as a new list (in `group_id`, or among your own lists).
+     */
+    fun `importListFile`(`groupId`: kotlin.String?, `file`: kotlin.ByteArray): ListItem
     
     /**
      * Create an invite to a group (8 words, valid `days`, 1–30).
      */
     fun `invite`(`groupId`: kotlin.String, `days`: kotlin.UInt): InviteInfo
+    
+    /**
+     * Nothing made on this device yet: the first-launch screen may offer a restore.
+     */
+    fun `isPristine`(): kotlin.Boolean
     
     /**
      * Join a group with an invite's 8 words (network: seconds).
@@ -1778,6 +1866,11 @@ public interface KtNodeInterface {
     
     fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
     
+    /**
+     * Set when this node was opened from a backup.
+     */
+    fun `restored`(): RestoreInfo?
+    
     fun `setDisplayName`(`name`: kotlin.String)
     
     fun `setDone`(`listId`: kotlin.String, `taskId`: kotlin.String, `done`: kotlin.Boolean)
@@ -1789,6 +1882,10 @@ public interface KtNodeInterface {
      */
     fun `startLive`()
     
+    /**
+     * Back to background mode. Returns once live mode has let go of this node (so the
+     * platform can close it, e.g. to restore a backup).
+     */
     fun `stopLive`()
     
     /**
@@ -1797,6 +1894,11 @@ public interface KtNodeInterface {
     fun `syncNow`(): SyncReport
     
     fun `tasks`(`listId`: kotlin.String): List<TaskItem>
+    
+    /**
+     * Write a sealed backup now (export, or before a risky operation).
+     */
+    fun `writeBackup`(`path`: kotlin.String)
     
     companion object
 }
@@ -2024,6 +2126,42 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     
 
+    
+    /**
+     * The list as a sealed `.tasklist` file (with history; re-importable).
+     */
+    @Throws(KtException::class)override fun `exportListFile`(`listId`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_export_list_file(
+        it,
+        
+        FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The list as Markdown (Obsidian Tasks format).
+     */
+    @Throws(KtException::class)override fun `exportMarkdown`(`listId`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_export_markdown(
+        it,
+        
+        FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
     override fun `groups`(): List<GroupItem> {
             return FfiConverterSequenceTypeGroupItem.lift(
     callWithHandle {
@@ -2031,6 +2169,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_groups(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Import a `.tasklist` file as a new list (in `group_id`, or among your own lists).
+     */
+    @Throws(KtException::class)override fun `importListFile`(`groupId`: kotlin.String?, `file`: kotlin.ByteArray): ListItem {
+            return FfiConverterTypeListItem.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_import_list_file(
+        it,
+        
+        FfiConverterOptionalString.lower(`groupId`),
+        FfiConverterByteArray.lower(`file`),_status)
 }
     }
     )
@@ -2050,6 +2207,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         
         FfiConverterString.lower(`groupId`),
         FfiConverterUInt.lower(`days`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Nothing made on this device yet: the first-launch screen may offer a restore.
+     */override fun `isPristine`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_is_pristine(
+        it,
+        _status)
 }
     }
     )
@@ -2120,6 +2293,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    /**
+     * Set when this node was opened from a backup.
+     */override fun `restored`(): RestoreInfo? {
+            return FfiConverterOptionalTypeRestoreInfo.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_restored(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(KtException::class)override fun `setDisplayName`(`name`: kotlin.String)
         = 
     callWithHandle {
@@ -2177,7 +2366,11 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
     
 
-    override fun `stopLive`()
+    
+    /**
+     * Back to background mode. Returns once live mode has let go of this node (so the
+     * platform can close it, e.g. to restore a backup).
+     */override fun `stopLive`()
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -2221,6 +2414,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    /**
+     * Write a sealed backup now (export, or before a risky operation).
+     */
+    @Throws(KtException::class)override fun `writeBackup`(`path`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_write_backup(
+        it,
+        
+        FfiConverterString.lower(`path`),_status)
+}
+    }
+    
+    
+
+    
 
     
 
@@ -2242,6 +2452,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         FfiConverterString.lower(`dataDir`),
         FfiConverterString.lower(`workerPath`),
         FfiConverterTypeNodeOptions.lower(`options`),_status)
+}
+    )
+    }
+    
+
+        
+    /**
+     * Restore a backup file the user picked (first launch, nothing made on this device yet).
+     */
+    @Throws(KtException::class) fun `openRestoring`(`identityDir`: kotlin.String, `dataDir`: kotlin.String, `workerPath`: kotlin.String, `options`: NodeOptions, `backup`: kotlin.ByteArray): KtNode {
+            return FfiConverterTypeKtNode.lift(
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_constructor_ktnode_open_restoring(
+    
+        
+        FfiConverterString.lower(`identityDir`),
+        FfiConverterString.lower(`dataDir`),
+        FfiConverterString.lower(`workerPath`),
+        FfiConverterTypeNodeOptions.lower(`options`),
+        FfiConverterByteArray.lower(`backup`),_status)
 }
     )
     }
@@ -2475,6 +2705,13 @@ data class NodeOptions (
      * Bind address for P2P ("" = all interfaces; tests use "127.0.0.1:0").
      */
     var `bind`: kotlin.String
+    , 
+    /**
+     * Where the daily sealed backup goes ("" = none). Android: a folder that Android
+     * backup includes (and nothing else). A backup found here on a fresh install is
+     * restored automatically.
+     */
+    var `backupDir`: kotlin.String
     
 ){
     
@@ -2496,6 +2733,7 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterBoolean.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
@@ -2504,7 +2742,8 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterSequenceString.allocationSize(value.`relays`) +
             FfiConverterBoolean.allocationSize(value.`p2p`) +
             FfiConverterBoolean.allocationSize(value.`dht`) +
-            FfiConverterString.allocationSize(value.`bind`)
+            FfiConverterString.allocationSize(value.`bind`) +
+            FfiConverterString.allocationSize(value.`backupDir`)
     )
 
     override fun write(value: NodeOptions, buf: ByteBuffer) {
@@ -2513,6 +2752,7 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterBoolean.write(value.`p2p`, buf)
             FfiConverterBoolean.write(value.`dht`, buf)
             FfiConverterString.write(value.`bind`, buf)
+            FfiConverterString.write(value.`backupDir`, buf)
     }
 }
 
@@ -2574,6 +2814,53 @@ public object FfiConverterTypeRelayStat: FfiConverterRustBuffer<RelayStat> {
             FfiConverterULong.write(value.`failuresInARow`, buf)
             FfiConverterULong.write(value.`readbackHits`, buf)
             FfiConverterULong.write(value.`readbackMisses`, buf)
+    }
+}
+
+
+
+/**
+ * What a restore did.
+ */
+data class RestoreInfo (
+    /**
+     * Shared groups: readable now, back in when a member's device sees the request.
+     */
+    var `rejoiningGroups`: kotlin.UInt
+    , 
+    /**
+     * Solo lists copied into this device's own lists.
+     */
+    var `rehomedLists`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRestoreInfo: FfiConverterRustBuffer<RestoreInfo> {
+    override fun read(buf: ByteBuffer): RestoreInfo {
+        return RestoreInfo(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RestoreInfo) = (
+            FfiConverterUInt.allocationSize(value.`rejoiningGroups`) +
+            FfiConverterUInt.allocationSize(value.`rehomedLists`)
+    )
+
+    override fun write(value: RestoreInfo, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`rejoiningGroups`, buf)
+            FfiConverterUInt.write(value.`rehomedLists`, buf)
     }
 }
 
@@ -2815,6 +3102,38 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
         } else {
             buf.put(1)
             FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeRestoreInfo: FfiConverterRustBuffer<RestoreInfo?> {
+    override fun read(buf: ByteBuffer): RestoreInfo? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeRestoreInfo.read(buf)
+    }
+
+    override fun allocationSize(value: RestoreInfo?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeRestoreInfo.allocationSize(value)
+        }
+    }
+
+    override fun write(value: RestoreInfo?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeRestoreInfo.write(value, buf)
         }
     }
 }

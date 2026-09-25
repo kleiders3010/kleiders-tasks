@@ -55,6 +55,19 @@ pub struct NodeOptions {
     pub dht: bool,
     /// Bind address for P2P ("" = all interfaces; tests use "127.0.0.1:0").
     pub bind: String,
+    /// Where the daily sealed backup goes ("" = none). Android: a folder that Android
+    /// backup includes (and nothing else). A backup found here on a fresh install is
+    /// restored automatically.
+    pub backup_dir: String,
+}
+
+/// What a restore did.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RestoreInfo {
+    /// Shared groups: readable now, back in when a member's device sees the request.
+    pub rejoining_groups: u32,
+    /// Solo lists copied into this device's own lists.
+    pub rehomed_lists: u32,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -139,8 +152,15 @@ pub struct KtNode {
     net: Net,
     data_dir: PathBuf,
     listener: Mutex<Option<Arc<dyn KtListener>>>,
-    live: Mutex<Option<tokio::sync::watch::Sender<bool>>>,
+    /// Live mode: the stop signal and the task holding a reference to this node.
+    live: Mutex<Option<(tokio::sync::watch::Sender<bool>, tokio::task::JoinHandle<()>)>>,
+    backup_dir: Option<PathBuf>,
+    restored: Option<RestoreInfo>,
 }
+
+const BACKUP_FILE: &str = "tasks.ktbackup";
+const BACKUP_EVERY: Duration = Duration::from_secs(24 * 3600);
+const RECOVERY_DAYS: u32 = 30;
 
 fn gid(s: &str) -> Result<GroupId, KtError> {
     GroupId::from_hex(s).ok_or_else(|| fail("bad group id"))
@@ -174,6 +194,28 @@ impl KtNode {
         }
     }
 
+    /// The daily sealed backup (the previous one is kept next to it).
+    fn backup_if_due(&self) {
+        let Some(dir) = &self.backup_dir else { return };
+        let path = dir.join(BACKUP_FILE);
+        let age = std::fs::metadata(&path).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok());
+        if age.is_some_and(|a| a < BACKUP_EVERY) {
+            return;
+        }
+        let _ = self.write_backup_to(&path);
+    }
+
+    fn write_backup_to(&self, path: &std::path::Path) -> Result<(), KtError> {
+        let bytes = self.app.backup(RECOVERY_DAYS).map_err(fail)?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(fail)?;
+        }
+        if path.exists() {
+            let _ = std::fs::copy(path, path.with_extension("prev.ktbackup"));
+        }
+        kt_engine::storage::write_atomic(path, &bytes).map_err(fail)
+    }
+
     fn notify(&self) {
         if let Some(l) = self.listener.lock().expect("lock").clone() {
             l.on_change();
@@ -183,6 +225,8 @@ impl KtNode {
     /// One full round on every layer: maintenance, sync, invites.
     async fn round(&self) -> SyncReport {
         let net = &self.net;
+        // First, so a new recovery invite goes out with this same round.
+        self.backup_if_due();
         kt_net::relays::maintain(&net.syncer, &net.nostr, &net.relays).await;
         if let Some((h, dir)) = &net.helpers {
             kt_net::helper_dir::maintain_with_dht(&net.syncer, h, &net.nostr, dir, net.dht.as_deref()).await;
@@ -216,9 +260,44 @@ impl KtNode {
     /// import sandbox executable (Android: `nativeLibraryDir/libkt_import.so`).
     #[uniffi::constructor]
     pub fn open(identity_dir: String, data_dir: String, worker_path: String, options: NodeOptions) -> Result<Arc<KtNode>, KtError> {
+        // A fresh install with a backup waiting (Android restored it): restore it.
+        let found = (!options.backup_dir.is_empty() && !PathBuf::from(&data_dir).join("app.meta").exists())
+            .then(|| std::fs::read(PathBuf::from(&options.backup_dir).join(BACKUP_FILE)).ok())
+            .flatten();
+        KtNode::start(identity_dir, data_dir, worker_path, options, found, false)
+    }
+
+    /// Restore a backup file the user picked (first launch, nothing made on this device yet).
+    #[uniffi::constructor]
+    pub fn open_restoring(identity_dir: String, data_dir: String, worker_path: String, options: NodeOptions, backup: Vec<u8>) -> Result<Arc<KtNode>, KtError> {
+        kt_engine::replica::backup::open(&backup).map_err(|_| fail("not a Tasks backup file"))?;
+        KtNode::start(identity_dir, data_dir, worker_path, options, Some(backup), true)
+    }
+}
+
+impl KtNode {
+    fn start(identity_dir: String, data_dir: String, worker_path: String, options: NodeOptions, restore: Option<Vec<u8>>, picked: bool) -> Result<Arc<KtNode>, KtError> {
         let sandbox = SandboxConfig { worker: PathBuf::from(worker_path), timeout: Duration::from_secs(20) };
         let data = PathBuf::from(&data_dir);
-        let app = App::open(&PathBuf::from(identity_dir), &data, sandbox).map_err(fail)?;
+        let identity = PathBuf::from(identity_dir);
+        let (app, restored) = match restore.map(|b| App::restore(&identity, &data, sandbox.clone(), &b)) {
+            Some(Ok((app, s))) => (app, Some(RestoreInfo { rejoining_groups: s.rejoining.len() as u32, rehomed_lists: s.rehomed_lists as u32 })),
+            // A file the user picked: say what went wrong.
+            Some(Err(e)) if picked => return Err(fail(e)),
+            Some(Err(_)) => {
+                // An unreadable backup never keeps the app from starting, and isn't
+                // overwritten by the next daily backup.
+                if let Some(dir) = (!options.backup_dir.is_empty()).then(|| PathBuf::from(&options.backup_dir)) {
+                    let _ = std::fs::rename(dir.join(BACKUP_FILE), dir.join("tasks.unrestored.ktbackup"));
+                }
+                if !data.join("app.meta").exists() {
+                    let _ = std::fs::remove_dir_all(&data);
+                    std::fs::create_dir_all(&data).map_err(fail)?;
+                }
+                (App::open(&identity, &data, sandbox).map_err(fail)?, None)
+            }
+            None => (App::open(&identity, &data, sandbox).map_err(fail)?, None),
+        };
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().worker_threads(2).build().map_err(fail)?;
         let seeds: Vec<String> = if options.relays.is_empty() { kt_net::relays::SEED_RELAYS.iter().map(|s| s.to_string()).collect() } else { options.relays.clone() };
         let replica = app.replica();
@@ -262,7 +341,46 @@ impl KtNode {
             let dht = if options.dht { DhtDiscovery::with_cache(replica.clone(), data.join("dht_nodes.txt"), None).ok().map(Arc::new) } else { None };
             Net { syncer, nostr, relays, p2p, helpers, dht }
         });
-        Ok(Arc::new(KtNode { app, rt, net, data_dir: data, listener: Mutex::new(None), live: Mutex::new(None) }))
+        let backup_dir = (!options.backup_dir.is_empty()).then(|| PathBuf::from(&options.backup_dir));
+        Ok(Arc::new(KtNode { app, rt, net, data_dir: data, listener: Mutex::new(None), live: Mutex::new(None), backup_dir, restored }))
+    }
+}
+
+#[uniffi::export]
+impl KtNode {
+    /// Set when this node was opened from a backup.
+    pub fn restored(&self) -> Option<RestoreInfo> {
+        self.restored.clone()
+    }
+
+    /// Nothing made on this device yet: the first-launch screen may offer a restore.
+    pub fn is_pristine(&self) -> bool {
+        self.app.is_pristine()
+    }
+
+    /// The list as Markdown (Obsidian Tasks format).
+    pub fn export_markdown(&self, list_id: String) -> Result<String, KtError> {
+        let l = self.list(&list_id)?;
+        self.app.export_markdown(&l).map_err(fail)
+    }
+
+    /// The list as a sealed `.tasklist` file (with history; re-importable).
+    pub fn export_list_file(&self, list_id: String) -> Result<Vec<u8>, KtError> {
+        let l = self.list(&list_id)?;
+        self.app.export_list_file(&l).map_err(fail)
+    }
+
+    /// Import a `.tasklist` file as a new list (in `group_id`, or among your own lists).
+    pub fn import_list_file(&self, group_id: Option<String>, file: Vec<u8>) -> Result<ListItem, KtError> {
+        let g = group_id.as_deref().map(gid).transpose()?;
+        let l = self.app.import_list_file(g, &file).map_err(fail)?;
+        self.notify();
+        Ok(ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name })
+    }
+
+    /// Write a sealed backup now (export, or before a risky operation).
+    pub fn write_backup(&self, path: String) -> Result<(), KtError> {
+        self.write_backup_to(&PathBuf::from(path))
     }
 
     pub fn device_key(&self) -> String {
@@ -374,9 +492,7 @@ impl KtNode {
     /// App open: live updates on every layer until [`KtNode::stop_live`].
     pub fn start_live(self: Arc<Self>) {
         let (tx, rx) = tokio::sync::watch::channel(false);
-        if let Some(old) = self.live.lock().expect("lock").replace(tx) {
-            let _ = old.send(true);
-        }
+        self.stop_live();
         let net_syncer = self.net.syncer.clone();
         let nostr = self.net.nostr.clone();
         let p2p = self.net.p2p.clone();
@@ -387,7 +503,7 @@ impl KtNode {
         // Periodic full rounds + change notifications.
         let me = self.clone();
         let mut stop = rx;
-        self.rt.spawn(async move {
+        let task = self.rt.spawn(async move {
             let mut last_round = std::time::Instant::now() - Duration::from_secs(3600);
             loop {
                 if last_round.elapsed() > Duration::from_secs(45) {
@@ -406,11 +522,16 @@ impl KtNode {
                 }
             }
         });
+        *self.live.lock().expect("lock") = Some((tx, task));
     }
 
+    /// Back to background mode. Returns once live mode has let go of this node (so the
+    /// platform can close it, e.g. to restore a backup).
     pub fn stop_live(&self) {
-        if let Some(tx) = self.live.lock().expect("lock").take() {
+        if let Some((tx, task)) = self.live.lock().expect("lock").take() {
             let _ = tx.send(true);
+            task.abort();
+            let _ = self.rt.block_on(async { tokio::time::timeout(Duration::from_secs(5), task).await });
         }
     }
 

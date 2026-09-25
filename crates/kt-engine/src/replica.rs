@@ -32,6 +32,7 @@ mod invites;
 mod mailboxset;
 pub use mailboxset::{MailboxSet, PREVIOUS_SET_READ_MS};
 pub use invites::{OpenInvite, PendingJoin};
+pub mod backup;
 mod compaction;
 mod slots;
 pub use compaction::CompactionPolicy;
@@ -273,6 +274,18 @@ impl Replica {
 
     pub fn docs(&self, g: &GroupId) -> Vec<DocId> {
         self.groups.get(g).map(|s| s.docs.keys().copied().collect()).unwrap_or_default()
+    }
+
+    /// Drop a group from this device entirely (its data was copied elsewhere, or the user
+    /// left). Other members are unaffected.
+    pub fn forget_group(&mut self, g: &GroupId) -> Result<()> {
+        self.groups.remove(g);
+        self.accepted_groups.remove(g);
+        let dir = self.layout.group_dir(g);
+        if dir.exists() {
+            std::fs::remove_dir_all(dir)?;
+        }
+        Ok(())
     }
 
     /// Allow epoch records of this group to be accepted (after an invite, for example).

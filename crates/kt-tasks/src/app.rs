@@ -45,6 +45,15 @@ pub struct GroupInfo {
     pub personal: bool,
 }
 
+/// What a restore did.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RestoreSummary {
+    /// Shared groups: readable now; back in as soon as a member's device sees the request.
+    pub rejoining: Vec<GroupId>,
+    /// Lists from groups nobody else can let us back into, copied into our personal group.
+    pub rehomed_lists: usize,
+}
+
 /// A list as the UI sees it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ListInfo {
@@ -128,6 +137,10 @@ impl App {
     pub fn open(identity_dir: &Path, data_dir: &Path, sandbox: SandboxConfig) -> Result<App> {
         let mut replica = Replica::open(identity_dir, data_dir, sandbox).map_err(eng)?;
         replica.set_semantics(Box::new(TaskSemantics));
+        App::with_replica(replica, data_dir)
+    }
+
+    fn with_replica(mut replica: Replica, data_dir: &Path) -> Result<App> {
         let meta_path: PathBuf = data_dir.join("app.meta");
         let meta = match std::fs::read(&meta_path) {
             Ok(b) => wire::decode::<AppMeta>(*b"AM", 1, &b).map_err(eng)?.1,
@@ -215,6 +228,13 @@ impl App {
         Ok(ListInfo { group: g, doc: d, name: name.to_string(), group_name })
     }
 
+    /// Nothing made on this device yet (no lists, no other groups, no pending joins): a
+    /// backup can still be restored onto it.
+    pub fn is_pristine(&self) -> bool {
+        let r = self.lock();
+        groups_of(&r, self.meta.personal).len() <= 1 && lists_of(&r, self.meta.personal).is_empty() && r.pending_joins().is_empty()
+    }
+
     /// All lists on this device, across all groups.
     pub fn lists(&self) -> Vec<ListInfo> {
         lists_of(&self.lock(), self.meta.personal)
@@ -281,6 +301,115 @@ impl App {
         r.commit(&list.group, &gd_from).map_err(eng)?;
         let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == to).map(|x| x.name).unwrap_or_default();
         Ok(ListInfo { group: to, doc: d, name: list.name.clone(), group_name })
+    }
+
+    /// A sealed backup of everything on this device (DESIGN §11). Includes a recovery
+    /// invite per shared group, valid `recovery_days`.
+    pub fn backup(&self, recovery_days: u32) -> Result<Vec<u8>> {
+        let app = wire::encode(*b"AM", 1, &self.meta).map_err(eng)?;
+        let b = self.lock().make_backup(u64::from(recovery_days.clamp(1, 30)) * 86_400_000, app).map_err(eng)?;
+        kt_engine::replica::backup::seal(&b).map_err(eng)
+    }
+
+    /// Restore a backup onto a fresh device (new identity, D1). Shared groups: readable at
+    /// once and back in when a member's device sees the recovery request. Groups nobody
+    /// else can let us into (solo lists): their lists are copied into our new personal group.
+    pub fn restore(identity_dir: &Path, data_dir: &Path, sandbox: SandboxConfig, backup: &[u8]) -> Result<(App, RestoreSummary)> {
+        let b = kt_engine::replica::backup::open(backup).map_err(eng)?;
+        let old: AppMeta = wire::decode(*b"AM", 1, &b.app).map_err(eng)?.1;
+        if data_dir.join("app.meta").exists() {
+            // Opened once already (first-launch screen): fine while nothing was made yet.
+            let pristine = App::open(identity_dir, data_dir, sandbox.clone())?.is_pristine();
+            if !pristine {
+                return Err(Error::Invalid("this device already has lists; restore onto a fresh install".into()));
+            }
+            std::fs::remove_dir_all(data_dir).map_err(eng)?;
+            std::fs::create_dir_all(data_dir).map_err(eng)?;
+        }
+        let mut replica = Replica::open(identity_dir, data_dir, sandbox).map_err(eng)?;
+        replica.set_semantics(Box::new(TaskSemantics));
+        let results = replica.restore_backup(&b).map_err(eng)?;
+        // Other devices of ours still have the personal group (device linking): it comes
+        // back like any shared group, and it stays our personal group.
+        let adopt = results.contains(&kt_engine::replica::backup::Restored::Rejoining(old.personal));
+        if adopt {
+            storage::write_atomic(&data_dir.join("app.meta"), &wire::encode(*b"AM", 1, &old).map_err(eng)?).map_err(eng)?;
+        }
+        let app = App::with_replica(replica, data_dir)?;
+        let mut summary = RestoreSummary::default();
+        {
+            let mut r = app.lock();
+            // The display name comes along (already there when the old personal group is ours).
+            let name = if adopt { None } else { r.doc(&old.personal, &old.profile).and_then(|d| str_of(d.get_map("profile").get("name"))) };
+            if let Some(name) = name {
+                let (g, d) = (app.meta.personal, app.meta.profile);
+                r.doc(&g, &d).ok_or(Error::NotFound)?.get_map("profile").insert("name", name.as_str()).map_err(eng)?;
+                r.commit(&g, &d).map_err(eng)?;
+            }
+            for res in results {
+                match res {
+                    kt_engine::replica::backup::Restored::Rejoining(g) => summary.rejoining.push(g),
+                    kt_engine::replica::backup::Restored::ReadOnly(g) => {
+                        // Copy the lists into our personal group (nobody can let us back in).
+                        let personal = app.meta.personal;
+                        let Some(gd_to) = group_doc(&r, &personal) else { continue };
+                        let peer = r.identity().peer_id();
+                        let lists: Vec<DocId> = r.docs(&g).into_iter().filter(|d| r.doc(&g, d).and_then(doc_kind).as_deref() == Some("list")).collect();
+                        for d in lists {
+                            let Some(src) = r.doc(&g, &d) else { continue };
+                            let copy = crate::rebuild(src, peer)?;
+                            let snap = copy.export(loro::ExportMode::Snapshot).map_err(eng)?;
+                            let nd = r.create_doc(&personal).map_err(eng)?;
+                            r.doc(&personal, &nd).unwrap().import(&snap).map_err(eng)?;
+                            r.commit(&personal, &nd).map_err(eng)?;
+                            r.doc(&personal, &gd_to).unwrap().get_map("lists").insert(&nd.to_hex(), true).map_err(eng)?;
+                            r.commit(&personal, &gd_to).map_err(eng)?;
+                            summary.rehomed_lists += 1;
+                        }
+                        // Copied: this device doesn't keep the old group around.
+                        r.forget_group(&g).map_err(eng)?;
+                    }
+                }
+            }
+        }
+        Ok((app, summary))
+    }
+
+    /// The list as Markdown (Obsidian Tasks compatible; one-way).
+    pub fn export_markdown(&self, list: &ListInfo) -> Result<String> {
+        let ts = self.read(list, crate::tasks)?;
+        Ok(crate::export::markdown(&list.name, &ts))
+    }
+
+    /// The list as a `.tasklist` file (sealed, with history; re-importable).
+    pub fn export_list_file(&self, list: &ListInfo) -> Result<Vec<u8>> {
+        let r = self.lock();
+        let doc = r.doc(&list.group, &list.doc).ok_or(Error::NotFound)?;
+        let snap = doc.export(loro::ExportMode::Snapshot).map_err(eng)?;
+        let body = wire::encode(*b"LF", 1, &(list.name.clone(), snap)).map_err(eng)?;
+        Ok(kt_engine::replica::backup::seal_file(b"KTL1", b"kt/tasklist/v1", &body))
+    }
+
+    /// Import a `.tasklist` file as a new list in `group` (or the personal group). The
+    /// history stays in the file; the new list starts from its current state.
+    pub fn import_list_file(&self, group: Option<GroupId>, bytes: &[u8]) -> Result<ListInfo> {
+        let body = kt_engine::replica::backup::open_file(b"KTL1", b"kt/tasklist/v1", bytes).map_err(|_| Error::Invalid("not a .tasklist file".into()))?;
+        let (name, snap): (String, Vec<u8>) = wire::decode(*b"LF", 1, &body).map_err(eng)?.1;
+        let g = group.unwrap_or(self.meta.personal);
+        let mut r = self.lock();
+        let src = r.load_untrusted_snapshot(&snap).map_err(eng)?;
+        if doc_kind(&src).as_deref() != Some("list") {
+            return Err(Error::Invalid("not a list".into()));
+        }
+        let copy = crate::rebuild(&src, r.identity().peer_id())?;
+        let gd = group_doc(&r, &g).ok_or(Error::NotFound)?;
+        let d = r.create_doc(&g).map_err(eng)?;
+        r.doc(&g, &d).unwrap().import(&copy.export(loro::ExportMode::Snapshot).map_err(eng)?).map_err(eng)?;
+        r.commit(&g, &d).map_err(eng)?;
+        r.doc(&g, &gd).unwrap().get_map("lists").insert(&d.to_hex(), true).map_err(eng)?;
+        r.commit(&g, &gd).map_err(eng)?;
+        let group_name = groups_of(&r, self.meta.personal).into_iter().find(|x| x.group == g).map(|x| x.name).unwrap_or_default();
+        Ok(ListInfo { group: g, doc: d, name, group_name })
     }
 
     /// Manual sharing (file bundles): add another device to a group and return the

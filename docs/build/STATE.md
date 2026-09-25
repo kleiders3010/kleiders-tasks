@@ -82,25 +82,25 @@
 - [ ] Measure the release AAB download size per device
 
 ### M5: Lifecycle and backup
-- [ ] Android backup (sealed without a lock), Block Store, restore prompt
-- [ ] Exports, desktop backup folder, Google Drive (opt-in)
+- [x] Backups, engine side (`replica/backup.rs`): sealed file (random key inside), groups with records, keys, snapshots and a recovery invite per shared group; restore = fresh identity, snapshots validated in the sandbox, recovery join posted; waiting joins carried into later backups
+- [x] Backups, app side (`App::backup` / `App::restore`): solo lists re-homed into the new personal group, display name kept, old personal group adopted when another linked device can let us back in; restore allowed on a fresh or untouched install only. Tests: `kt-tasks/tests/backup.rs`
+- [x] Daily backup file from `KtNode` (`backup_dir`, previous copy kept); automatic restore when a fresh install finds one; unreadable backups set aside; `open_restoring` for a picked file; `stop_live` waits so a node can be closed and replaced
+- [x] Android backup rules: only `files/backup/tasks.ktbackup` (cloud + device transfer); first-launch "Restore from a backup file" (document picker)
+- [x] Desktop: backup folder (`<app data>/backups` for now; the folder prompt comes with polished UI), restore from a file dialog; headless test `DesktopRestoreTest`
+- [x] Exports: Markdown (Obsidian Tasks format) and sealed `.tasklist` files (re-import starts a new list from the current state); `KtNode.export_markdown / export_list_file / import_list_file`; Export button (Android: Markdown via the share sheet; desktop: `.md` + `.tasklist` side by side)
+- [ ] `.tasklist` in the Android UI (share via FileProvider, open to import)
+- [x] Android backup verified on the emulator (`scripts/android-backup-test.sh`, local transport): 5 KB backed up (only the sealed file), restored at reinstall, first launch restored the list, a new daily backup written
+- [ ] Block Store (`play` flavor; needs Play Services, so not on the test tablet)
+- [ ] Google Drive (opt-in)
 - [ ] Notifications from merged state
+- [ ] The old device stays a member after a restore: offer to remove it (lost vs. reset is the user's call)
 
 ## Current state
-- **M2 in progress (2026-09-24).** 93 tests passing. Nostr sync works end to end locally (CLI + tests) and PC ↔ tablet (Samsung SM-T290, Android 11, 2 GB: 0.14 s per sync round). D49 settled with lab data (E10): helper iroh relays + direct via own signaling.
-- Android binary size: the `kt` CLI with Nostr + iroh + the relay server is 9.8 MB (arm64 release, stripped). E6's 7.07 MB figure had no relay server and no CLI; re-measure the real app library in M4.
-- Found and fixed in M2:
-  - the host parsed untrusted blobs before the sandbox (a regression from a duplicate-skip shortcut): the sandbox worker now reports op ranges and the host decides from those;
-  - slot fingerprints changed between processes (hash-map order), so every run rewrote every slot;
-  - ops made right before a compaction were lost to members that hadn't received them;
-  - parked compaction proposals weren't retried;
-  - `wss://` relays panicked without a TLS crypto provider.
-- **M1 complete (2026-09-24).** 42 tests passing (`scripts/test.sh`): 29 engine unit, 5 network simulations, 3 domain, 5 document-epoch scenarios. The two-device CLI demo works across process restarts, including sharing, concurrent edits and a document epoch (4,018 → 627 bytes).
-- Fixed during M1: new members couldn't read pre-join history (Add epochs now carry wrapped history keys); the outgoing queue and own-op send positions are now persisted (the CLI's short-lived processes exposed both).
+- **M5 in progress (2026-09-24).** M1–M3 done; M4 has its remaining UI items (widget, notifications, tray, linking screens). Rust suite green; the Android app joined a real group from the tablet over public networks; headless desktop UI tests pass.
+- Earlier notes on M1/M2 fixes live in git history and the research files (E10–E12).
 
 ## Next action
-1. Helper network remaining items (above), n0 DNS option.
-2. Then M3 (invites, device linking).
+1. M4 remainder: device linking (app side), widget, notifications, tray/autostart, AAB size.
 
 ## Design deviations
 - ~~Epoch records travel unencrypted in M1~~: on the network they now travel only inside sealed slots (M2). The direct join bundle still carries them as-is (M3 invites replace it).
@@ -115,4 +115,5 @@
 - Android builds from Git Bash: `ANDROID_NDK_HOME="$(cygpath -w ~/AppData/Local/Android/Sdk/ndk/29.0.14206865)" cargo ndk -t arm64-v8a -P 26 build --release -p kt-cli`. With `MSYS_NO_PATHCONV=1` (needed for adb device paths) a Unix-style NDK path fails with "os error 3".
 - adb: `MSYS_NO_PATHCONV=1` for device paths; tunnel PC services with `adb reverse tcp:PORT tcp:PORT` (TCP only).
 - Background test relays: run from a *copy* of kt.exe (a running kt.exe blocks rebuilds); Git Bash `timeout` doesn't reliably kill Windows exes.
+- `bmgr backupnow` refuses force-stopped apps on Android 15+ ("Backup is not allowed"): launch the app normally first.
 - PC network tests bind to loopback only (binding all interfaces triggers a Windows firewall dialog).

@@ -45,7 +45,7 @@ import kotlinx.coroutines.withContext
  * Everything technical happens in the Rust node; this only shows state and forwards taps.
  */
 @Composable
-fun TasksApp(node: KtNode) {
+fun TasksApp(node: KtNode, onRestore: (() -> Unit)? = null, onExport: ((ListItem) -> Unit)? = null) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
     DisposableEffect(node) {
@@ -61,25 +61,25 @@ fun TasksApp(node: KtNode) {
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
-                ListsScreen(node, version, onChanged = { version++ }, onOpen = { open = it })
+                ListsScreen(node, version, onRestore, onChanged = { version++ }, onOpen = { open = it })
             } else {
-                TasksScreen(node, current, version, onChanged = { version++ }, onBack = { open = null })
+                TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })
             }
         }
     }
 }
 
 @Composable
-private fun ListsScreen(node: KtNode, version: Int, onChanged: () -> Unit, onOpen: (ListItem) -> Unit) {
+private fun ListsScreen(node: KtNode, version: Int, onRestore: (() -> Unit)?, onChanged: () -> Unit, onOpen: (ListItem) -> Unit) {
     val scope = rememberCoroutineScope()
-    val lists = remember(version) { node.lists() }
-    val groups = remember(version) { node.groups() }
+    val lists = remember(node, version) { node.lists() }
+    val groups = remember(node, version) { node.groups() }
     var status by remember { mutableStateOf("") }
     var newList by remember { mutableStateOf("") }
     var newGroup by remember { mutableStateOf("") }
     var invite by remember { mutableStateOf<Pair<String, InviteInfo>?>(null) }
     var joining by remember { mutableStateOf(false) }
-    var name by remember(version) { mutableStateOf(node.displayName()) }
+    var name by remember(node, version) { mutableStateOf(node.displayName()) }
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -98,6 +98,17 @@ private fun ListsScreen(node: KtNode, version: Int, onChanged: () -> Unit, onOpe
             Button(onClick = { joining = true }, modifier = Modifier.testTag("join")) { Text("Join with code") }
         }
         if (status.isNotEmpty()) Text(status, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("status"))
+        node.restored()?.let { r ->
+            Text(
+                "Restored from a backup: ${r.rehomedLists} of your own lists are back" +
+                    if (r.rejoiningGroups > 0u) "; ${r.rejoiningGroups} shared groups reopen for editing when a member's device is online" else "",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.testTag("restoredInfo"),
+            )
+        }
+        if (onRestore != null && remember(node, version) { node.isPristine() }) {
+            TextButton(onClick = onRestore, modifier = Modifier.testTag("restore")) { Text("Restore from a backup file") }
+        }
         HorizontalDivider()
         LazyColumn(Modifier.weight(1f)) {
             for (g in groups) {
@@ -185,13 +196,14 @@ private fun ListsScreen(node: KtNode, version: Int, onChanged: () -> Unit, onOpe
 }
 
 @Composable
-private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onChanged: () -> Unit, onBack: () -> Unit) {
-    val tasks = remember(version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
+private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((ListItem) -> Unit)?, onChanged: () -> Unit, onBack: () -> Unit) {
+    val tasks = remember(node, version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
     var title by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack, modifier = Modifier.testTag("back")) { Text("‹ Lists") }
-            Text("${list.name} · ${list.groupName}", style = MaterialTheme.typography.titleLarge)
+            Text("${list.name} · ${list.groupName}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            if (onExport != null) TextButton(onClick = { onExport(list) }, modifier = Modifier.testTag("export")) { Text("Export") }
         }
         LazyColumn(Modifier.weight(1f)) {
             items(tasks, key = { it.id }) { t ->

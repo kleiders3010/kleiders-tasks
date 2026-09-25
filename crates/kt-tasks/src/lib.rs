@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 
 pub mod app;
+pub mod export;
 
 use kt_engine::limits::TEXT_ATTACHMENT_THRESHOLD;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID, ValueOrContainer};

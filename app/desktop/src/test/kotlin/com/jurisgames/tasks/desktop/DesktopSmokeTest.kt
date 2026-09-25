@@ -24,7 +24,7 @@ class DesktopSmokeTest {
         val home = Files.createTempDirectory("kt-desktop").toFile()
         val worker = System.getProperty("kt.worker")
         // No network: a dead relay and no P2P (nothing leaves this machine).
-        val node = KtNode.open(File(home, "identity").path, File(home, "data").path, worker, NodeOptions(Platform.DESKTOP, listOf("ws://127.0.0.1:9"), false, false, "127.0.0.1:0"))
+        val node = KtNode.open(File(home, "identity").path, File(home, "data").path, worker, NodeOptions(Platform.DESKTOP, listOf("ws://127.0.0.1:9"), false, false, "127.0.0.1:0", ""))
         rule.setContent { TasksApp(node) }
         rule.onNodeWithTag("newgroup").performTextInput("Family")
         rule.onNodeWithTag("addgroup").performClick()
