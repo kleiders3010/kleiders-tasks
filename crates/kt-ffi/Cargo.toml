@@ -1,0 +1,28 @@
+[package]
+name = "kt-ffi"
+description = "Kotlin bridge (UniFFI) for Kleiders Tasks: one KtNode object for the app"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "kt_ffi"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+kt-engine = { path = "../kt-engine" }
+kt-tasks = { path = "../kt-tasks" }
+kt-net = { path = "../kt-net" }
+uniffi.workspace = true
+tokio.workspace = true
+hex.workspace = true
+loro.workspace = true
+thiserror.workspace = true

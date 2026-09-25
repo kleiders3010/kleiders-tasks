@@ -22,6 +22,19 @@ use crate::nostr::NostrMailbox;
 use crate::sync::Syncer;
 
 pub const LAYER: &str = "nostr";
+
+/// The seed list shipped with the app: only a starting point (the list is self-sustaining).
+/// The 8 relays that passed the E4 acceptance probe.
+pub const SEED_RELAYS: &[&str] = &[
+    "wss://relay.damus.io",
+    "wss://nos.lol",
+    "wss://relay.primal.net",
+    "wss://nostr.mom",
+    "wss://offchain.pub",
+    "wss://nostr.oxtr.dev",
+    "wss://nostr-pub.wellorder.net",
+    "wss://relay.snort.social",
+];
 /// Relays per group set: writes go to the best 3, reads cover all.
 pub const SET_SIZE: usize = 4;
 /// After a set change, keep writing to the previous relays this long.

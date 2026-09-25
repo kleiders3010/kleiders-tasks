@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/kt-engine", "crates/kt-tasks", "crates/kt-net", "crates/kt-cli"]
+members = ["crates/kt-engine", "crates/kt-tasks", "crates/kt-net", "crates/kt-cli", "crates/kt-ffi"]
 exclude = ["research"]
 
 [workspace.package]
@@ -24,6 +24,7 @@ thiserror = "=2.0.21"
 anyhow = "=1.0.100"
 zeroize = "=1.9.0"
 hex = "=0.4.3"
+uniffi = "=0.32.2"
 argon2 = { version = "=0.5.3", default-features = false, features = ["alloc"] }
 # Networking (M2). Versions match what iroh 1.2 already pulls in, so they add no app size.
 tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
