@@ -797,6 +797,12 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_mark_seen(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_measure_endpoints_online(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_measure_endpoints_running(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_measure_extra_endpoints(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_network_changed(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen(
@@ -955,6 +961,12 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_mark_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_measure_endpoints_online(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_kt_ffi_fn_method_ktnode_measure_endpoints_running(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
+    external fun uniffi_kt_ffi_fn_method_ktnode_measure_extra_endpoints(`ptr`: Long,`extra`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_network_changed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_newer_version_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1268,6 +1280,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_mark_seen() and 0xFFFF) != 44362) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_measure_endpoints_online() and 0xFFFF) != 26237) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_measure_endpoints_running() and 0xFFFF) != 5742) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_measure_extra_endpoints() and 0xFFFF) != 24753) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_network_changed() and 0xFFFF) != 26352) {
@@ -2685,6 +2706,25 @@ public interface KtNodeInterface {
     fun `markSeen`()
     
     /**
+     * Measurement only: how many of the extra endpoints hold a home relay right now.
+     */
+    fun `measureEndpointsOnline`(): kotlin.UInt
+    
+    /**
+     * Measurement only: how many extra endpoints are running.
+     */
+    fun `measureEndpointsRunning`(): kotlin.UInt
+    
+    /**
+     * MEASUREMENT ONLY, not a feature (D23, `kt_net::measure`): keep `extra` idle iroh
+     * endpoints alive next to the real one, with its relay settings, so the battery and
+     * connection cost of one endpoint per group (N groups = N - 1 extra) can be measured.
+     * 0 stops them; the same count again changes nothing. Returns how many are running.
+     * Only the adb measurement switch calls this (Android `MeasureReceiver`), never the app.
+     */
+    fun `measureExtraEndpoints`(`extra`: kotlin.UInt): kotlin.UInt
+    
+    /**
      * The platform saw the network change (Wi-Fi to mobile, a new network, back online):
      * P2P re-checks its paths now instead of when its timers notice.
      */
@@ -3355,6 +3395,59 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 }
     }
     
+    
+
+    
+    /**
+     * Measurement only: how many of the extra endpoints hold a home relay right now.
+     */override fun `measureEndpointsOnline`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_measure_endpoints_online(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Measurement only: how many extra endpoints are running.
+     */override fun `measureEndpointsRunning`(): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_measure_endpoints_running(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * MEASUREMENT ONLY, not a feature (D23, `kt_net::measure`): keep `extra` idle iroh
+     * endpoints alive next to the real one, with its relay settings, so the battery and
+     * connection cost of one endpoint per group (N groups = N - 1 extra) can be measured.
+     * 0 stops them; the same count again changes nothing. Returns how many are running.
+     * Only the adb measurement switch calls this (Android `MeasureReceiver`), never the app.
+     */override fun `measureExtraEndpoints`(`extra`: kotlin.UInt): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_measure_extra_endpoints(
+        it,
+        
+        FfiConverterUInt.lower(`extra`),_status)
+}
+    }
+    )
+    }
     
 
     

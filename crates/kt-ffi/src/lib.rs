@@ -653,6 +653,9 @@ pub struct KtNode {
     manifest_checked: Mutex<Option<std::time::Instant>>,
     /// Real networking (not a loopback test node).
     lan_enabled: bool,
+    /// MEASUREMENT ONLY (D23): idle extra endpoints pricing a per-group network identity
+    /// ([`KtNode::measure_extra_endpoints`]). Empty unless the measurement switch set them.
+    measure: Mutex<Option<kt_net::measure::ExtraEndpoints>>,
     /// Desktops: the relay run for others (D51), when the setting is on.
     #[cfg(feature = "desktop")]
     relay_for_others: tokio::sync::Mutex<Option<kt_net::relay_runner::RelayForOthers>>,
@@ -990,6 +993,7 @@ impl KtNode {
             rounds: Mutex::new(std::collections::VecDeque::new()),
             manifest_checked: Mutex::new(None),
             lan_enabled: options.bind.is_empty(),
+            measure: Mutex::new(None),
             #[cfg(feature = "desktop")]
             relay_for_others: tokio::sync::Mutex::new(None),
             #[cfg(feature = "desktop")]
@@ -1310,6 +1314,45 @@ impl KtNode {
             let ep = p.endpoint().clone();
             self.rt.spawn(async move { ep.network_change().await });
         }
+        if let Some(eps) = self.measure.lock().expect("lock").as_ref().map(|m| m.endpoints()) {
+            // Measurement only: the extra endpoints re-check too, as N real ones would.
+            self.rt.spawn(async move {
+                for ep in eps {
+                    ep.network_change().await;
+                }
+            });
+        }
+    }
+
+    /// MEASUREMENT ONLY, not a feature (D23, `kt_net::measure`): keep `extra` idle iroh
+    /// endpoints alive next to the real one, with its relay settings, so the battery and
+    /// connection cost of one endpoint per group (N groups = N - 1 extra) can be measured.
+    /// 0 stops them; the same count again changes nothing. Returns how many are running.
+    /// Only the adb measurement switch calls this (Android `MeasureReceiver`), never the app.
+    pub fn measure_extra_endpoints(&self, extra: u32) -> u32 {
+        let extra = extra.min(64);
+        let mut cur = self.measure.lock().expect("lock");
+        if cur.as_ref().map_or(0, |m| m.len() as u32) == extra {
+            return extra; // already so (the node's opening and the switch may both ask)
+        }
+        if let Some(old) = cur.take() {
+            self.rt.block_on(old.close());
+        }
+        let Some(p) = &self.net.p2p else { return 0 };
+        if extra > 0 {
+            *cur = self.rt.block_on(kt_net::measure::ExtraEndpoints::start(p, extra)).ok();
+        }
+        cur.as_ref().map_or(0, |m| m.len() as u32)
+    }
+
+    /// Measurement only: how many extra endpoints are running.
+    pub fn measure_endpoints_running(&self) -> u32 {
+        self.measure.lock().expect("lock").as_ref().map_or(0, |m| m.len() as u32)
+    }
+
+    /// Measurement only: how many of the extra endpoints hold a home relay right now.
+    pub fn measure_endpoints_online(&self) -> u32 {
+        self.measure.lock().expect("lock").as_ref().map_or(0, |m| m.online() as u32)
     }
 
     /// Is there a newer version than `current_version_code`? `channel`: "play", "apk",

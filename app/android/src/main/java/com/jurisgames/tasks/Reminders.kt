@@ -74,6 +74,7 @@ class ReminderReceiver : BroadcastReceiver() {
 /** Boot, app update, or the exact-alarm permission granted: alarms need setting again. */
 class RescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        Measure.ensureAlarm(ctx) // the "more often" measurement alarm, if on
         val done = goAsync()
         Thread {
             try {
