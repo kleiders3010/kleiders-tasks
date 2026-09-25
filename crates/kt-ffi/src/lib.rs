@@ -155,6 +155,14 @@ pub struct UpdateItem {
     pub link: String,
 }
 
+/// Someone who edits a list (for "Undo changes by [person] since [time]").
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct PersonItem {
+    pub name: String,
+    /// This account's own devices.
+    pub is_me: bool,
+}
+
 /// What a restore did.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RestoreInfo {
@@ -284,6 +292,12 @@ pub struct KtNode {
     settings: Mutex<StoredSettings>,
     /// (on Wi-Fi, charging, app open), as the platform last reported (phones).
     device_state: Mutex<(bool, bool, bool)>,
+    /// Battery saver, low battery, heat or data saver (phones): no helping (§7a).
+    constrained: std::sync::atomic::AtomicBool,
+    /// Same-Wi-Fi discovery (rotating beacons, §6) while the app is open.
+    lan: Mutex<Option<Arc<kt_net::lan::Lan>>>,
+    /// Real networking (not a loopback test node).
+    lan_enabled: bool,
     /// Desktops: the relay run for others (D51), when the setting is on.
     #[cfg(feature = "desktop")]
     relay_for_others: tokio::sync::Mutex<Option<kt_net::relay_runner::RelayForOthers>>,
@@ -328,7 +342,7 @@ impl KtNode {
             dht: self.net.dht.clone(),
             nostr: Some(self.net.nostr.clone()),
             helpers: self.net.helpers.as_ref().map(|h| h.0.clone()),
-            lan: None,
+            lan: self.lan.lock().expect("lock").clone(),
         }
     }
 
@@ -366,7 +380,8 @@ impl KtNode {
     /// Helping follows the setting and the device's state.
     fn apply_helping(&self) {
         let (wifi, charging, open) = *self.device_state.lock().expect("lock");
-        let on = self.settings.lock().expect("lock").net.helper_limits(wifi, charging, open).is_some();
+        let constrained = self.constrained.load(std::sync::atomic::Ordering::Relaxed);
+        let on = !constrained && self.settings.lock().expect("lock").net.helper_limits(wifi, charging, open).is_some();
         if let Some(p) = &self.net.p2p {
             p.set_helping(on);
         }
@@ -563,6 +578,9 @@ impl KtNode {
             settings: Mutex::new(stored),
             // Phones start as "not on Wi-Fi" until the platform says otherwise.
             device_state: Mutex::new((platform == NetPlatform::Desktop, false, false)),
+            constrained: std::sync::atomic::AtomicBool::new(false),
+            lan: Mutex::new(None),
+            lan_enabled: options.bind.is_empty(),
             #[cfg(feature = "desktop")]
             relay_for_others: tokio::sync::Mutex::new(None),
             #[cfg(feature = "desktop")]
@@ -796,12 +814,23 @@ impl KtNode {
         Ok(())
     }
 
-    /// Phones report Wi-Fi and charging (and the node knows when the app is open): helping
-    /// others follows them (§7a).
-    pub fn set_device_state(&self, on_wifi: bool, charging: bool) {
+    /// Phones report Wi-Fi, charging, and whether the phone is constrained (battery saver,
+    /// low battery, heat, data saver); the node knows when the app is open. Helping others
+    /// follows them (§7a).
+    pub fn set_device_state(&self, on_wifi: bool, charging: bool, constrained: bool) {
         self.device_state.lock().expect("lock").0 = on_wifi;
         self.device_state.lock().expect("lock").1 = charging;
+        self.constrained.store(constrained, std::sync::atomic::Ordering::Relaxed);
         self.apply_helping();
+    }
+
+    /// The platform saw the network change (Wi-Fi to mobile, a new network, back online):
+    /// P2P re-checks its paths now instead of when its timers notice.
+    pub fn network_changed(&self) {
+        if let Some(p) = &self.net.p2p {
+            let ep = p.endpoint().clone();
+            self.rt.spawn(async move { ep.network_change().await });
+        }
     }
 
     /// Is there a newer version than `current_version_code`? `channel`: "play", "apk",
@@ -824,6 +853,22 @@ impl KtNode {
     /// The user is looking: nothing so far needs a notification.
     pub fn mark_seen(&self) {
         let _ = self.app.mark_seen();
+    }
+
+    /// The people who edit a list (its group's members, by name).
+    pub fn people(&self, list_id: String) -> Result<Vec<PersonItem>, KtError> {
+        let l = self.list(&list_id)?;
+        Ok(self.app.people(&l).into_iter().map(|p| PersonItem { name: p.name, is_me: p.is_me }).collect())
+    }
+
+    /// Undo what that person did in the list since `since_ms` (other people's work stays).
+    /// Returns how many things were put back.
+    pub fn undo_changes_by(&self, list_id: String, person: PersonItem, since_ms: u64) -> Result<u32, KtError> {
+        let l = self.list(&list_id)?;
+        let p = self.app.people(&l).into_iter().find(|p| p.name == person.name && p.is_me == person.is_me).ok_or_else(|| fail("nobody by that name in this list's group"))?;
+        let n = self.app.undo_changes_by(&l, &p, since_ms).map_err(fail)? as u32;
+        self.notify();
+        Ok(n)
     }
 
     /// A link code for adding another device to this account (valid a few hours).
@@ -908,10 +953,29 @@ impl KtNode {
 
     /// App open: live updates on every layer until [`KtNode::stop_live`].
     pub fn start_live(self: Arc<Self>) {
+        self.stop_live(); // first: it marks the app as closed
         self.device_state.lock().expect("lock").2 = true;
         self.apply_helping();
         let (tx, rx) = tokio::sync::watch::channel(false);
-        self.stop_live();
+        // Same Wi-Fi: beacon while open; a member heard on the LAN gets a direct round.
+        if let (true, Some(p)) = (self.lan_enabled, self.net.p2p.clone()) {
+            let replica = self.app.replica();
+            if let Ok(lan) = self.rt.block_on(kt_net::lan::Lan::start(replica, kt_net::lan::LanConfig::default())) {
+                self.rt.spawn(lan.clone().run(rx.clone()));
+                let (l, mut stop) = (lan.clone(), rx.clone());
+                self.rt.spawn(async move {
+                    loop {
+                        tokio::select! {
+                            _ = l.learned.notified() => {
+                                p.sync_round().await;
+                            }
+                            _ = stop.changed() => return,
+                        }
+                    }
+                });
+                *self.lan.lock().expect("lock") = Some(lan);
+            }
+        }
         let net_syncer = self.net.syncer.clone();
         let nostr = self.net.nostr.clone();
         let p2p = self.net.p2p.clone();
@@ -950,6 +1014,7 @@ impl KtNode {
     pub fn stop_live(&self) {
         self.device_state.lock().expect("lock").2 = false;
         self.apply_helping();
+        self.lan.lock().expect("lock").take(); // beacons stop with the live signal below
         if let Some((tx, task)) = self.live.lock().expect("lock").take() {
             let _ = tx.send(true);
             task.abort();

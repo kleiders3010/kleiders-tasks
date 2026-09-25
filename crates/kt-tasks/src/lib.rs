@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 pub mod app;
 pub mod export;
+pub mod history;
 
 use kt_engine::limits::TEXT_ATTACHMENT_THRESHOLD;
 use loro::{LoroDoc, LoroMap, LoroTree, LoroValue, TreeID, ValueOrContainer};
@@ -242,19 +243,66 @@ pub fn tasks(doc: &LoroDoc) -> Vec<TaskView> {
 pub fn normalized(doc: &LoroDoc) -> Vec<u8> {
     fn walk(t: &LoroTree, n: TreeID, depth: usize, out: &mut String) {
         if let Ok(meta) = t.get_meta(n) {
-            let v = meta.get_deep_value();
-            out.push_str(&format!("{depth}|{v:?}\n"));
+            out.push_str(&format!("{depth}|{}\n", canonical(&meta.get_deep_value())));
         }
         for c in t.children(Some(n)).unwrap_or_default() {
             walk(t, c, depth + 1, out);
         }
     }
+    let mut out = String::new();
+    // Every root map (list meta; group docs' lists, people, ...; profile, index), not just
+    // the task tree: a rebuild that dropped any of them must not verify.
+    for (name, v) in root_maps(doc) {
+        out.push_str(&format!("map {name}|{}\n", canonical(&v)));
+    }
     let t = tree(doc);
-    let mut out = format!("meta|{:?}\n", doc.get_map("meta").get_deep_value());
     for r in t.roots() {
         walk(&t, r, 0, &mut out);
     }
     out.into_bytes()
+}
+
+/// A value as text with map keys sorted (Loro's maps iterate in hash order).
+fn canonical(v: &LoroValue) -> String {
+    match v {
+        LoroValue::Map(m) => {
+            let sorted: BTreeMap<&String, &LoroValue> = m.iter().collect();
+            let inner: Vec<String> = sorted.into_iter().map(|(k, v)| format!("{k:?}:{}", canonical(v))).collect();
+            format!("{{{}}}", inner.join(","))
+        }
+        LoroValue::List(l) => format!("[{}]", l.iter().map(canonical).collect::<Vec<_>>().join(",")),
+        other => format!("{other:?}"),
+    }
+}
+
+/// The document's root maps by name (everything except the task tree).
+fn root_maps(doc: &LoroDoc) -> BTreeMap<String, LoroValue> {
+    match doc.get_deep_value() {
+        LoroValue::Map(m) => m.iter().filter(|(k, v)| k.as_str() != "tasks" && matches!(v, LoroValue::Map(_))).map(|(k, v)| (k.clone(), v.clone())).collect(),
+        _ => BTreeMap::new(),
+    }
+}
+
+/// Write `v` under `key` in `map`, recreating nested maps and lists as containers.
+fn put_deep(map: &LoroMap, key: &str, v: &LoroValue) -> Result<()> {
+    match v {
+        LoroValue::Map(m) => {
+            let child = map.insert_container(key, LoroMap::new()).map_err(loro)?;
+            for (k, x) in m.iter() {
+                put_deep(&child, k, x)?;
+            }
+        }
+        LoroValue::List(l) => {
+            let child = map.insert_container(key, loro::LoroList::new()).map_err(loro)?;
+            for x in l.iter() {
+                child.push(x.clone()).map_err(loro)?;
+            }
+        }
+        other => {
+            map.insert(key, other.clone()).map_err(loro)?;
+        }
+    }
+    Ok(())
 }
 
 /// Build a fresh document with the same live state (document epoch, D24): no tombstones,
@@ -262,11 +310,13 @@ pub fn normalized(doc: &LoroDoc) -> Vec<u8> {
 pub fn rebuild(doc: &LoroDoc, peer: u64) -> Result<LoroDoc> {
     let fresh = LoroDoc::new();
     fresh.set_peer_id(peer).map_err(loro)?;
-    let src_meta = doc.get_map("meta");
-    let dst_meta = fresh.get_map("meta");
-    if let LoroValue::Map(m) = src_meta.get_deep_value() {
-        for (k, v) in m.iter() {
-            dst_meta.insert(k, v.clone()).map_err(loro)?;
+    // Every root map (a group doc's lists and people, a profile, an index...), not just meta.
+    for (name, v) in root_maps(doc) {
+        if let LoroValue::Map(m) = v {
+            let dst = fresh.get_map(name.as_str());
+            for (k, x) in m.iter() {
+                put_deep(&dst, k, x)?;
+            }
         }
     }
     let st = tree(doc);
@@ -313,6 +363,21 @@ fn flat(doc: &LoroDoc) -> BTreeMap<String, (Option<String>, String, bool, String
 pub fn rebase(base: &LoroDoc, local: &LoroDoc, target: &LoroDoc) -> Result<()> {
     let b = flat(base);
     let l = flat(local);
+    // Root maps (list meta, group lists/people, profile, index): keys changed locally.
+    let (bm, lm) = (root_maps(base), root_maps(local));
+    for name in bm.keys().chain(lm.keys()).collect::<std::collections::BTreeSet<_>>() {
+        let empty = LoroValue::Map(Default::default());
+        let (LoroValue::Map(bv), LoroValue::Map(lv)) = (bm.get(name).unwrap_or(&empty), lm.get(name).unwrap_or(&empty)) else { continue };
+        let dst = target.get_map(name.as_str());
+        for (k, v) in lv.iter() {
+            if bv.get(k) != Some(v) {
+                put_deep(&dst, k, v)?;
+            }
+        }
+        for k in bv.keys().filter(|k| !lv.contains_key(*k)) {
+            dst.delete(k).map_err(loro)?;
+        }
+    }
     if list_name(local) != list_name(base) {
         rename_list(target, &list_name(local))?;
     }
@@ -434,6 +499,43 @@ mod tests {
         let old = d.export(ExportMode::Snapshot).unwrap().len();
         let new = fresh.export(ExportMode::Snapshot).unwrap().len();
         assert!(new * 3 < old, "rebuild should shrink the document: {old} -> {new}");
+    }
+
+    #[test]
+    fn compaction_keeps_every_map() {
+        // A group document: meta, a list index and people (not just a task tree).
+        let d = doc();
+        d.get_map("meta").insert("kind", "group").unwrap();
+        d.get_map("lists").insert("aa11", true).unwrap();
+        d.get_map("lists").insert("bb22", true).unwrap();
+        d.get_map("people").insert("dev1", "Alex").unwrap();
+        d.commit();
+        let fresh = rebuild(&d, 9).unwrap();
+        assert_eq!(normalized(&fresh), normalized(&d), "nothing dropped");
+        assert_eq!(fresh.get_map("people").get_deep_value(), d.get_map("people").get_deep_value());
+        // Same content, other insertion order: equal.
+        let other = doc();
+        other.get_map("people").insert("dev1", "Alex").unwrap();
+        other.get_map("lists").insert("bb22", true).unwrap();
+        other.get_map("lists").insert("aa11", true).unwrap();
+        other.get_map("meta").insert("kind", "group").unwrap();
+        other.commit();
+        assert_eq!(normalized(&other), normalized(&d));
+        // A dropped map doesn't verify.
+        let lossy = doc();
+        lossy.get_map("meta").insert("kind", "group").unwrap();
+        lossy.commit();
+        assert_ne!(normalized(&lossy), normalized(&d));
+        // Rebase carries map edits made before the switch.
+        let local = d.fork();
+        local.set_peer_id(3).unwrap();
+        local.get_map("people").insert("dev2", "Sam").unwrap();
+        local.get_map("lists").delete("bb22").unwrap();
+        local.commit();
+        let target = rebuild(&d, 2).unwrap();
+        target.set_peer_id(3).unwrap();
+        rebase(&d, &local, &target).unwrap();
+        assert_eq!(normalized(&target), normalized(&local));
     }
 
     #[test]

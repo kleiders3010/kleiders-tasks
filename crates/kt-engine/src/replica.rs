@@ -135,8 +135,20 @@ struct PrevGen {
 }
 
 fn new_doc_state(doc: LoroDoc, generation: u32) -> DocState {
+    with_timestamps(&doc);
     DocState { doc, sent_counter: 0, imported_since_snapshot: 0, generation, gen_base: 0, prev: None }
 }
+
+/// Changes record when they were made (per minute): "undo changes by a person since a
+/// time" (D27) needs it.
+fn with_timestamps(doc: &LoroDoc) {
+    doc.set_record_timestamp(true);
+    doc.set_change_merge_interval(60);
+}
+
+/// Previous generations are kept this long after a switch, with their full history (D27:
+/// at least 30 days of history, even across compactions).
+pub const ARCHIVE_KEEP_MS: u64 = 30 * 86_400_000;
 
 struct GroupState {
     epochs: GroupEpochs,
@@ -818,6 +830,26 @@ impl Replica {
         self.switch_generation(&g, &inner.doc, fresh, proposal.generation, sender, rebase, bytes)
     }
 
+    /// Earlier generations of a document still kept (generation, when it was left, the
+    /// document with its full history), oldest first.
+    pub fn doc_archive(&self, g: &GroupId, d: &DocId) -> Vec<(u32, u64, LoroDoc)> {
+        let dir = self.layout.doc_dir(g, d).join("archive");
+        let mut out: Vec<(u32, u64, LoroDoc)> = std::fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let generation: u32 = e.file_name().to_str()?.strip_prefix("gen-")?.parse().ok()?;
+                let b = std::fs::read(e.path()).ok()?;
+                let at = u64::from_le_bytes(b.get(..8)?.try_into().ok()?);
+                let doc = LoroDoc::from_snapshot(&b[8..]).ok()?; // our own file
+                Some((generation, at, doc))
+            })
+            .collect();
+        out.sort_by_key(|x| x.0);
+        out
+    }
+
     /// Replace a document with a new generation, rebasing local changes if given.
     #[allow(clippy::too_many_arguments)]
     fn switch_generation(
@@ -832,6 +864,7 @@ impl Replica {
     ) -> Result<()> {
         let me = self.identity.peer_id();
         fresh.set_peer_id(me).map_err(|e| Error::Loro(e.to_string()))?;
+        with_timestamps(&fresh);
         let start = fresh.fork();
         let mut rebased = false;
         if let (Some((base, local)), Some(sem)) = (&rebase, self.semantics.as_ref()) {
@@ -880,7 +913,23 @@ impl Replica {
             .docs
             .get_mut(d)
             .ok_or_else(|| Error::NotFound("doc".into()))?;
+        let switching_up = ds.generation < generation;
         let old = std::mem::replace(&mut ds.doc, fresh);
+        if switching_up {
+            // Keep the generation we're leaving, with its full history (D27).
+            let dir = self.layout.doc_dir(g, d).join("archive");
+            std::fs::create_dir_all(&dir)?;
+            let mut b = now_ms().to_le_bytes().to_vec();
+            b.extend_from_slice(&old.export(ExportMode::Snapshot).map_err(|e| Error::Loro(e.to_string()))?);
+            storage::write_atomic(&dir.join(format!("gen-{}", ds.generation)), &b)?;
+            for e in std::fs::read_dir(&dir)?.flatten() {
+                let keep = std::fs::read(e.path()).ok().filter(|b| b.len() >= 8).map(|b| u64::from_le_bytes(b[..8].try_into().expect("8")));
+                if keep.is_none_or(|t| now_ms().saturating_sub(t) > ARCHIVE_KEEP_MS) {
+                    let _ = std::fs::remove_file(e.path());
+                }
+            }
+        }
+        let ds = self.groups.get_mut(g).expect("checked").docs.get_mut(d).expect("checked");
         let prev_doc = match ds.prev.take() {
             // Replacing a concurrent proposal: the pre-switch document stays the reference.
             Some(p) if ds.generation == generation => p.doc,

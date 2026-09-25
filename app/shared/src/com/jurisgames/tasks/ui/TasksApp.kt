@@ -345,6 +345,8 @@ private fun ListsScreen(
 
 @Composable
 private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((ListItem) -> Unit)?, onChanged: () -> Unit, onBack: () -> Unit) {
+    var undoOpen by remember { mutableStateOf(false) }
+    if (undoOpen) UndoDialog(node, list, onDone = { onChanged() }, onClose = { undoOpen = false })
     val tasks = remember(node, version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
     var title by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -352,6 +354,7 @@ private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((
             TextButton(onClick = onBack, modifier = Modifier.testTag("back")) { Text("‹ Lists") }
             Text("${list.name} · ${list.groupName}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             if (onExport != null) TextButton(onClick = { onExport(list) }, modifier = Modifier.testTag("export")) { Text("Export") }
+            TextButton(onClick = { undoOpen = true }, modifier = Modifier.testTag("undoOpen")) { Text("Undo…") }
         }
         LazyColumn(Modifier.weight(1f)) {
             items(tasks, key = { it.id }) { t ->

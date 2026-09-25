@@ -105,6 +105,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         app.node.markSeen() // what's on screen needs no notification
         app.reportDeviceState()
+        multicast.acquire() // Android drops multicast (LAN beacons) without it
         app.node.startLive() // app open: live on every layer
         askForNotificationsWhenShared()
         checkForUpdate()
@@ -118,7 +119,13 @@ class MainActivity : ComponentActivity() {
         if (app.node.groups().any { !it.personal }) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    /** Held while the app is open, for the same-Wi-Fi beacons (§6). */
+    private val multicast by lazy {
+        getSystemService(android.net.wifi.WifiManager::class.java).createMulticastLock("tasks-lan").apply { setReferenceCounted(false) }
+    }
+
     override fun onStop() {
+        if (multicast.isHeld) multicast.release()
         lifecycleScope.launch { TasksWidget.refresh(applicationContext) } // edits made in the app
         app.node.stopLive()
         SyncWorker.flushNow(this) // everything is saved; send it without waiting (§8)

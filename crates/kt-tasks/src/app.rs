@@ -28,6 +28,8 @@ use crate::{Error, Result, TaskSemantics};
 
 mod linking;
 mod notify;
+mod undo;
+pub use undo::Person;
 pub use notify::{Change, ChangeKind, STALE_MS};
 pub use linking::{AccountChanges, DeviceInfo, RecentLink, LINK_CODE_MS, RECENT_LINK_MS};
 

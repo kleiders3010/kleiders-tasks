@@ -751,6 +751,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_mark_seen(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_network_changed(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_people(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_recent_links(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
@@ -784,6 +788,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_take_changes(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_tasks(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_undo_changes_by(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_unlink_device(
     ): Int
@@ -878,6 +884,10 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_mark_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_network_changed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_people(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_recent_links(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_relay_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -890,7 +900,7 @@ internal object UniffiLib {
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
-    external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,`constrained`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_display_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -912,6 +922,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_tasks(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_undo_changes_by(`ptr`: Long,`listId`: RustBuffer.ByValue,`person`: RustBuffer.ByValue,`sinceMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_unlink_device(`ptr`: Long,`deviceId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1120,6 +1132,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_mark_seen() and 0xFFFF) != 44362) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_network_changed() and 0xFFFF) != 26352) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_people() and 0xFFFF) != 15932) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_recent_links() and 0xFFFF) != 22864) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1138,7 +1156,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_device_state() and 0xFFFF) != 59577) {
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_device_state() and 0xFFFF) != 3199) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_display_name() and 0xFFFF) != 11119) {
@@ -1169,6 +1187,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_tasks() and 0xFFFF) != 31507) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_undo_changes_by() and 0xFFFF) != 21194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_unlink_device() and 0xFFFF) != 3021) {
@@ -2030,6 +2051,17 @@ public interface KtNodeInterface {
     fun `markSeen`()
     
     /**
+     * The platform saw the network change (Wi-Fi to mobile, a new network, back online):
+     * P2P re-checks its paths now instead of when its timers notice.
+     */
+    fun `networkChanged`()
+    
+    /**
+     * The people who edit a list (its group's members, by name).
+     */
+    fun `people`(`listId`: kotlin.String): List<PersonItem>
+    
+    /**
      * Devices linked in the last day ("New device linked · Undo" on every device).
      */
     fun `recentLinks`(): List<RecentLinkItem>
@@ -2058,10 +2090,11 @@ public interface KtNodeInterface {
     fun `restored`(): RestoreInfo?
     
     /**
-     * Phones report Wi-Fi and charging (and the node knows when the app is open): helping
-     * others follows them (§7a).
+     * Phones report Wi-Fi, charging, and whether the phone is constrained (battery saver,
+     * low battery, heat, data saver); the node knows when the app is open. Helping others
+     * follows them (§7a).
      */
-    fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean)
+    fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean, `constrained`: kotlin.Boolean)
     
     fun `setDisplayName`(`name`: kotlin.String)
     
@@ -2102,6 +2135,12 @@ public interface KtNodeInterface {
     fun `takeChanges`(): List<ChangeItem>
     
     fun `tasks`(`listId`: kotlin.String): List<TaskItem>
+    
+    /**
+     * Undo what that person did in the list since `since_ms` (other people's work stays).
+     * Returns how many things were put back.
+     */
+    fun `undoChangesBy`(`listId`: kotlin.String, `person`: PersonItem, `sinceMs`: kotlin.ULong): kotlin.UInt
     
     /**
      * Undo a link: the device leaves the account and every group (keys rotate).
@@ -2611,6 +2650,40 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * The platform saw the network change (Wi-Fi to mobile, a new network, back online):
+     * P2P re-checks its paths now instead of when its timers notice.
+     */override fun `networkChanged`()
+        = 
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_network_changed(
+        it,
+        _status)
+}
+    }
+    
+    
+
+    
+    /**
+     * The people who edit a list (its group's members, by name).
+     */
+    @Throws(KtException::class)override fun `people`(`listId`: kotlin.String): List<PersonItem> {
+            return FfiConverterSequenceTypePersonItem.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_people(
+        it,
+        
+        FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * Devices linked in the last day ("New device linked · Undo" on every device).
      */override fun `recentLinks`(): List<RecentLinkItem> {
             return FfiConverterSequenceTypeRecentLinkItem.lift(
@@ -2709,9 +2782,10 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
-     * Phones report Wi-Fi and charging (and the node knows when the app is open): helping
-     * others follows them (§7a).
-     */override fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean)
+     * Phones report Wi-Fi, charging, and whether the phone is constrained (battery saver,
+     * low battery, heat, data saver); the node knows when the app is open. Helping others
+     * follows them (§7a).
+     */override fun `setDeviceState`(`onWifi`: kotlin.Boolean, `charging`: kotlin.Boolean, `constrained`: kotlin.Boolean)
         = 
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -2719,7 +2793,8 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterBoolean.lower(`onWifi`),
-        FfiConverterBoolean.lower(`charging`),_status)
+        FfiConverterBoolean.lower(`charging`),
+        FfiConverterBoolean.lower(`constrained`),_status)
 }
     }
     
@@ -2874,6 +2949,27 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Undo what that person did in the list since `since_ms` (other people's work stays).
+     * Returns how many things were put back.
+     */
+    @Throws(KtException::class)override fun `undoChangesBy`(`listId`: kotlin.String, `person`: PersonItem, `sinceMs`: kotlin.ULong): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_undo_changes_by(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterTypePersonItem.lower(`person`),
+        FfiConverterULong.lower(`sinceMs`),_status)
 }
     }
     )
@@ -3418,6 +3514,50 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
             FfiConverterString.write(value.`bind`, buf)
             FfiConverterString.write(value.`deviceName`, buf)
             FfiConverterString.write(value.`backupDir`, buf)
+    }
+}
+
+
+
+/**
+ * Someone who edits a list (for "Undo changes by [person] since [time]").
+ */
+data class PersonItem (
+    var `name`: kotlin.String
+    , 
+    /**
+     * This account's own devices.
+     */
+    var `isMe`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePersonItem: FfiConverterRustBuffer<PersonItem> {
+    override fun read(buf: ByteBuffer): PersonItem {
+        return PersonItem(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PersonItem) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterBoolean.allocationSize(value.`isMe`)
+    )
+
+    override fun write(value: PersonItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterBoolean.write(value.`isMe`, buf)
     }
 }
 
@@ -4245,6 +4385,34 @@ public object FfiConverterSequenceTypeListItem: FfiConverterRustBuffer<List<List
         buf.putInt(value.size)
         value.iterator().forEach {
             FfiConverterTypeListItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypePersonItem: FfiConverterRustBuffer<List<PersonItem>> {
+    override fun read(buf: ByteBuffer): List<PersonItem> {
+        val len = buf.getInt()
+        return List<PersonItem>(len) {
+            FfiConverterTypePersonItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<PersonItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypePersonItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<PersonItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypePersonItem.write(it, buf)
         }
     }
 }

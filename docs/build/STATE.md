@@ -112,10 +112,11 @@
 
 ### Gaps found against DESIGN (2026-09-25 audit)
 - [x] Periodic key rotation (D5 rule 7, `replica/rotation.rs`): due after 30 days, one member in turn (hash-ranked, 6 h cascade), from background sync; additions already make a fresh key; only removals close open invites (refined D7). Test `keys_rotate_periodically_without_closing_invites`
-- [ ] History: keep at least 30 days before compacting (D27), and "undo changes by a person since a time"
+- [x] History (D27): documents record change times; a compaction archives the previous generation with its full history for 30 days (`Replica::doc_archive`); "Undo changes by [person] since [time]" (`kt-tasks/src/history.rs`, `App::undo_changes_by`, list screen "Undo…") puts back tasks added/deleted, fields edited and moves made by that person's devices, leaving others' later edits alone, across compactions. Tests: `history` unit test, `tests/undo.rs` (after a compaction), `DesktopUndoTest`
+- [x] **Compaction bug found and fixed**: compacting a group, profile or index document dropped every map except `meta` (a group's list index and names), and equality compared hash-ordered printouts. Rebuild, equality and rebase now cover every root map canonically. Test `compaction_keeps_every_map`
 - [ ] Text attachments for long notes (blob layer; currently refused)
-- [ ] Same-Wi-Fi (LAN) layer wired into the apps (multicast lock on Android)
-- [ ] Android network changes fed to iroh; phone helping also off in battery saver, low battery, heat, data saver
+- [x] Same-Wi-Fi (LAN) layer in the apps: beacons while open, a direct round when a member is heard, LAN as an invite layer; Android multicast lock while open. Also fixed: `start_live` marked the app closed right after opening it (phone helping never saw the app open)
+- [x] Android network changes go to iroh (`network_changed`); phone helping is off in battery saver, below 20 % battery, at severe heat, or with data saver
 - [ ] Reminders (exact alarms, permission asked when first needed, rescheduled after a restore)
 - [ ] Format versioning: keep and pass on newer data, feature floor, "update available" from newer formats; required updates only via a signed manifest or Play priority
 - [ ] Golden corpus: old/new version interoperability tests

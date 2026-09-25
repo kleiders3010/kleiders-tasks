@@ -55,8 +55,13 @@ class TasksApplication : Application() {
         val wifi = cm.getNetworkCapabilities(cm.activeNetwork)?.let {
             it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) || it.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET)
         } ?: false
-        val charging = getSystemService(android.os.BatteryManager::class.java).isCharging
-        node.setDeviceState(wifi, charging)
+        val battery = getSystemService(android.os.BatteryManager::class.java)
+        val power = getSystemService(android.os.PowerManager::class.java)
+        val lowBattery = battery.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY).let { it in 0..19 } && !battery.isCharging
+        val hot = android.os.Build.VERSION.SDK_INT >= 29 && power.currentThermalStatus >= android.os.PowerManager.THERMAL_STATUS_SEVERE
+        val dataSaver = cm.restrictBackgroundStatus == android.net.ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
+        // No helping others in battery saver, low battery, heat or data saver (§7a).
+        node.setDeviceState(wifi, battery.isCharging, power.isPowerSaveMode || lowBattery || hot || dataSaver)
     }
 
     /** "Sync in the background": periodic work on or off. */
@@ -66,6 +71,16 @@ class TasksApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Network changes go to P2P right away (§8): it re-checks paths instead of waiting.
+        getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) = changed()
+            override fun onLost(network: android.net.Network) = changed()
+            override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) = changed()
+            private fun changed() {
+                if (current == null) return // nothing to tell before the node exists
+                runCatching { reportDeviceState(); node.networkChanged() }
+            }
+        })
         schedulePeriodic() // the worker itself checks "Sync in the background"
     }
 
