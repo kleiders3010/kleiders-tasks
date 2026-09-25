@@ -50,6 +50,17 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+        <!-- Measurement only (Measure.kt): the "more often" alarm, and the adb switch, which
+             only holders of DUMP (the adb shell) can reach. Off by default; no UI. -->
+        <receiver android:name=".MoreOftenReceiver" android:exported="false" />
+        <receiver
+            android:name=".MeasureReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.jurisgames.tasks.MEASURE" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".TasksWidgetReceiver"
             android:exported="true"

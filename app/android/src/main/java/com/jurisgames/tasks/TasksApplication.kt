@@ -17,7 +17,11 @@ class TasksApplication : Application() {
 
     /** One node per process; opened on first use (UI or background job). */
     val node: KtNode
-        @Synchronized get() = current ?: open(null).also { current = it }
+        @Synchronized get() = current ?: open(null).also { current = it; Measure.onNodeOpened(this, it) }
+
+    /** The node if something already opened it (never opens it). */
+    val nodeIfOpen: KtNode?
+        @Synchronized get() = current
 
     /** Registers the app Context with the Rust side (src/android.rs in kt-ffi). */
     private external fun initAndroidContext(context: android.content.Context)
@@ -47,7 +51,7 @@ class TasksApplication : Application() {
     fun restoreFrom(bytes: ByteArray): KtNode {
         current?.let { it.stopLive(); it.close() }
         current = null
-        return open(bytes).also { current = it }
+        return open(bytes).also { current = it; Measure.onNodeOpened(this, it) }
     }
 
     /** Wi-Fi and charging decide whether this phone helps others sync right now (§7a). */
@@ -79,10 +83,12 @@ class TasksApplication : Application() {
             override fun onCapabilitiesChanged(network: android.net.Network, caps: android.net.NetworkCapabilities) = changed()
             private fun changed() {
                 if (current == null) return // nothing to tell before the node exists
+                Measure.networkChanged()
                 runCatching { reportDeviceState(); node.networkChanged() }
             }
         })
         schedulePeriodic() // the worker itself checks "Sync in the background"
+        Measure.ensureAlarm(this) // measurement only; off unless switched on over adb
     }
 
     private fun schedulePeriodic() {

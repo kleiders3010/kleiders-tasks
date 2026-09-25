@@ -15,7 +15,9 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         val node = app.node
         if (!node.settings().syncInBackground) return Result.success() // sync only while open
         app.reportDeviceState()
+        val started = android.os.SystemClock.elapsedRealtime()
         node.syncNow()
+        if (inputData.getBoolean(MORE_OFTEN, false)) Measure.roundDone(applicationContext, android.os.SystemClock.elapsedRealtime() - started)
         if (inputData.getBoolean(PERIODIC, false)) BackgroundCheck.ran(applicationContext)
         ChangeNotifier.post(applicationContext, node.takeChanges())
         TasksWidget.refresh(applicationContext) // every change redraws the widget
@@ -25,6 +27,8 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
 
     companion object {
         const val PERIODIC = "periodic"
+        /** Started by the "more often" alarm (measurement only, [Measure]). */
+        const val MORE_OFTEN = "more_often"
 
         /** Leaving the app: send pending changes now (expedited, no notification; DESIGN §8). */
         fun flushNow(ctx: Context) {
