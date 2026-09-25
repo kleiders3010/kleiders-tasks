@@ -47,20 +47,20 @@ async fn blobs_travel_directly_and_through_helpers() {
     let h = node("h", true).await;
     let h_addr = h.where_data().to_addr().unwrap();
     let amb = HelperMailbox::new(a.clone(), vec![h_addr.clone()]);
-    let rep = kt_net::blobs::round(None, Some(&amb), &store_a, &[], &[r.id]).await;
+    let rep = kt_net::blobs::round(None, Some(&amb), None, &store_a, &[], &[r.id]).await;
     assert_eq!(rep.offered, 1, "{rep:?}");
-    let rep = kt_net::blobs::round(None, Some(&amb), &store_a, &[], &[r.id]).await;
+    let rep = kt_net::blobs::round(None, Some(&amb), None, &store_a, &[], &[r.id]).await;
     assert_eq!(rep.offered, 0, "offered again only when due");
     assert_eq!(h.helper().unwrap().blobs.held().0, 1);
     a.close().await;
 
     let store_b = BlobStore::new(tmp("sb"));
     let bmb = HelperMailbox::new(b.clone(), vec![h_addr]);
-    let rep = kt_net::blobs::round(Some(&b), Some(&bmb), &store_b, &[r.id], &[]).await;
+    let rep = kt_net::blobs::round(Some(&b), Some(&bmb), None, &store_b, &[r.id], &[]).await;
     assert_eq!((rep.fetched, rep.missing), (1, 0), "{rep:?}");
     assert_eq!(blobs::open(&r, &store_b.get(&r.id).unwrap()).unwrap(), text.as_bytes());
 
     // Something nobody has stays missing, without failing the round.
-    let rep = kt_net::blobs::round(Some(&b), Some(&bmb), &store_b, &[[7; 32]], &[]).await;
+    let rep = kt_net::blobs::round(Some(&b), Some(&bmb), None, &store_b, &[[7; 32]], &[]).await;
     assert_eq!((rep.fetched, rep.missing), (0, 1));
 }

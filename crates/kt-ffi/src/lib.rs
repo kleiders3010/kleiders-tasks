@@ -528,6 +528,8 @@ struct Net {
     p2p: Option<Arc<P2p>>,
     helpers: Option<(Arc<HelperMailbox>, HelperDirectory)>,
     dht: Option<Arc<DhtDiscovery>>,
+    /// Public Blossom servers for attachments (best effort; off for loopback tests).
+    blossom: Option<kt_net::blossom::Blossom>,
 }
 
 #[derive(uniffi::Object)]
@@ -752,7 +754,7 @@ impl KtNode {
         let store = self.app.blob_store();
         let used = self.app.referenced_blobs();
         let (have, wanted): (Vec<_>, Vec<_>) = used.into_iter().partition(|id| store.has(id));
-        let blobs = kt_net::blobs::round(net.p2p.as_deref(), net.helpers.as_ref().map(|h| h.0.as_ref()), &store, &wanted, &have).await;
+        let blobs = kt_net::blobs::round(net.p2p.as_deref(), net.helpers.as_ref().map(|h| h.0.as_ref()), net.blossom.as_ref(), &store, &wanted, &have).await;
         if blobs.fetched > 0 {
             self.notify();
         }
@@ -859,7 +861,9 @@ impl KtNode {
                 }
             }
             let dht = if options.dht { DhtDiscovery::with_cache(replica.clone(), data.join("dht_nodes.txt"), None).ok().map(Arc::new) } else { None };
-            Net { syncer, nostr, relays, p2p, helpers, dht }
+            // Public Blossom servers only with real networking (never from loopback tests).
+            let blossom = if options.bind.is_empty() { kt_net::blossom::Blossom::seeded() } else { None };
+            Net { syncer, nostr, relays, p2p, helpers, dht, blossom }
         });
         if !options.device_name.is_empty() {
             let _ = app.set_device_name(&options.device_name);

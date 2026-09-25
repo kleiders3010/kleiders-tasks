@@ -203,9 +203,9 @@ pub struct BlobReport {
     pub missing: usize,
 }
 
-/// One blob round: fetch what's missing (members first, then helpers), and offer the
-/// blobs in use to helpers when they're due.
-pub async fn round(p2p: Option<&P2p>, helpers: Option<&HelperMailbox>, store: &BlobStore, wanted: &[BlobId], in_use: &[BlobId]) -> BlobReport {
+/// One blob round: fetch what's missing (members first, then helpers, then Blossom), and
+/// offer the blobs in use to helpers and Blossom when they're due.
+pub async fn round(p2p: Option<&P2p>, helpers: Option<&HelperMailbox>, blossom: Option<&crate::blossom::Blossom>, store: &BlobStore, wanted: &[BlobId], in_use: &[BlobId]) -> BlobReport {
     let mut rep = BlobReport::default();
     let members = p2p.map(|p| p.member_addrs()).unwrap_or_default();
     for id in wanted {
@@ -226,12 +226,17 @@ pub async fn round(p2p: Option<&P2p>, helpers: Option<&HelperMailbox>, store: &B
                 got = h.get_blob(id).await;
             }
         }
+        if got.is_none() {
+            if let Some(b) = blossom {
+                got = b.get(id).await;
+            }
+        }
         match got.map(|b| store.put_expected(id, &b)) {
             Some(Ok(())) => rep.fetched += 1,
             _ => rep.missing += 1,
         }
     }
-    if let Some(h) = helpers {
+    if helpers.is_some() || blossom.is_some() {
         let path = offered_path(store);
         let mut offered: Offered = std::fs::read(&path).ok().and_then(|b| postcard::from_bytes(&b).ok()).unwrap_or_default();
         let now = now_ms();
@@ -241,7 +246,14 @@ pub async fn round(p2p: Option<&P2p>, helpers: Option<&HelperMailbox>, store: &B
                 continue;
             }
             let Some(b) = store.get(id) else { continue };
-            if h.put_blob(&b, BLOB_COPIES).await > 0 {
+            let mut held = 0;
+            if let Some(h) = helpers {
+                held += h.put_blob(&b, BLOB_COPIES).await;
+            }
+            if let Some(bl) = blossom {
+                held += bl.offer(&b).await;
+            }
+            if held > 0 {
                 offered.0.insert(*id, now);
                 rep.offered += 1;
             }

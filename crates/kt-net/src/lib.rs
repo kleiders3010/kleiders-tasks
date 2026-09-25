@@ -5,6 +5,7 @@
 //! [`sync::Syncer`] that drives a replica against mailboxes.
 
 pub mod blobs;
+pub mod blossom;
 pub mod dht;
 pub mod helper;
 pub mod health;
