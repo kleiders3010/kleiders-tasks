@@ -801,6 +801,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_notes(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_people(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_recent_links(
@@ -824,6 +826,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_list_style(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_notes(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_reminder(
     ): Int
@@ -953,6 +957,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_newer_version_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_kt_ffi_fn_method_ktnode_notes(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_people(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_recent_links(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -976,6 +982,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_set_list_style(`ptr`: Long,`listId`: RustBuffer.ByValue,`hue`: RustBuffer.ByValue,`vivid`: Byte,`icon`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_notes(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_reminder(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`atMs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1264,6 +1272,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen() and 0xFFFF) != 52805) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_notes() and 0xFFFF) != 12902) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_people() and 0xFFFF) != 15932) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1298,6 +1309,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_notes() and 0xFFFF) != 43201) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_reminder() and 0xFFFF) != 62604) {
@@ -2676,6 +2690,11 @@ public interface KtNodeInterface {
     fun `newerVersionSeen`(): kotlin.Boolean
     
     /**
+     * A task's full notes (an attachment still on its way shows its preview).
+     */
+    fun `notes`(`listId`: kotlin.String, `taskId`: kotlin.String): NotesItem
+    
+    /**
      * The people who edit a list (its group's members, by name).
      */
     fun `people`(`listId`: kotlin.String): List<PersonItem>
@@ -2725,6 +2744,11 @@ public interface KtNodeInterface {
     fun `setListStyle`(`listId`: kotlin.String, `hue`: kotlin.Double?, `vivid`: kotlin.UByte, `icon`: kotlin.String?)
     
     fun `setListener`(`listener`: KtListener)
+    
+    /**
+     * Set a task's notes; long ones become a text attachment (D4).
+     */
+    fun `setNotes`(`listId`: kotlin.String, `taskId`: kotlin.String, `text`: kotlin.String)
     
     /**
      * Set or clear a task's reminder (shared with everyone in the list, like any field).
@@ -3355,6 +3379,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * A task's full notes (an attachment still on its way shows its preview).
+     */
+    @Throws(KtException::class)override fun `notes`(`listId`: kotlin.String, `taskId`: kotlin.String): NotesItem {
+            return FfiConverterTypeNotesItem.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_notes(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * The people who edit a list (its group's members, by name).
      */
     @Throws(KtException::class)override fun `people`(`listId`: kotlin.String): List<PersonItem> {
@@ -3547,6 +3590,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterTypeKtListener.lower(`listener`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Set a task's notes; long ones become a text attachment (D4).
+     */
+    @Throws(KtException::class)override fun `setNotes`(`listId`: kotlin.String, `taskId`: kotlin.String, `text`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_notes(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterString.lower(`text`),_status)
 }
     }
     
@@ -4561,6 +4623,55 @@ public object FfiConverterTypeNodeOptions: FfiConverterRustBuffer<NodeOptions> {
 
 
 /**
+ * A task's full notes, as far as this device has them.
+ */
+data class NotesItem (
+    var `text`: kotlin.String
+    , 
+    /**
+     * False while an attachment is still on its way: `text` is its preview.
+     */
+    var `complete`: kotlin.Boolean
+    , 
+    var `size`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeNotesItem: FfiConverterRustBuffer<NotesItem> {
+    override fun read(buf: ByteBuffer): NotesItem {
+        return NotesItem(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: NotesItem) = (
+            FfiConverterString.allocationSize(value.`text`) +
+            FfiConverterBoolean.allocationSize(value.`complete`) +
+            FfiConverterULong.allocationSize(value.`size`)
+    )
+
+    override fun write(value: NotesItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`text`, buf)
+            FfiConverterBoolean.write(value.`complete`, buf)
+            FfiConverterULong.write(value.`size`, buf)
+    }
+}
+
+
+
+/**
  * Someone who edits a list (for "Undo changes by [person] since [time]").
  */
 data class PersonItem (
@@ -5101,7 +5212,15 @@ data class TaskItem (
     , 
     var `done`: kotlin.Boolean
     , 
+    /**
+     * Inline notes, or an attachment's preview (full text: [`KtNode::notes`]).
+     */
     var `notes`: kotlin.String
+    , 
+    /**
+     * The notes continue in a text attachment.
+     */
+    var `hasAttachment`: kotlin.Boolean
     , 
     /**
      * A timed reminder (ms since the epoch).
@@ -5129,6 +5248,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
             FfiConverterOptionalULong.read(buf),
         )
     }
@@ -5140,6 +5260,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterString.allocationSize(value.`title`) +
             FfiConverterBoolean.allocationSize(value.`done`) +
             FfiConverterString.allocationSize(value.`notes`) +
+            FfiConverterBoolean.allocationSize(value.`hasAttachment`) +
             FfiConverterOptionalULong.allocationSize(value.`remindMs`)
     )
 
@@ -5150,6 +5271,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterString.write(value.`title`, buf)
             FfiConverterBoolean.write(value.`done`, buf)
             FfiConverterString.write(value.`notes`, buf)
+            FfiConverterBoolean.write(value.`hasAttachment`, buf)
             FfiConverterOptionalULong.write(value.`remindMs`, buf)
     }
 }

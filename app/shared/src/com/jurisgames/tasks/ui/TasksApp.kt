@@ -353,6 +353,8 @@ private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((
     var undoOpen by remember { mutableStateOf(false) }
     if (undoOpen) UndoDialog(node, list, onDone = { onChanged() }, onClose = { undoOpen = false })
     var styleOpen by remember { mutableStateOf(false) }
+    var notesFor by remember { mutableStateOf<String?>(null) }
+    notesFor?.let { id -> NotesDialog(node, list.id, id, version, onSaved = onChanged, onClose = { notesFor = null }) }
     // The list as it is now (its style may have just changed, here or on another device).
     val shown = remember(node, version, list.id) { node.lists().find { it.id == list.id } ?: list }
     if (styleOpen) StyleDialog(node, shown, onDone = onChanged, onClose = { styleOpen = false })
@@ -372,6 +374,9 @@ private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((
                 Row(Modifier.fillMaxWidth().padding(start = (t.depth.toInt() * 24).dp), verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(t.done, { node.setDone(list.id, t.id, it); onChanged() }, modifier = Modifier.testTag("done-" + t.title))
                     Text(t.title, Modifier.weight(1f).testTag("task-" + t.title))
+                    TextButton(onClick = { notesFor = t.id }, modifier = Modifier.testTag("notes-" + t.title)) {
+                        Text(if (t.notes.isNotEmpty() || t.hasAttachment) "📝" else "🗒")
+                    }
                     ReminderButton(node, list.id, t.id, t.remindMs, onChanged)
                     TextButton(onClick = { node.addTask(list.id, "New subtask", t.id); onChanged() }) { Text("+") }
                     TextButton(onClick = { node.deleteTask(list.id, t.id); onChanged() }, modifier = Modifier.testTag("delete-" + t.title)) { Text("✕") }

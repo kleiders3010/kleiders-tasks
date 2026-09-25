@@ -2,6 +2,7 @@
 //!
 //! Spec: `docs/DESIGN.md` (v2). This crate has no task-specific code (principle 7).
 
+pub mod blobs;
 pub mod crypto;
 pub mod envelope;
 pub mod epochs;

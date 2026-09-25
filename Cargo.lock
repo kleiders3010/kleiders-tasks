@@ -2436,6 +2436,7 @@ dependencies = [
  "hkdf",
  "kt-fuzz",
  "loro",
+ "lz4_flex",
  "postcard",
  "rand 0.8.5",
  "rand_core 0.6.4",

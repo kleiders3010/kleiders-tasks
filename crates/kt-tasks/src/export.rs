@@ -14,8 +14,11 @@ fn items(ts: &[TaskView], depth: usize, out: &mut String) {
     for t in ts {
         let indent = "\t".repeat(depth);
         out.push_str(&format!("{indent}- [{}] {}\n", if t.done { 'x' } else { ' ' }, one_line(&t.title)));
-        for line in t.notes.lines().filter(|l| !l.trim().is_empty()) {
+        for line in t.notes_preview().lines().filter(|l| !l.trim().is_empty()) {
             out.push_str(&format!("{indent}  {}\n", line.trim_end()));
+        }
+        if t.attachment().is_some() {
+            out.push_str(&format!("{indent}  (continues in the app)\n"));
         }
         items(&t.children, depth + 1, out);
     }

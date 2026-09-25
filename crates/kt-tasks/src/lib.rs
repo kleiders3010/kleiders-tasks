@@ -4,7 +4,10 @@
 //! - map `meta`: `name` (string), `hue` (i64 0–360 or absent), `icon` (string or absent)
 //! - tree `tasks`: each node's meta map holds
 //!   - `id`: stable task ID (random hex); survives document epochs, which recreate tree nodes
-//!   - `title` (string), `done` (bool), `notes` (string, inline up to the attachment threshold)
+//!   - `title` (string), `done` (bool), `notes` (string): inline text up to the attachment
+//!     threshold; longer notes are a text attachment, stored as [`BLOB_MARK`] + blob
+//!     reference + newline + a preview, in this one field so every edit, undo and merge
+//!     moves reference and preview together
 //!
 //! Task order is the tree's fractional-index order. Unknown fields are preserved
 //! (principle 8): the domain never deletes keys it doesn't know.
@@ -92,6 +95,12 @@ pub fn rename_list(doc: &LoroDoc, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// One task (with its subtasks), if it exists.
+pub(crate) fn find_view(doc: &LoroDoc, task_id: &str) -> Option<TaskView> {
+    let n = find(doc, task_id).ok()?;
+    view_of(&tree(doc), n)
+}
+
 fn find(doc: &LoroDoc, task_id: &str) -> Result<TreeID> {
     let t = tree(doc);
     for n in t.nodes() {
@@ -144,16 +153,69 @@ pub fn set_done(doc: &LoroDoc, task: &str, done: bool) -> Result<()> {
     Ok(())
 }
 
-/// Set a task's notes. Text above the attachment threshold (D4) must go through the blob
-/// layer instead; until that exists (M2) it's refused with a clear message, never silently cut.
+/// Set a task's notes: inline text, or an attachment's notes value ([`attachment_notes`]).
+/// Text above the attachment threshold (D4) goes through `App::set_notes`, which makes the
+/// blob; here it's refused, never silently cut.
 pub fn set_notes(doc: &LoroDoc, task: &str, notes: &str) -> Result<()> {
-    if notes.len() > TEXT_ATTACHMENT_THRESHOLD {
-        return Err(Error::Invalid("notes this long are stored as an attachment (not available yet)".into()));
-    }
+    let value = if notes.starts_with(BLOB_MARK) {
+        match notes_of(notes) {
+            Notes::Attachment { .. } => notes.to_string(),
+            Notes::Inline(_) => return Err(Error::Invalid("not a valid attachment".into())),
+        }
+    } else if notes.len() > TEXT_ATTACHMENT_THRESHOLD {
+        return Err(Error::Invalid("notes this long go through App::set_notes (a text attachment)".into()));
+    } else {
+        notes.replace('\u{0}', "") // the marker can't be typed in
+    };
     let n = find(doc, task)?;
-    tree(doc).get_meta(n).map_err(loro)?.insert("notes", notes).map_err(loro)?;
+    tree(doc).get_meta(n).map_err(loro)?.insert("notes", value.as_str()).map_err(loro)?;
     doc.commit();
     Ok(())
+}
+
+/// Starts a notes value that is a text attachment.
+pub const BLOB_MARK: &str = "\u{0}blob:";
+/// Characters of an attachment kept inline as its preview (lists, exports, widgets).
+pub const PREVIEW_CHARS: usize = 2000;
+
+/// A task's notes, as stored.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Notes<'a> {
+    Inline(&'a str),
+    Attachment { blob: kt_engine::blobs::BlobRef, preview: &'a str },
+}
+
+/// Read a notes value. A malformed attachment reads as no notes, never as the marker text.
+pub fn notes_of(raw: &str) -> Notes<'_> {
+    let Some(rest) = raw.strip_prefix(BLOB_MARK) else { return Notes::Inline(raw) };
+    let (r, preview) = rest.split_once('\n').unwrap_or((rest, ""));
+    match kt_engine::blobs::BlobRef::parse(r) {
+        Ok(blob) => Notes::Attachment { blob, preview },
+        Err(_) => Notes::Inline(""),
+    }
+}
+
+/// The notes value for a text attachment of `full`.
+pub fn attachment_notes(blob: &kt_engine::blobs::BlobRef, full: &str) -> String {
+    let preview: String = full.chars().take(PREVIEW_CHARS).collect();
+    format!("{BLOB_MARK}{}\n{preview}", blob.encode())
+}
+
+impl TaskView {
+    /// Notes to show without the attachment: inline notes, or an attachment's preview.
+    pub fn notes_preview(&self) -> &str {
+        match notes_of(&self.notes) {
+            Notes::Inline(t) => t,
+            Notes::Attachment { preview, .. } => preview,
+        }
+    }
+
+    pub fn attachment(&self) -> Option<kt_engine::blobs::BlobRef> {
+        match notes_of(&self.notes) {
+            Notes::Attachment { blob, .. } => Some(blob),
+            Notes::Inline(_) => None,
+        }
+    }
 }
 
 /// Set or clear a task's reminder (ms since the epoch).

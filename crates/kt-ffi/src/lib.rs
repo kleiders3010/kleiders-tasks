@@ -249,9 +249,21 @@ pub struct TaskItem {
     pub depth: u32,
     pub title: String,
     pub done: bool,
+    /// Inline notes, or an attachment's preview (full text: [`KtNode::notes`]).
     pub notes: String,
+    /// The notes continue in a text attachment.
+    pub has_attachment: bool,
     /// A timed reminder (ms since the epoch).
     pub remind_ms: Option<u64>,
+}
+
+/// A task's full notes, as far as this device has them.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct NotesItem {
+    pub text: String,
+    /// False while an attachment is still on its way: `text` is its preview.
+    pub complete: bool,
+    pub size: u64,
 }
 
 /// An upcoming reminder (the platform schedules an alarm for each).
@@ -562,7 +574,16 @@ fn gid(s: &str) -> Result<GroupId, KtError> {
 
 fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
     for t in ts {
-        out.push(TaskItem { id: t.id.clone(), parent_id: parent.map(str::to_string), depth, title: t.title.clone(), done: t.done, notes: t.notes.clone(), remind_ms: t.remind_ms });
+        out.push(TaskItem {
+            id: t.id.clone(),
+            parent_id: parent.map(str::to_string),
+            depth,
+            title: t.title.clone(),
+            done: t.done,
+            notes: t.notes_preview().to_string(),
+            has_attachment: t.attachment().is_some(),
+            remind_ms: t.remind_ms,
+        });
         flatten(&t.children, Some(&t.id), depth + 1, out);
     }
 }
@@ -727,6 +748,15 @@ impl KtNode {
         let _ = self.app.settle_account();
         let _ = self.app.publish_names();
         kt_net::health::exchange(&net.syncer, net.helpers.as_ref().map(|h| h.0.as_ref()), &net.nostr);
+        // Text attachments: fetch what's missing, offer what's in use to helpers.
+        let store = self.app.blob_store();
+        let used = self.app.referenced_blobs();
+        let (have, wanted): (Vec<_>, Vec<_>) = used.into_iter().partition(|id| store.has(id));
+        let blobs = kt_net::blobs::round(net.p2p.as_deref(), net.helpers.as_ref().map(|h| h.0.as_ref()), &store, &wanted, &have).await;
+        if blobs.fetched > 0 {
+            self.notify();
+        }
+        self.app.collect_blob_garbage();
         SyncReport { written: w.written as u32, received: r.slots_opened as u32, rejected: r.rejected as u32, peers_reached: peers, joined_groups: joined }
     }
 }
@@ -819,6 +849,7 @@ impl KtNode {
                     ..Default::default()
                 };
                 if let Ok(p) = P2p::start(syncer.clone(), cfg).await {
+                    p.set_blob_store(app.blob_store()); // attachments, served by ID
                     p.publish_whereabouts();
                     let hmb = Arc::new(HelperMailbox::new(p.clone(), vec![]));
                     syncer.add_mailbox(hmb.clone() as Arc<dyn Mailbox>);
@@ -978,6 +1009,19 @@ impl KtNode {
     pub fn add_task(&self, list_id: String, title: String, parent_id: Option<String>) -> Result<String, KtError> {
         let l = self.list(&list_id)?;
         self.app.edit(&l, |d| kt_tasks::add_task(d, parent_id.as_deref(), &title)).map_err(fail)
+    }
+
+    /// Set a task's notes; long ones become a text attachment (D4).
+    pub fn set_notes(&self, list_id: String, task_id: String, text: String) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.set_notes(&l, &task_id, &text).map_err(fail)
+    }
+
+    /// A task's full notes (an attachment still on its way shows its preview).
+    pub fn notes(&self, list_id: String, task_id: String) -> Result<NotesItem, KtError> {
+        let l = self.list(&list_id)?;
+        let n = self.app.notes(&l, &task_id).map_err(fail)?;
+        Ok(NotesItem { text: n.text, complete: n.complete, size: n.size })
     }
 
     pub fn set_done(&self, list_id: String, task_id: String, done: bool) -> Result<(), KtError> {

@@ -37,6 +37,8 @@ use crate::sync::{ReadReport, Syncer};
 pub const ALPN: &[u8] = b"kt/slots/1";
 /// Invite records by lookup key (D55 layers 1 and 3: the inviter's and members' devices).
 pub const INVITE_ALPN: &[u8] = b"kt/invite/1";
+/// Blobs by ID ([`crate::blobs`]).
+pub const BLOB_ALPN: &[u8] = b"kt/blob/1";
 const MAX_FRAME: usize = 32 * 1024 * 1024;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Helper relays in use are probed again this often.
@@ -189,6 +191,8 @@ pub struct P2p {
     helping: std::sync::atomic::AtomicBool,
     /// Sealed invite records we serve, by lookup key.
     invites: Mutex<HashMap<[u8; 32], Vec<u8>>>,
+    /// This device's blobs, served by ID.
+    blob_store: Mutex<Option<kt_engine::blobs::BlobStore>>,
 }
 
 impl P2p {
@@ -223,7 +227,7 @@ impl P2p {
         let mut b = Endpoint::builder(presets::Minimal)
             .ca_tls_config(crate::relay_tls::ca_tls_config(pins.clone()))
             .secret_key(SecretKey::from_bytes(&seed))
-            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec()])
+            .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec(), BLOB_ALPN.to_vec()])
             .relay_mode(relay_mode);
         if !cfg.portmap {
             b = b.portmapper_config(PortmapperConfig::Disabled);
@@ -250,6 +254,7 @@ impl P2p {
             dead_relays: Mutex::new(HashMap::new()),
             helping: std::sync::atomic::AtomicBool::new(true),
             invites: Mutex::new(HashMap::new()),
+            blob_store: Mutex::new(None),
         });
         let acc = p.clone();
         tokio::spawn(async move { acc.accept_loop().await });
@@ -319,6 +324,28 @@ impl P2p {
             .map_err(|e| e.to_string())?;
         self.conns.lock().expect("lock").insert(key, c.clone());
         Ok(c)
+    }
+
+    /// Serve this device's blobs to anyone who asks by ID.
+    pub fn set_blob_store(&self, store: kt_engine::blobs::BlobStore) {
+        *self.blob_store.lock().expect("lock") = Some(store);
+    }
+
+    /// Member devices' endpoints, one per device.
+    pub fn member_addrs(&self) -> Vec<EndpointAddr> {
+        let me = self.ep.id();
+        let mut seen = std::collections::HashSet::new();
+        self.members().into_iter().map(|(_, a)| a).filter(|a| a.id != me && seen.insert(a.id)).collect()
+    }
+
+    /// Ask a device for a blob; only the exact bytes are accepted.
+    pub async fn fetch_blob(&self, addr: EndpointAddr, id: [u8; 32]) -> Option<Vec<u8>> {
+        let conn = self.connection_alpn(addr, BLOB_ALPN).await.ok()?;
+        let (mut s, mut r) = conn.open_bi().await.ok()?;
+        send_frame(&mut s, &id).await.ok()?;
+        let _ = s.finish();
+        let b = recv_frame::<Option<Vec<u8>>>(&mut r).await.ok().flatten()?;
+        (kt_engine::blobs::blob_id(&b) == id).then_some(b)
     }
 
     /// Serve these sealed invite records (lookup key -> record) to anyone who asks by key.
@@ -532,6 +559,18 @@ impl P2p {
             tokio::spawn(async move {
                 let Ok(conn) = inc.await else { return };
                 let remote = conn.remote_id();
+                if conn.alpn() == BLOB_ALPN {
+                    while let Ok((mut s, mut r)) = conn.accept_bi().await {
+                        let store = me.blob_store.lock().expect("lock").clone();
+                        tokio::spawn(async move {
+                            if let Ok(id) = recv_frame::<[u8; 32]>(&mut r).await {
+                                let _ = send_frame(&mut s, &store.and_then(|st| st.get(&id))).await;
+                                let _ = s.finish();
+                            }
+                        });
+                    }
+                    return;
+                }
                 if conn.alpn() == INVITE_ALPN {
                     while let Ok((mut s, mut r)) = conn.accept_bi().await {
                         let board = me.invites.lock().expect("lock").clone();

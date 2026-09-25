@@ -26,6 +26,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Error, Result, TaskSemantics};
 
+mod attachments;
+pub use attachments::NotesText;
 mod linking;
 mod notify;
 mod undo;
@@ -324,7 +326,12 @@ impl App {
     /// A sealed backup of everything on this device (DESIGN §11). Includes a recovery
     /// invite per shared group, valid `recovery_days`.
     pub fn backup(&self, recovery_days: u32) -> Result<Vec<u8>> {
-        let app = wire::encode(*b"AM", 1, &self.meta()).map_err(eng)?;
+        // The app part: our meta, plus the attachments of lists only our own devices have
+        // (shared lists' attachments come back from the group).
+        let meta = wire::encode(*b"AM", 1, &self.meta()).map_err(eng)?;
+        let personal = self.meta().personal;
+        let lists: Vec<ListInfo> = self.lists().into_iter().filter(|l| l.group == personal).collect();
+        let app = wire::encode(*b"AB", 1, &(meta, self.blobs_for(&lists, attachments::BACKUP_BLOB_BYTES))).map_err(eng)?;
         let b = self.lock().make_backup(u64::from(recovery_days.clamp(1, 30)) * 86_400_000, app).map_err(eng)?;
         kt_engine::replica::backup::seal(&b).map_err(eng)
     }
@@ -334,7 +341,9 @@ impl App {
     /// else can let us into (solo lists): their lists are copied into our new personal group.
     pub fn restore(identity_dir: &Path, data_dir: &Path, sandbox: SandboxConfig, backup: &[u8]) -> Result<(App, RestoreSummary)> {
         let b = kt_engine::replica::backup::open(backup).map_err(eng)?;
-        let old: AppMeta = wire::decode(*b"AM", 1, &b.app).map_err(eng)?.1;
+        // Backups made before attachments hold the meta alone.
+        let (meta, blobs): (Vec<u8>, Vec<Vec<u8>>) = if b.app.starts_with(b"AB") { wire::decode(*b"AB", 1, &b.app).map_err(eng)?.1 } else { (b.app.clone(), Vec::new()) };
+        let old: AppMeta = wire::decode(*b"AM", 1, &meta).map_err(eng)?.1;
         if data_dir.join("app.meta").exists() {
             // Opened once already (first-launch screen): fine while nothing was made yet.
             let pristine = App::open(identity_dir, data_dir, sandbox.clone())?.is_pristine();
@@ -354,6 +363,9 @@ impl App {
             storage::write_atomic(&data_dir.join("app.meta"), &wire::encode(*b"AM", 1, &old).map_err(eng)?).map_err(eng)?;
         }
         let app = App::with_replica(replica, data_dir)?;
+        for blob in &blobs {
+            let _ = app.blob_store().put(blob); // stored under their own hash: nothing to trust
+        }
         let mut summary = RestoreSummary { old_device: Some(b.old_device), ..Default::default() };
         // Remembered so the app can offer to remove it once we're back in (lost or stolen
         // vs. just reset is the user's call, asked once).
@@ -398,7 +410,10 @@ impl App {
         let r = self.lock();
         let doc = r.doc(&list.group, &list.doc).ok_or(Error::NotFound)?;
         let snap = doc.export(loro::ExportMode::Snapshot).map_err(eng)?;
-        let body = wire::encode(*b"LF", 1, &(list.name.clone(), snap)).map_err(eng)?;
+        drop(r);
+        // Format 2 carries the list's attachments: whoever imports it isn't in our group.
+        let blobs = self.blobs_for(std::slice::from_ref(list), kt_engine::limits::ABSURD_SIZE);
+        let body = wire::encode(*b"LF", 2, &(list.name.clone(), snap, blobs)).map_err(eng)?;
         Ok(kt_engine::replica::backup::seal_file(b"KTL1", b"kt/tasklist/v1", &body))
     }
 
@@ -406,7 +421,16 @@ impl App {
     /// history stays in the file; the new list starts from its current state.
     pub fn import_list_file(&self, group: Option<GroupId>, bytes: &[u8]) -> Result<ListInfo> {
         let body = kt_engine::replica::backup::open_file(b"KTL1", b"kt/tasklist/v1", bytes).map_err(|_| Error::Invalid("not a .tasklist file".into()))?;
-        let (name, snap): (String, Vec<u8>) = wire::decode(*b"LF", 1, &body).map_err(eng)?.1;
+        let (name, snap, blobs): (String, Vec<u8>, Vec<Vec<u8>>) = match body.get(2..4) {
+            Some([1, 0]) => {
+                let (n, s): (String, Vec<u8>) = wire::decode(*b"LF", 1, &body).map_err(eng)?.1;
+                (n, s, Vec::new())
+            }
+            _ => wire::decode(*b"LF", 2, &body).map_err(eng)?.1,
+        };
+        for b in &blobs {
+            let _ = self.blob_store().put(b);
+        }
         let g = group.unwrap_or(self.meta().personal);
         let mut r = self.lock();
         let src = r.load_untrusted_snapshot(&snap).map_err(eng)?;

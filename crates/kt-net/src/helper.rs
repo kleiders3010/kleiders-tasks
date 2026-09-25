@@ -42,7 +42,8 @@ use crate::mailbox::{BoxFut, Capabilities, Mailbox, SlotRead, SlotWrite, WriteOu
 use crate::p2p::P2p;
 
 pub const HELPER_ALPN: &[u8] = b"kt/helper/1";
-const MAX_FRAME: usize = 2 * 1024 * 1024;
+/// Blobs (up to [`HelperLimits::max_blob`]) travel in one frame.
+const MAX_FRAME: usize = 10 * 1024 * 1024;
 
 // ---------------------------------------------------------------- wire
 
@@ -98,6 +99,9 @@ enum Request {
     Hello(HelperRef),
     /// Which other helpers do you know?
     Peers,
+    /// Keep a sealed blob (proof of work unless already held: then it's a refresh).
+    BlobPut { data: Vec<u8>, nonce: u64 },
+    BlobGet { id: [u8; 32] },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,6 +134,8 @@ enum Response {
     Info(HelperInfo),
     Ok,
     Peers(Vec<HelperRef>),
+    BlobPut(PutReply),
+    Blob(Option<Vec<u8>>),
 }
 
 async fn send_frame<T: Serialize>(s: &mut SendStream, v: &T) -> Result<(), String> {
@@ -156,6 +162,10 @@ fn put_message(topic: &[u8; 32], version: u64, blob: &[u8]) -> Vec<u8> {
     m.extend_from_slice(&version.to_le_bytes());
     m.extend_from_slice(blake3::hash(blob).as_bytes());
     m
+}
+
+pub(crate) fn pow_leading_zeros(topic: &[u8; 32], writer: &[u8; 32], version: u64, nonce: u64) -> u32 {
+    pow_bits(topic, writer, version, nonce)
 }
 
 fn pow_bits(topic: &[u8; 32], writer: &[u8; 32], version: u64, nonce: u64) -> u32 {
@@ -216,6 +226,9 @@ pub struct HelperLimits {
     pub ttl_ms: u64,
     /// Keep a disk copy (None = RAM only).
     pub disk: Option<DiskConfig>,
+    /// Bytes of strangers' blobs (text attachments) kept, and the largest one taken.
+    pub blob_capacity: u64,
+    pub max_blob: u64,
 }
 
 impl Default for HelperLimits {
@@ -229,6 +242,8 @@ impl Default for HelperLimits {
             young_topic_cap: 256 * 1024,
             ttl_ms: 14 * 24 * 3600 * 1000,
             disk: None,
+            blob_capacity: 32 * 1024 * 1024,
+            max_blob: 8 * 1024 * 1024,
         }
     }
 }
@@ -263,9 +278,12 @@ fn verify_put(p: &SignedPut) -> bool {
     pk.verify(&put_message(&p.topic, p.version, &p.blob), &Signature::from_bytes(&sig)).is_ok()
 }
 
-/// Delete a helper's disk copy (helping turned off).
+/// Delete a helper's disk copy (helping turned off), blobs included.
 pub fn wipe_disk(dir: &std::path::Path) {
     let _ = std::fs::remove_dir_all(dir);
+    let mut name = dir.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    name.push("-blobs");
+    let _ = std::fs::remove_dir_all(dir.with_file_name(name));
 }
 
 pub struct HelperStore {
@@ -275,6 +293,8 @@ pub struct HelperStore {
     evicted: Mutex<std::collections::HashSet<([u8; 32], [u8; 32])>>,
     /// Other helpers this helper has heard of (introductions, replication fan-out lists).
     peers: Mutex<HashMap<[u8; 32], (HelperRef, u64)>>,
+    /// Strangers' sealed blobs.
+    pub blobs: crate::blobs::BlobHold,
 }
 
 const MAX_PEERS: usize = 512;
@@ -304,6 +324,7 @@ impl HelperStore {
     pub fn new(limits: HelperLimits) -> Arc<HelperStore> {
         let store = HelperStore {
             session_start_ms: now_ms(),
+            blobs: crate::blobs::BlobHold::new(&limits),
             limits,
             inner: Mutex::new((HashMap::new(), HashMap::new(), 0)),
             evicted: Mutex::new(std::collections::HashSet::new()),
@@ -397,7 +418,8 @@ impl HelperStore {
             self.disk_remove(k);
         }
         topics.retain(|_, t| t.bytes > 0);
-        stale.len()
+        drop(g);
+        stale.len() + self.blobs.sweep()
     }
 
     /// How many slots are held, and bytes used.
@@ -528,6 +550,8 @@ impl HelperStore {
                 Response::Ok
             }
             Request::Peers => Response::Peers(self.known_peers()),
+            Request::BlobPut { data, nonce } => Response::BlobPut(self.blobs.put(data, nonce)),
+            Request::BlobGet { id } => Response::Blob(self.blobs.get(&id)),
         };
         send_frame(&mut s, &resp).await?;
         let _ = s.finish();
@@ -780,6 +804,48 @@ impl HelperMailbox {
                 None
             }
         }
+    }
+
+    /// Put a sealed blob on up to `copies` helpers (ranked for its ID, so readers look in
+    /// the same place). Returns how many hold it now.
+    pub async fn put_blob(&self, data: &[u8], copies: usize) -> usize {
+        let id = kt_engine::blobs::blob_id(data);
+        let len = data.len() as u64;
+        let mut ok = 0;
+        for h in self.ranked(&id) {
+            if ok >= copies {
+                break;
+            }
+            let mut nonce = 0u64;
+            for _ in 0..2 {
+                match self.call(&h, &Request::BlobPut { data: data.to_vec(), nonce }).await {
+                    Some(Response::BlobPut(PutReply::NeedPow(bits))) if bits <= 26 => {
+                        nonce = match tokio::task::spawn_blocking(move || crate::blobs::solve_blob_pow(&id, len, bits)).await {
+                            Ok(n) => n,
+                            Err(_) => break,
+                        };
+                    }
+                    Some(Response::BlobPut(PutReply::Stored | PutReply::Stale)) => {
+                        ok += 1;
+                        break;
+                    }
+                    _ => break,
+                }
+            }
+        }
+        ok
+    }
+
+    /// Fetch a blob from the helpers ranked for its ID; only the exact bytes are accepted.
+    pub async fn get_blob(&self, id: &[u8; 32]) -> Option<Vec<u8>> {
+        for h in self.ranked(id).into_iter().take(crate::blobs::BLOB_COPIES + 2) {
+            if let Some(Response::Blob(Some(b))) = self.call(&h, &Request::BlobGet { id: *id }).await {
+                if kt_engine::blobs::blob_id(&b) == *id {
+                    return Some(b);
+                }
+            }
+        }
+        None
     }
 
     /// Ask a helper which other helpers it knows (helper peer exchange).
@@ -1044,6 +1110,8 @@ mod fuzz_tests {
             postcard::to_stdvec(&Request::Get { topics: vec![[1; 32]], have: vec![([1; 32], put.writer, 0)] }).unwrap(),
             postcard::to_stdvec(&Request::Hello(href())).unwrap(),
             postcard::to_stdvec(&Request::Info).unwrap(),
+            postcard::to_stdvec(&Request::BlobPut { data: b"sealed".to_vec(), nonce: 7 }).unwrap(),
+            postcard::to_stdvec(&Request::BlobGet { id: [3; 32] }).unwrap(),
             postcard::to_stdvec(&Response::Slots(vec![(([1; 32], put.writer), 1, b"x".to_vec())], vec![([1; 32], [2; 32])])).unwrap(),
             postcard::to_stdvec(&Response::Peers(vec![href()])).unwrap(),
             postcard::to_stdvec(&Response::Info(store.info())).unwrap(),
@@ -1059,6 +1127,12 @@ mod fuzz_tests {
                     }
                     Request::Hello(h) => store.learn_peer(h),
                     Request::Info | Request::Peers => {}
+                    Request::BlobPut { data, nonce } => {
+                        let _ = store.blobs.put(data, nonce);
+                    }
+                    Request::BlobGet { id } => {
+                        let _ = store.blobs.get(&id);
+                    }
                 }
             }
             if let Ok(Response::Peers(ps)) = postcard::from_bytes::<Response>(b) {

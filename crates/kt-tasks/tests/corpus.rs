@@ -92,11 +92,14 @@ fn write_corpus() {
         a.set_display_name("Alex").unwrap();
         b.set_display_name("Sam").unwrap();
         let solo = a.create_list(None, "Diary").unwrap();
-        a.edit(&solo, |d| tk::add_task(d, None, "private note").map_err(Into::into)).unwrap();
+        let entry = a.edit(&solo, |d| tk::add_task(d, None, "private note").map_err(Into::into)).unwrap();
+        // v2+: text attachments (in the backup for solo lists, in .tasklist files).
+        a.set_notes(&solo, &entry, &"Long diary entry. ".repeat(8000)).unwrap();
         let fam = a.create_group("Family").unwrap();
         let groceries = a.create_list(Some(fam.group), "Groceries").unwrap();
         let milk = a.edit(&groceries, |d| tk::add_task(d, None, "milk").map_err(Into::into)).unwrap();
-        a.edit(&groceries, |d| tk::add_task(d, Some(&milk), "oat").map_err(Into::into)).unwrap();
+        let oat = a.edit(&groceries, |d| tk::add_task(d, Some(&milk), "oat").map_err(Into::into)).unwrap();
+        a.set_notes(&groceries, &oat, &"Which brand, which size, and why. ".repeat(4000)).unwrap();
         a.edit(&groceries, |d| tk::set_done(d, &milk, true).map_err(Into::into)).unwrap();
         a.edit(&groceries, |d| tk::set_reminder(d, &milk, Some(1_900_000_000_000)).map_err(Into::into)).unwrap();
         let style = tk::appearance::ListStyle { hue: Some(130.0), vivid: 2, icon: Some("cart".into()) };
@@ -179,5 +182,21 @@ fn reads_every_corpus_generation() {
         let styled = apps[1].lists().into_iter().find(|l| l.name == "Groceries" && l.doc != imported.doc).unwrap();
         let st = apps[1].read(&styled, tk::appearance::list_style).unwrap();
         assert!(st.hue.is_some() && st.icon.is_some(), "{}: list style reads", g.display());
+        // Attachments (generations that have them): whole on the author's device, in the
+        // restored backup (solo list) and in the imported list file.
+        let full = |app: &App, list: &tk::app::ListInfo| {
+            fn all(ts: Vec<tk::TaskView>) -> Vec<tk::TaskView> {
+                ts.into_iter().flat_map(|t| std::iter::once(t.clone()).chain(all(t.children))).collect()
+            }
+            let ts = all(app.read(list, tk::tasks).unwrap());
+            ts.iter().filter(|t| t.attachment().is_some()).map(|t| app.notes(list, &t.id).unwrap().complete).collect::<Vec<bool>>()
+        };
+        for l in apps[0].lists() {
+            assert!(full(&apps[0], &l).iter().all(|c| *c), "{}: author's attachments", g.display());
+        }
+        for l in restored.lists().into_iter().filter(|l| l.name == "Diary") {
+            assert!(full(&restored, &l).iter().all(|c| *c), "{}: attachment in the backup", g.display());
+        }
+        assert!(full(&apps[1], &imported).iter().all(|c| *c), "{}: attachment in the list file", g.display());
     }
 }
