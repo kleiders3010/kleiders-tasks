@@ -17,6 +17,12 @@ use kt_engine::crypto;
 use serde::{Deserialize, Serialize};
 
 pub const MANIFEST_KIND: u16 = 35712;
+/// The operator key's public half (created 2026-09-25; the sealed private key and its tool
+/// live offline, see `kt-cli/src/operator.rs`).
+pub const OPERATOR_PUBLIC_KEY: [u8; 32] = [
+    0x22, 0x0f, 0x32, 0xe5, 0xe4, 0x28, 0x84, 0x51, 0xe4, 0xb2, 0x31, 0x71, 0x90, 0x88, 0xdd, 0xf7, 0x72, 0x18, 0xbf, 0xdb, 0x96, 0x55, 0xcb, 0x7a, 0xde, 0xac, 0x59, 0x3d, 0x70, 0xc8,
+    0xaf, 0x12,
+];
 pub const MANIFEST_TOPIC_TAG: &str = "kt-operator-manifest";
 const TAG: [u8; 2] = *b"OM";
 const MAX_MANIFEST: usize = 256 * 1024;
@@ -178,6 +184,12 @@ mod tests {
             iroh_relays: vec![],
             helpers: vec![Weighted { item: [7; 32], weight: 9 }],
         }
+    }
+
+    #[test]
+    fn operator_public_key_is_the_real_one() {
+        assert_eq!(hex::encode(OPERATOR_PUBLIC_KEY), "220f32e5e4288451e4b231719088ddf77218bfdb9655cb7adeac593d70c8af12");
+        assert!(iroh::PublicKey::from_bytes(&OPERATOR_PUBLIC_KEY).is_ok(), "a valid Ed25519 point");
     }
 
     #[test]
