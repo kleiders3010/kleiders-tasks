@@ -166,6 +166,12 @@ pub struct P2p {
     syncer: Arc<Syncer>,
     conns: Mutex<HashMap<(EndpointId, Vec<u8>), Connection>>,
     helper: Option<Arc<crate::helper::HelperStore>>,
+    /// Helper relays' pinned keys (by IP), checked by the endpoint's TLS verifier.
+    pins: crate::relay_tls::Pins,
+    /// The relay this device runs for others, when reachable (announced with it).
+    own_relay: Mutex<Option<String>>,
+    /// Helper relays this endpoint currently uses (URL -> key).
+    used_relays: Mutex<HashMap<String, [u8; 32]>>,
     /// Helping right now (a phone helps only on Wi-Fi, and by default while charging or
     /// open: the store stays, serving pauses).
     helping: std::sync::atomic::AtomicBool,
@@ -201,7 +207,9 @@ impl P2p {
         }
         // A custom map (not Disabled, possibly empty) so relays can be added at runtime (E10).
         let relay_mode = RelayMode::Custom(RelayMap::from_iter(cfgs));
+        let pins: crate::relay_tls::Pins = Default::default();
         let mut b = Endpoint::builder(presets::Minimal)
+            .ca_tls_config(crate::relay_tls::ca_tls_config(pins.clone()))
             .secret_key(SecretKey::from_bytes(&seed))
             .alpns(vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec()])
             .relay_mode(relay_mode);
@@ -223,6 +231,9 @@ impl P2p {
             syncer,
             conns: Mutex::new(HashMap::new()),
             helper,
+            pins,
+            own_relay: Mutex::new(None),
+            used_relays: Mutex::new(HashMap::new()),
             helping: std::sync::atomic::AtomicBool::new(true),
             invites: Mutex::new(HashMap::new()),
         });
@@ -348,6 +359,66 @@ impl P2p {
     /// Our helper store, if helping right now.
     pub fn helper(&self) -> Option<Arc<crate::helper::HelperStore>> {
         self.helper.clone().filter(|_| self.helping.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// Use a helper's relay (`https://IP:port` with the helper's endpoint key from its
+    /// signed announcement, or plain `http://` on a LAN). It joins this endpoint's relay
+    /// map; iroh picks among its relays by latency.
+    pub async fn use_helper_relay(&self, url: &str, key: [u8; 32]) -> Result<(), String> {
+        let u: RelayUrl = url.parse().map_err(|e| format!("bad relay url {url}: {e}"))?;
+        let host = u.host_str().map(str::to_string).ok_or("relay url without a host")?;
+        let ip: std::net::IpAddr = host.trim_start_matches('[').trim_end_matches(']').parse().map_err(|_| "helper relays are addressed by IP")?;
+        self.pins.write().expect("pins lock").insert(ip, key);
+        self.ep.insert_relay(u.clone(), Arc::new(iroh::RelayConfig::new(u, None))).await;
+        Ok(())
+    }
+
+    /// Connected to a home relay: this device can reach others, so failures to reach a
+    /// peer are the peer's.
+    pub fn is_online(&self) -> bool {
+        self.ep.addr().addrs.iter().any(|a| matches!(a, TransportAddr::Relay(_)))
+    }
+
+    /// Use exactly these helper relays (URL, key): new ones are added, dropped ones removed.
+    /// Returns how many are in use.
+    pub async fn sync_helper_relays(&self, wanted: Vec<(String, [u8; 32])>) -> usize {
+        let current: HashMap<String, [u8; 32]> = self.used_relays.lock().expect("lock").clone();
+        for (url, _) in current.iter().filter(|(u, _)| !wanted.iter().any(|(w, _)| w == *u)) {
+            self.drop_helper_relay(url).await;
+        }
+        let mut now = HashMap::new();
+        for (url, key) in wanted {
+            if current.get(&url) == Some(&key) || self.use_helper_relay(&url, key).await.is_ok() {
+                now.insert(url, key);
+            }
+        }
+        let n = now.len();
+        *self.used_relays.lock().expect("lock") = now;
+        n
+    }
+
+    /// The relay this device runs for others (set by the relay runner; `None` = not relaying).
+    pub fn set_own_relay(&self, url: Option<String>) {
+        *self.own_relay.lock().expect("lock") = url;
+    }
+
+    /// How this device appears as a helper: its addresses, and its relay if it runs one.
+    pub fn helper_ref(&self) -> Option<crate::helper::HelperRef> {
+        let mut h = crate::helper::HelperRef::from_addr(&self.where_data().to_addr()?);
+        h.relay = self.own_relay.lock().expect("lock").clone();
+        Some(h)
+    }
+
+    /// Stop using a helper's relay.
+    pub async fn drop_helper_relay(&self, url: &str) {
+        if let Ok(u) = url.parse::<RelayUrl>() {
+            self.ep.remove_relay(&u).await;
+        }
+    }
+
+    /// Our endpoint secret (a helper relay's certificate is made from it).
+    pub fn endpoint_secret(&self) -> [u8; 32] {
+        self.ep.secret_key().to_bytes()
     }
 
     /// Pause or resume helping others (held slots stay; strangers are turned away and

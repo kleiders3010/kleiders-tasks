@@ -56,7 +56,7 @@ pub async fn announce(hmb: &HelperMailbox, mb: &NostrMailbox) -> usize {
     let Some(store) = p2p.helper() else { return 0 };
     let info = store.info();
     let a = Announce {
-        helper: HelperRef::from_addr(&p2p.where_data().to_addr().expect("own address")),
+        helper: p2p.helper_ref().expect("own address"),
         capacity: info.capacity,
         session_start_ms: info.session_start_ms,
     };
@@ -209,6 +209,9 @@ pub fn decode_ref(s: &str) -> Option<HelperRef> {
 }
 
 /// Point the helper mailbox at each group's helper set.
+/// How many helpers' relays a device keeps in its relay map.
+pub const HELPER_RELAYS: usize = 3;
+
 pub fn install_resolver(syncer: &Arc<Syncer>, hmb: &HelperMailbox) {
     let replica = syncer.replica();
     hmb.set_resolver(Arc::new(move |topic: &[u8; 32]| {
@@ -240,6 +243,8 @@ pub struct HelperKeeperReport {
     pub discovered: usize,
     pub sets_created: usize,
     pub sets_repaired: usize,
+    /// Helper relays this device uses after this round.
+    pub relays_in_use: usize,
 }
 
 /// Learn helpers without Nostr: every helper in any of our groups' sets (groups overlap,
@@ -310,7 +315,7 @@ pub async fn maintain_with_dht(
     if let Some(dht) = dht {
         let p2p = hmb.p2p();
         if p2p.helper().is_some() && due {
-            let me = HelperRef::from_addr(&p2p.where_data().to_addr().expect("own address"));
+            let me = p2p.helper_ref().expect("own address");
             if dht.announce_helper(&me, p2p.endpoint().secret_key(), today()).await {
                 report.announced += 1;
             }
@@ -327,6 +332,19 @@ pub async fn maintain_with_dht(
     }
     report.discovered += exchange_peers(syncer, hmb, dir).await;
     hmb.set_pool(dir.ordered(hmb, None).into_iter().filter_map(|h| h.to_addr()).take(HELPER_SET).collect());
+    // Relays run by known helpers (D51): the endpoint can pick one as its home relay, or
+    // reach devices that use them. Several, so one leaving doesn't matter. Not filtered by
+    // storage health: a device that isn't online yet can't reach any helper's storage, and
+    // may need exactly these relays to get online (iroh tracks relay health itself).
+    let me = *hmb.p2p().endpoint().id().as_bytes();
+    let relays: Vec<(String, [u8; 32])> = dir
+        .ordered(hmb, None)
+        .into_iter()
+        .filter(|h| h.endpoint != me)
+        .filter_map(|h| h.relay.clone().map(|u| (u, h.endpoint)))
+        .take(HELPER_RELAYS)
+        .collect();
+    report.relays_in_use = hmb.p2p().sync_helper_relays(relays).await;
     let replica = syncer.replica();
     let day = today();
     let groups: Vec<(GroupId, Option<Vec<String>>, Option<[u8; 32]>)> = {

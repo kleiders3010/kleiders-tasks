@@ -4,14 +4,14 @@
 //! their groups' devices when those can't connect directly (E10: 5 of 13 NAT pairs,
 //! including phone↔phone on carrier NAT, only ever connect through a relay).
 //!
-//! - **Access:** open, or restricted to holders of a token (e.g. a per-group secret).
-//!   Whether default-on helpers serve strangers is D51 (the user's decision, pending);
-//!   the capability exists either way.
+//! - **Access:** open (D51: desktops relay for strangers by default), or restricted to
+//!   holders of a token (e.g. a per-group secret).
 //! - **Per-client bandwidth cap** (E10: bulk relaying costs ~25 core-seconds per GB).
-//! - **TLS:** real helpers need a certificate for their IP address (Let's Encrypt IP
-//!   certificates; E10 validated the flow against a local ACME server). This prototype
-//!   serves plain HTTP (LAN, tests, USB tunnels) or a caller-provided certificate. The ACME
-//!   automation is not built yet: it needs a publicly reachable machine to test.
+//! - **TLS without a CA** (decided 2026-09-25, replacing Let's Encrypt IP certificates):
+//!   the relay presents a self-signed certificate made from the helper's endpoint key, and
+//!   clients pin that key from the helper's signed announcement (`relay_tls`). Works on any
+//!   port an automatic mapping gets. Plain HTTP stays available for LAN, tests and USB
+//!   tunnels.
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
@@ -27,11 +27,21 @@ pub struct HelperRelayConfig {
     pub tokens: Option<HashSet<String>>,
     /// Per-client receive cap in bytes per second.
     pub client_bytes_per_sec: u32,
+    /// Serve TLS with a certificate made from this endpoint secret (`relay_tls`), on
+    /// `https_bind`. `None`: plain HTTP only.
+    pub tls_secret: Option<[u8; 32]>,
+    pub https_bind: SocketAddr,
 }
 
 impl Default for HelperRelayConfig {
     fn default() -> Self {
-        HelperRelayConfig { http_bind: "127.0.0.1:0".parse().expect("addr"), tokens: None, client_bytes_per_sec: 512 * 1024 }
+        HelperRelayConfig {
+            http_bind: "127.0.0.1:0".parse().expect("addr"),
+            tokens: None,
+            client_bytes_per_sec: 512 * 1024,
+            tls_secret: None,
+            https_bind: "127.0.0.1:0".parse().expect("addr"),
+        }
     }
 }
 
@@ -62,6 +72,10 @@ impl HelperRelay {
         if let Some(t) = cfg.tokens {
             relay.access = Arc::new(TokenGate(t));
         }
+        if let Some(secret) = cfg.tls_secret {
+            let server_config = crate::relay_tls::server_config(&secret)?;
+            relay.tls = Some(rs::TlsConfig::new(cfg.https_bind, rs::CertConfig::Manual { server_config }));
+        }
         let mut sc = ServerConfig::default();
         sc.relay = Some(relay);
         let server = rs::Server::spawn(sc).await.map_err(|e| e.to_string())?;
@@ -72,9 +86,17 @@ impl HelperRelay {
         self.server.http_addr()
     }
 
-    /// The URL clients put in their relay map (plain HTTP in this prototype).
+    /// The HTTPS address when serving TLS.
+    pub fn https_addr(&self) -> Option<SocketAddr> {
+        self.server.https_addr()
+    }
+
+    /// The URL clients put in their relay map: HTTPS when serving TLS, else plain HTTP.
     pub fn url(&self) -> Option<String> {
-        self.http_addr().map(|a| format!("http://{a}"))
+        match self.https_addr() {
+            Some(a) => Some(format!("https://{a}")),
+            None => self.http_addr().map(|a| format!("http://{a}")),
+        }
     }
 
     pub async fn shutdown(self) {

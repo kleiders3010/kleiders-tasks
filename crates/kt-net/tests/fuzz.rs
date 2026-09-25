@@ -46,7 +46,7 @@ fn operator_manifest() {
 
 #[test]
 fn helper_announcements() {
-    let r = kt_net::helper::HelperRef { endpoint: [4; 32], ips: vec!["192.0.2.4:1".parse().unwrap()], relays: vec!["https://relay.example/".into()] };
+    let r = kt_net::helper::HelperRef { endpoint: [4; 32], ips: vec!["192.0.2.4:1".parse().unwrap()], relays: vec!["https://relay.example/".into()], relay: Some("https://192.0.2.4:4443".into()) };
     let a = kt_net::helper_dir::Announce { helper: r.clone(), capacity: 1 << 20, session_start_ms: 5 };
     let seeds = vec![postcard::to_stdvec(&a).unwrap(), hex::encode(postcard::to_stdvec(&r).unwrap()).into_bytes()];
     kt_fuzz::run("helper-announce", &seeds, 2.0, |b| {

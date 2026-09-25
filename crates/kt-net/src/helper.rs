@@ -52,6 +52,10 @@ pub struct HelperRef {
     pub endpoint: [u8; 32],
     pub ips: Vec<std::net::SocketAddr>,
     pub relays: Vec<String>,
+    /// The relay this helper runs for others (`https://IP:port`, D51), if reachable. Its
+    /// certificate carries `endpoint` as its key, which clients pin (`relay_tls`).
+    #[serde(default)]
+    pub relay: Option<String>,
 }
 
 impl HelperRef {
@@ -65,7 +69,7 @@ impl HelperRef {
                 _ => {}
             }
         }
-        HelperRef { endpoint: *a.id.as_bytes(), ips, relays }
+        HelperRef { endpoint: *a.id.as_bytes(), ips, relays, relay: None }
     }
 
     pub fn to_addr(&self) -> Option<EndpointAddr> {
@@ -600,7 +604,12 @@ pub struct HelperMailbox {
     pub declared_evictions: Mutex<u32>,
     writes_per_slot: usize,
     reads_per_topic: usize,
+    /// When any helper last answered (proof this device can reach the network).
+    last_success: Mutex<Option<Instant>>,
 }
+
+/// A device that reached a helper this recently counts as online (see [`HelperMailbox::we_are_online`]).
+const ONLINE_EVIDENCE: Duration = Duration::from_secs(300);
 
 fn writer_key(seed: &[u8; 32]) -> SecretKey {
     let k = kt_engine::crypto::derive(seed, "kt/helper-writer/v1", b"");
@@ -619,7 +628,15 @@ impl HelperMailbox {
             declared_evictions: Mutex::new(0),
             writes_per_slot: 3,
             reads_per_topic: 4,
+            last_success: Mutex::new(None),
         }
+    }
+
+    /// Failures only count against helpers when this device is demonstrably online: it
+    /// has a home relay, or some helper answered recently. A device that starts offline
+    /// (or loses its network) mustn't drop helpers, and their relays, for its own state.
+    fn we_are_online(&self) -> bool {
+        self.p2p.is_online() || self.last_success.lock().expect("lock").is_some_and(|t| t.elapsed() < ONLINE_EVIDENCE)
     }
 
     /// How many helpers get each slot directly (the rest by replication). Default 3.
@@ -698,12 +715,17 @@ impl HelperMailbox {
         let e = rec.entry(h.id).or_default();
         match res {
             Ok(r) => {
+                *self.last_success.lock().expect("lock") = Some(Instant::now());
                 e.reachable += 1;
                 e.unreachable_in_a_row = 0;
                 self.down.lock().expect("lock").remove(&h.id);
                 let ms = t.elapsed().as_secs_f64() * 1000.0;
                 e.latency_ms = if e.latency_ms == 0.0 { ms } else { e.latency_ms * 0.8 + ms * 0.2 };
                 Some(r)
+            }
+            Err(_) if !self.we_are_online() => {
+                // We're the ones offline: not the helper's fault. No penalty, no backoff.
+                None
             }
             Err(_) => {
                 e.unreachable += 1;
@@ -966,7 +988,7 @@ mod fuzz_tests {
     }
 
     fn href() -> HelperRef {
-        HelperRef { endpoint: [3; 32], ips: vec!["192.0.2.1:4444".parse().unwrap()], relays: vec!["https://relay.example/".into()] }
+        HelperRef { endpoint: [3; 32], ips: vec!["192.0.2.1:4444".parse().unwrap()], relays: vec!["https://relay.example/".into()], relay: Some("https://192.0.2.1:4443".into()) }
     }
 
     #[test]

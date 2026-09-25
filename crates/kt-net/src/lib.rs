@@ -16,6 +16,9 @@ pub mod mailbox;
 pub mod manifest;
 pub mod nostr;
 pub mod p2p;
+#[cfg(feature = "relay-server")]
+pub mod relay_runner;
+pub mod relay_tls;
 pub mod relays;
 pub mod settings;
 pub mod slotstore;

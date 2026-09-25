@@ -284,6 +284,12 @@ pub struct KtNode {
     settings: Mutex<StoredSettings>,
     /// (on Wi-Fi, charging, app open), as the platform last reported (phones).
     device_state: Mutex<(bool, bool, bool)>,
+    /// Desktops: the relay run for others (D51), when the setting is on.
+    #[cfg(feature = "desktop")]
+    relay_for_others: tokio::sync::Mutex<Option<kt_net::relay_runner::RelayForOthers>>,
+    /// Real networking (not a loopback test node): only then does a desktop relay for others.
+    #[cfg(feature = "desktop")]
+    public_net: bool,
 }
 
 const BACKUP_FILE: &str = "tasks.ktbackup";
@@ -363,6 +369,33 @@ impl KtNode {
         let on = self.settings.lock().expect("lock").net.helper_limits(wifi, charging, open).is_some();
         if let Some(p) = &self.net.p2p {
             p.set_helping(on);
+        }
+    }
+
+    /// "Relay connections for others" (desktop, D51): run the relay while the setting is
+    /// on. It's announced only if strangers can reach it (relay_runner); checking that
+    /// takes a few seconds, so it happens in the background.
+    fn apply_relay_for_others(self: &Arc<Self>) {
+        #[cfg(feature = "desktop")]
+        {
+            let want = self.public_net && self.settings.lock().expect("lock").net.relay_config().is_some();
+            let Some(p2p) = self.net.p2p.clone() else { return };
+            let me = self.clone();
+            self.rt.spawn(async move {
+                let mut cur = me.relay_for_others.lock().await;
+                match (want, cur.is_some()) {
+                    (true, false) => {
+                        let any: std::net::IpAddr = std::net::Ipv4Addr::UNSPECIFIED.into();
+                        *cur = kt_net::relay_runner::RelayForOthers::start(&p2p, any, None).await.ok();
+                    }
+                    (false, true) => {
+                        if let Some(r) = cur.take() {
+                            r.stop(&p2p).await;
+                        }
+                    }
+                    _ => {}
+                }
+            });
         }
     }
 
@@ -526,8 +559,13 @@ impl KtNode {
             settings: Mutex::new(stored),
             // Phones start as "not on Wi-Fi" until the platform says otherwise.
             device_state: Mutex::new((platform == NetPlatform::Desktop, false, false)),
+            #[cfg(feature = "desktop")]
+            relay_for_others: tokio::sync::Mutex::new(None),
+            #[cfg(feature = "desktop")]
+            public_net: options.bind.is_empty(),
         });
         node.apply_helping();
+        node.apply_relay_for_others();
         Ok(node)
     }
 }
@@ -711,7 +749,7 @@ impl KtNode {
     }
 
     /// Save the settings screen. Settings that don't exist on this platform are refused.
-    pub fn set_settings(&self, new: Settings) -> Result<(), KtError> {
+    pub fn set_settings(self: Arc<Self>, new: Settings) -> Result<(), KtError> {
         let mut s = self.settings.lock().expect("lock").clone();
         s.sync_in_background = new.sync_in_background;
         s.notify_changes = new.notify_changes;
@@ -731,6 +769,7 @@ impl KtNode {
         self.save_settings(&s)?;
         *self.settings.lock().expect("lock") = s;
         self.apply_helping();
+        self.apply_relay_for_others();
         Ok(())
     }
 
