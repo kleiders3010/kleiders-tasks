@@ -16,13 +16,17 @@ required-features = ["bindgen"]
 
 [features]
 bindgen = ["uniffi/cli"]
+# Desktop builds: include the helper relay server (D51).
+desktop = ["kt-net/relay-server"]
 
 [dependencies]
 kt-engine = { path = "../kt-engine" }
 kt-tasks = { path = "../kt-tasks" }
-kt-net = { path = "../kt-net" }
+kt-net = { path = "../kt-net", default-features = false }
 uniffi.workspace = true
 tokio.workspace = true
 hex.workspace = true
 loro.workspace = true
 thiserror.workspace = true
+# Compile out dependencies' internal logging in release builds (size; the app has its own diagnostics).
+tracing = { version = "0.1", default-features = false, features = ["release_max_level_off"] }

@@ -8,6 +8,7 @@
 //!   (public IPv4 or a UPnP router) actually serve; the rest silently don't.
 
 use crate::helper::HelperLimits;
+#[cfg(feature = "relay-server")]
 use crate::helper_relay::HelperRelayConfig;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,6 +120,7 @@ impl NetSettings {
 
     /// The live relay to run for strangers, if any (open access: D51). The caller still
     /// checks reachability (public IPv4 or UPnP) and provides the certificate.
+    #[cfg(feature = "relay-server")]
     pub fn relay_config(&self) -> Option<HelperRelayConfig> {
         (self.relay_setting_available() && self.relay_for_others).then(HelperRelayConfig::default)
     }
@@ -131,15 +133,18 @@ mod tests {
     #[test]
     fn relay_for_others_is_on_for_desktop_and_absent_on_phones() {
         let mut d = NetSettings::defaults(Platform::Desktop);
-        assert!(d.relay_setting_available() && d.relay_for_others() && d.relay_config().is_some());
+        assert!(d.relay_setting_available() && d.relay_for_others());
+        #[cfg(feature = "relay-server")]
+        assert!(d.relay_config().is_some());
         d.set_relay_for_others(false).unwrap();
+        #[cfg(feature = "relay-server")]
         assert!(d.relay_config().is_none());
         assert!(d.helper_limits(false, false, false).is_some(), "storage helping is a separate setting");
 
         assert_eq!(d.visible(), vec![SettingId::HelpOthers, SettingId::RelayForOthers]);
         let mut p = NetSettings::defaults(Platform::Phone);
         assert_eq!(p.visible(), vec![SettingId::HelpOthers], "not shown at all on phones");
-        assert!(!p.relay_setting_available() && !p.relay_for_others() && p.relay_config().is_none());
+        assert!(!p.relay_setting_available() && !p.relay_for_others());
         assert!(p.set_relay_for_others(true).is_err());
         assert!(p.helper_limits(true, true, false).is_some());
         assert!(p.helper_limits(false, true, true).is_none(), "phones help only on Wi-Fi");

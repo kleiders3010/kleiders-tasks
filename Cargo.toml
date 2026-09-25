@@ -37,7 +37,7 @@ http = "1"
 iroh = "=1.2.0"
 mainline = { version = "=8.0.0", default-features = false, features = ["async"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider"] }
-iroh-relay = { version = "=1.2.0", features = ["server"] }
+iroh-relay = { version = "=1.2.0" }
 
 [profile.release]
 opt-level = "z"

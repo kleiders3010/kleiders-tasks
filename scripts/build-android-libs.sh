@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export ANDROID_NDK_HOME="$(cygpath -w ~/AppData/Local/Android/Sdk/ndk/29.0.14206865 2>/dev/null || echo ~/Android/Sdk/ndk/29.0.14206865)"
 OUT=app/android/src/main/jniLibs
-cargo ndk -t arm64-v8a -t x86_64 -P 26 -o "$OUT" build --release -p kt-ffi
+cargo ndk -t arm64-v8a -t x86_64 -P 26 -o "$OUT" build --release -p kt-ffi  # phone build: no relay server (D51)
 for abi in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android; do
   a=${abi%%:*}; t=${abi##*:}
   cargo ndk -t "$a" -P 26 build --release -p kt-engine --bin kt-import-worker

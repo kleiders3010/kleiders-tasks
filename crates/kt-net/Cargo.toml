@@ -5,6 +5,12 @@ edition.workspace = true
 version.workspace = true
 license.workspace = true
 
+[features]
+default = ["relay-server"]
+# The helper relay *server* (desktops relay live connections for others, D51). Phones never
+# run it, so the Android build leaves it out.
+relay-server = ["dep:iroh-relay"]
+
 [dependencies]
 kt-engine = { path = "../kt-engine" }
 tokio.workspace = true
@@ -15,7 +21,7 @@ base64.workspace = true
 http.workspace = true
 rustls.workspace = true
 iroh.workspace = true
-iroh-relay.workspace = true
+iroh-relay = { workspace = true, optional = true, features = ["server"] }
 reqwest.workspace = true
 mainline.workspace = true
 rand.workspace = true

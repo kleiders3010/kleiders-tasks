@@ -78,7 +78,8 @@
 - [x] **Android app on the tablet joined a real group through its UI over public networks** (`InviteFlowTest` steps driven from the host: join with words → PC accepts → list arrives in 4 s)
 - [ ] Emulator networking: the headless emulator on this PC has no working network (DNS and routes fail, even with `-dns-server`); likely host-side (VPN adapters). Network flows are tested on the tablet instead
 - [ ] Widget (Glance), notifications from merged state, desktop tray/autostart
-- [ ] App size: libkt_ffi.so is 15 MB (arm64): feature-gate the iroh relay server (desktop only, D51) and trim dependencies; measure the release AAB
+- [x] App size measured: libkt_ffi.so (arm64) 14.6 MB installed / 7.2 MB compressed after gating the relay server out of phone builds and compiling out dependency logging. Breakdown: 7.3 MB code, 2.2 MB rodata, 3 MB unwind tables (required by `panic = "unwind"`, D3). Within the ≤ 20 MB download / ≤ 40 MB installed targets
+- [ ] Measure the release AAB download size per device
 
 ### M5: Lifecycle and backup
 - [ ] Android backup (sealed without a lock), Block Store, restore prompt

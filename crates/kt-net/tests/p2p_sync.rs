@@ -163,6 +163,7 @@ async fn online(d: &Dev) {
     d.p.publish_whereabouts();
 }
 
+#[cfg(feature = "relay-server")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn devices_without_direct_paths_sync_through_a_helper_relay() {
     use kt_net::helper_relay::{HelperRelay, HelperRelayConfig};
@@ -188,6 +189,7 @@ async fn devices_without_direct_paths_sync_through_a_helper_relay() {
     assert!(value(&b, &g, &d).contains("via helper relay"));
 }
 
+#[cfg(feature = "relay-server")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn token_gated_helper_relay_refuses_others() {
     use kt_net::helper_relay::{HelperRelay, HelperRelayConfig};

@@ -9,8 +9,7 @@
 //! instances can't run at once (see [`IdentityLock`]).
 
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::crypto::{DevicePublic, DeviceSecret};
 use crate::ids::{peer_id_for, DeviceId};
@@ -97,7 +96,7 @@ impl IdentityLock {
 mod tests {
     use super::*;
 
-    fn tmp(name: &str) -> PathBuf {
+    fn tmp(name: &str) -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!("kt-identity-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         p
