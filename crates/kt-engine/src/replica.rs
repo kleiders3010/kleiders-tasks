@@ -35,6 +35,8 @@ pub use invites::{OpenInvite, PendingJoin};
 pub mod backup;
 pub mod handover;
 pub mod health;
+mod rotation;
+pub use rotation::{DEFAULT_ROTATE_AFTER_MS, ROTATE_CASCADE_MS};
 mod fuzzing;
 mod compaction;
 mod slots;
@@ -160,6 +162,8 @@ pub struct Replica {
     whereabouts: Option<Vec<u8>>,
     /// This device's health observations for its groups (opaque, from the transport layer).
     health: Option<Vec<u8>>,
+    /// Periodic key rotation period (D5 rule 7).
+    rotate_after_ms: u64,
     invite_cache: invites::InviteCache,
     /// Bumped on every local commit (lets live transports push right away).
     local_changes: u64,
@@ -190,6 +194,7 @@ impl Replica {
             imported: std::collections::HashSet::new(),
             whereabouts: None,
             health: None,
+            rotate_after_ms: rotation::DEFAULT_ROTATE_AFTER_MS,
             invite_cache: Default::default(),
             local_changes: 0,
             last_base_fp: HashMap::new(),

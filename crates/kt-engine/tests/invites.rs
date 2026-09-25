@@ -173,3 +173,53 @@ fn a_joiner_restarting_before_being_let_in_still_gets_in() {
     assert!(b.epochs(&g).unwrap().is_current_member(&b.device_id()));
     assert!(value(&b, &g, &d).contains("milk"));
 }
+
+/// Periodic key rotation (D5 rule 7): when the key is due, exactly one member rotates
+/// (the others would follow hours later if it were away); everyone moves to the new key
+/// and keeps syncing; an invite made before the rotation still works (only removals
+/// close invites).
+#[test]
+fn keys_rotate_periodically_without_closing_invites() {
+    let mut net = Net::default();
+    let (mut a, mut b, mut c) = (dev("ra"), dev("rb"), dev("rc"));
+    let g = a.create_group().unwrap();
+    let d = a.create_doc(&g).unwrap();
+    a.doc(&g, &d).unwrap().get_map("tasks").insert("t1", "before").unwrap();
+    a.commit(&g, &d).unwrap();
+    a.add_member(&g, b.device_public()).unwrap();
+    b.accept_group(g);
+    for m in a.export_group(&g).unwrap() {
+        let _ = b.receive(&m);
+    }
+    let (code, _) = a.create_invite(&g, CodeKind::Invite, MONTH).unwrap();
+    net.sync(&mut [&mut a, &mut b]);
+    let before = a.epochs(&g).unwrap().head().unwrap();
+
+    // Not due yet: nobody rotates.
+    assert!(a.auto_rotate().unwrap().is_empty() && b.auto_rotate().unwrap().is_empty());
+    // Due now (period 0): only the first in turn rotates; the other waits its 6 h.
+    a.set_rotation_interval_ms(0);
+    b.set_rotation_interval_ms(0);
+    let rotated = a.auto_rotate().unwrap().len() + b.auto_rotate().unwrap().len();
+    assert_eq!(rotated, 1, "exactly one member rotates");
+    net.sync(&mut [&mut a, &mut b]);
+    let after = a.epochs(&g).unwrap().head().unwrap();
+    assert_ne!(after, before, "a new key");
+    assert_eq!(b.epochs(&g).unwrap().head(), Some(after), "both on it");
+    a.set_rotation_interval_ms(u64::MAX);
+    b.set_rotation_interval_ms(u64::MAX);
+
+    // Still syncing under the new key.
+    b.doc(&g, &d).unwrap().get_map("tasks").insert("t2", "after").unwrap();
+    b.commit(&g, &d).unwrap();
+    net.sync(&mut [&mut a, &mut b]);
+    assert!(value(&a, &g, &d).contains("after"));
+
+    // The invite from before the rotation still lets someone in.
+    let rec = net.lookup(&code.to_text(), CodeKind::Invite).expect("record");
+    c.begin_join(&rec).unwrap();
+    net.sync(&mut [&mut a, &mut b, &mut c]);
+    assert!(c.epochs(&g).unwrap().is_current_member(&c.device_id()), "joined after the rotation");
+    assert!(value(&c, &g, &d).contains("before") && value(&c, &g, &d).contains("after"), "with the whole history");
+}
+

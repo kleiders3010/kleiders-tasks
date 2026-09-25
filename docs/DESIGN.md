@@ -155,7 +155,7 @@ Principle 10 limits *behavioral* settings. **Appearance options** are a separate
     6. Nostr;
     7. operator-manifest select nodes;
     8. Nearby (later).
-  - **Multi-use:** any number of people until expiry. **Valid 30 days** (the key-rotation period), shown in the sent message ("valid until 24 Oct"). It ends early if the group's key rotates sooner. The inviter can cancel any time. Every join notifies the group.
+  - **Multi-use:** any number of people until expiry. **Valid 30 days** (the key-rotation period), shown in the sent message ("valid until 24 Oct"). It ends early if someone is removed from the group (a periodic key rotation doesn't end it). The inviter can cancel any time. Every join notifies the group.
   - **Install from an invite:** the link's page offers "Get the app"; on first launch the app checks the clipboard description first (no toast) for an invite, with "tap the link again" as the fallback. Clipboard content is marked sensitive where possible.
   - **iPhone users:** not supported; the invite page says so clearly (D45).
 
@@ -204,8 +204,8 @@ All layers run in parallel (principle 4). **Preference order when several work**
   None of this depends on the developer: it keeps working if every developer-run service disappears. The operator manifest (§7b) is **not** used to maintain public relays.
 - **The same pattern applies to every layer** (seed → discover from the network itself → keep only what proves itself in use → record the group's choice in its data → replace automatically, invisibly):
   - member devices: addresses from slots, the DHT, LAN beacons and knocks;
-  - helpers and helper relays: helpers announce themselves on the DHT and Nostr under rotating points; devices test them and keep reliability records (§7a); each group records its helper set;
-  - the Mainline DHT: the library's community bootstrap nodes, plus nodes remembered from earlier sessions and known member and helper devices.
+  - helpers and helper relays: helpers announce themselves on the DHT and Nostr under rotating points; devices test them and keep reliability records (§7a); each group records its helper set; a device probes a helper relay (HTTPS `/ping`, pinned key) before using it and every 10 minutes, and skips dead ones and impostors for a few hours;
+  - the Mainline DHT: the library's community bootstrap nodes, plus nodes remembered from earlier sessions and member devices: a device whose DHT node is confirmed reachable (not firewalled) shares it in its whereabouts, and its members bootstrap through it first.
 - Every device keeps full data, so relays are a mailbox, never the only copy. Slots are refreshed by background sync.
 - **Reality (R2, E4):** works today on the big free relays (fresh keys, custom kinds, opaque content accepted). Risks, accepted for launch (D13): per-IP rate limits (Damus bans 1 h after repeated rejections), operator hostility to "relays as storage", strfry monoculture, relay churn. The fallback is our own network (member devices, helpers, select nodes).
 
@@ -222,7 +222,7 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
 - **Strangers' data in RAM and on disk (decided 2026-09-24, reversing RAM-only):** RAM-only phone helpers lose everything between background jobs, desktops on every reboot. The disk copy is managed strictly: hard byte caps and per-group quotas; slots unrefreshed for 14 days are deleted; turning helping off deletes it; encrypted at rest with a device-held key; corrupt files are deleted; on Android it lives in cache storage (the OS may reclaim it). Member devices keep their own groups' mailbox on disk. **Survive sleep:** desktop helpers keep RAM across sleep (the process is suspended, not restarted). **Hand off before going offline:** on quit/shutdown, and before a charging job ends, a helper passes its copies to online set members.
 - **Complementary schedules (E5b):** day desktops plus night-charging phones cover the clock *if their windows overlap*. With overlap, sleep-not-reboot and handoff, a small community (5 desktops + 50 phones) reached ~94%, and 10 + 200 ~97%. Selection prefers complementary schedules over raw uptime, and time-zone and IP/ASN diversity.
 - **Slot model** as §7: only the latest version of each slot is kept.
-- **Helper set per group, recorded in the group document**, chosen by reliability. Bootstrap for first joins uses helpers closest to a **secret-keyed, daily-rotated** point (HMAC(epoch key, date)), plus Nostr, so outsiders can't pre-position fake helpers.
+- **Helper set per group, recorded in the group document**, chosen by reliability. Bootstrap for first joins uses helpers closest to a **secret-keyed, daily-rotated** point (HMAC(epoch key, date)), plus Nostr, so outsiders can't pre-position fake helpers. A joiner computes the point from the key its invite carried, so it finds the group's helpers even when the invite's hints are gone.
 - **Replication:** start around **r ≈ 20** (E5: RAM-only, phone-heavy helpers need 15–20 for ~99% without member refresh), adapting to measured reliability. Churn is correlated by time of day, so the independence formula is only a starting point. The sender uploads to 2–3 helpers; they replicate to the rest of the set. Repair picks replacements when helpers vanish.
 - **Reliability records** per helper (reachability, returned what was stored, returned the latest version, latency), **shared only within one's own groups**, decaying over time:
 
@@ -237,6 +237,8 @@ Devices act as **helpers**: a user-run mailbox for other groups, like torrent se
   | Declared eviction for space | Very light |
   | Slow | Ranking only |
 
+- **Sharing:** others' records count half as much as one's own and halve every 3 days; only one's own observations are re-shared (no echo); an exclusion reported by a member applies group-wide. Reports travel as signed per-member records in the group's slots, with real changes and at least daily.
+- **Failures only count while the device itself is online** (a home relay, or some helper answered in the last 5 minutes): a device that starts offline must not drop its helpers, or the relays it needs to get online.
 - **Selection:** weighted random by reliability × free capacity; a small probation share for new helpers; silent exclusion of failing helpers; periodic re-probing.
 - **Attacks:** smearing impossible from outside; DoS only lowers rank temporarily; junk-filling countered by load-scaled proof of work on new slots, per-group quotas and priority for established, actually-read groups; **young groups get capped capacity** so new (real or fake) groups can't displace established ones quickly.
 - **Trust tiers:** 1) member devices (own groups, on disk); 2) **select nodes** from the operator manifest (§7b); 3) earned helpers. An own always-on machine simply joins as a member.

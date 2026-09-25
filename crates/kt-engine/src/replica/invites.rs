@@ -97,11 +97,10 @@ impl Replica {
             return false;
         }
         let Some(state) = self.groups.get(&inv.group) else { return false };
-        // Removals and rotations after the invite was made close it (additions don't).
+        // A removal after the invite was made closes it. Periodic rotations and additions
+        // don't: invites expire within the rotation period anyway.
         !state.epochs.all_records().any(|r| {
-            state.epochs.is_valid(&r.id())
-                && r.body.created_ms > inv.created_ms
-                && matches!(r.body.kind, EpochKind::Remove { .. } | EpochKind::Rotate)
+            state.epochs.is_valid(&r.id()) && r.body.created_ms > inv.created_ms && matches!(r.body.kind, EpochKind::Remove { .. })
         })
     }
 

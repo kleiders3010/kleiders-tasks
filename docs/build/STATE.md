@@ -110,6 +110,24 @@
 - [ ] ~~Block Store~~, ~~Google Drive~~: deferred (2026-09-25, DECIDED): backups only matter for sole members who lose their device
 - [x] After a restore, the previous device is offered for removal (2026-09-25): "Your previous device is still in N shared groups. If it was lost or stolen, remove it" with Remove it / Keep it, once the new device is back in; removal rotates those groups' keys (`App::replaced_device`, `remove_replaced_device`). Test in `kt-tasks/tests/backup.rs`
 
+### Gaps found against DESIGN (2026-09-25 audit)
+- [x] Periodic key rotation (D5 rule 7, `replica/rotation.rs`): due after 30 days, one member in turn (hash-ranked, 6 h cascade), from background sync; additions already make a fresh key; only removals close open invites (refined D7). Test `keys_rotate_periodically_without_closing_invites`
+- [ ] History: keep at least 30 days before compacting (D27), and "undo changes by a person since a time"
+- [ ] Text attachments for long notes (blob layer; currently refused)
+- [ ] Same-Wi-Fi (LAN) layer wired into the apps (multicast lock on Android)
+- [ ] Android network changes fed to iroh; phone helping also off in battery saver, low battery, heat, data saver
+- [ ] Reminders (exact alarms, permission asked when first needed, rescheduled after a restore)
+- [ ] Format versioning: keep and pass on newer data, feature floor, "update available" from newer formats; required updates only via a signed manifest or Play priority
+- [ ] Golden corpus: old/new version interoperability tests
+- [ ] Keys in OS secure storage (Android Keystore, desktop keyring)
+- [ ] Reserved post-quantum suite ID in the wire formats
+- [ ] Splash held until the first sync round (or ~1.5 s); blocked background sync detected and explained once
+- [ ] Clipboard invite check at first launch (install from an invite)
+- [ ] Appearance: list hue/icon, theme tokens, Material You with fallback; generated avatars and short tags
+- [ ] Hidden diagnostics screen (layers, relays, helpers, storage, sync log, export log)
+- [ ] Download/install size ceilings enforced in the build
+- [ ] File-name/path handling fuzz target
+
 ## Current state
 - **M4/M5 nearly done (2026-09-25).** Done since M4 started: backups and restore, exports, device linking (app side, with handovers and Undo), notifications (changes and joins), widget, tray and autostart, share links and QR, settings. Rust suite, desktop UI tests (smoke, link, restore, settings, autostart) and emulator tests (smoke, backup round trip, notifications, widget) green.
 - Release builds with R8: play 10.3 MB, foss 10.6 MB download, verified running (bundletool 1.18.3 in `~/tools`). Gradle tasks are now per flavor (`assemblePlayDebug`, `bundlePlayRelease`, ...).

@@ -339,7 +339,12 @@ impl Syncer {
         let r = self.read_round().await;
         // Compact lists whose history outgrew them, where everyone active acknowledged (D26).
         let replica = self.replica.clone();
-        let _ = tokio::task::spawn_blocking(move || replica.lock().expect("replica lock").auto_compact()).await;
+        let _ = tokio::task::spawn_blocking(move || {
+            let mut r = replica.lock().expect("replica lock");
+            let _ = r.auto_rotate(); // periodic key rotation (D5 rule 7)
+            r.auto_compact()
+        })
+        .await;
         let w2 = self.write_round().await;
         w.written += w2.written;
         w.deferred += w2.deferred;
