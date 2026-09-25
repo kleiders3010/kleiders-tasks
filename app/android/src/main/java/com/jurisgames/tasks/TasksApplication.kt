@@ -27,6 +27,7 @@ class TasksApplication : Application() {
         // iroh needs for the system DNS servers and network changes.
         System.loadLibrary("kt_ffi")
         initAndroidContext(this)
+        com.jurisgames.tasks.core.setKeyVault(KeystoreVault) // device keys sealed by the Keystore (§9)
         val identity = File(noBackupFilesDir, "identity") // never backed up (D1)
         val data = File(filesDir, "data") // not backed up either: rebuilt from the backup file
         identity.mkdirs()
@@ -88,7 +89,8 @@ class TasksApplication : Application() {
         // Background sync: WorkManager's 15-minute minimum; Doze stretches it (DESIGN §8).
         val periodic = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(androidx.work.workDataOf(SyncWorker.PERIODIC to true))
             .build()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork("sync", ExistingPeriodicWorkPolicy.KEEP, periodic)
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork("sync", ExistingPeriodicWorkPolicy.UPDATE, periodic)
     }
 }

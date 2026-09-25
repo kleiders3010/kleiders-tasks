@@ -47,7 +47,13 @@ fun UndoDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () -> 
             Column {
                 Text("Whose changes?", style = MaterialTheme.typography.titleSmall)
                 for (p in people) {
-                    FilterChip(selected = who == p, onClick = { who = p }, label = { Text(if (p.isMe) "${p.name} (you)" else p.name) }, modifier = Modifier.testTag("undoWho-" + p.name))
+                    FilterChip(
+                        selected = who == p,
+                        onClick = { who = p },
+                        leadingIcon = { Avatar(p) },
+                        label = { Text(personLabel(p, people)) },
+                        modifier = Modifier.testTag("undoWho-" + p.name),
+                    )
                 }
                 Text("Made in…", style = MaterialTheme.typography.titleSmall)
                 Row {

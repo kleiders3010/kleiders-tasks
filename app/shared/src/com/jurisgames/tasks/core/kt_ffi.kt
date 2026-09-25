@@ -653,6 +653,12 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 internal interface UniffiCallbackInterfaceKtListenerMethod0 : com.sun.jna.Callback {
     fun callback(`uniffiHandle`: Long,`uniffiOutReturn`: Pointer,uniffiCallStatus: UniffiRustCallStatus,)
 }
+internal interface UniffiCallbackInterfaceKeyVaultMethod0 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`plain`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
+internal interface UniffiCallbackInterfaceKeyVaultMethod1 : com.sun.jna.Callback {
+    fun callback(`uniffiHandle`: Long,`sealed`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,)
+}
 @Structure.FieldOrder("uniffiFree", "uniffiClone", "onChange")
 internal open class UniffiVTableCallbackInterfaceKtListener(
     @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
@@ -669,6 +675,28 @@ internal open class UniffiVTableCallbackInterfaceKtListener(
         `uniffiFree` = other.`uniffiFree`
         `uniffiClone` = other.`uniffiClone`
         `onChange` = other.`onChange`
+    }
+
+}
+@Structure.FieldOrder("uniffiFree", "uniffiClone", "seal", "open")
+internal open class UniffiVTableCallbackInterfaceKeyVault(
+    @JvmField internal var `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+    @JvmField internal var `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+    @JvmField internal var `seal`: UniffiCallbackInterfaceKeyVaultMethod0? = null,
+    @JvmField internal var `open`: UniffiCallbackInterfaceKeyVaultMethod1? = null,
+) : Structure() {
+    class UniffiByValue(
+        `uniffiFree`: UniffiCallbackInterfaceFree? = null,
+        `uniffiClone`: UniffiCallbackInterfaceClone? = null,
+        `seal`: UniffiCallbackInterfaceKeyVaultMethod0? = null,
+        `open`: UniffiCallbackInterfaceKeyVaultMethod1? = null,
+    ): UniffiVTableCallbackInterfaceKeyVault(`uniffiFree`,`uniffiClone`,`seal`,`open`,), Structure.ByValue
+
+   internal fun uniffiSetValue(other: UniffiVTableCallbackInterfaceKeyVault) {
+        `uniffiFree` = other.`uniffiFree`
+        `uniffiClone` = other.`uniffiClone`
+        `seal` = other.`seal`
+        `open` = other.`open`
     }
 
 }
@@ -697,9 +725,23 @@ internal object IntegrityCheckingUniffiLib {
     }
 
     internal fun ensureInitialized() = Unit
+    external fun uniffi_kt_ffi_checksum_func_accent_color(
+    ): Int
     external fun uniffi_kt_ffi_checksum_func_android_context_ready(
     ): Int
+    external fun uniffi_kt_ffi_checksum_func_export_file_stem(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_func_icon_symbol(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_func_list_hues(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_func_list_icons(
+    ): Int
     external fun uniffi_kt_ffi_checksum_func_qr_matrix(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_func_themes(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_func_set_key_vault(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktlistener_on_change(
     ): Int
@@ -721,11 +763,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_devices(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_diagnostics(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_display_name(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_export_list_file(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_export_markdown(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_first_round_done(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_groups(
     ): Int
@@ -753,6 +799,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_network_changed(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_people(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_recent_links(
@@ -773,6 +821,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_done(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_list_style(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_reminder(
@@ -791,6 +841,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_tasks(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_theme_colors(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_undo_changes_by(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_unlink_device(
@@ -798,6 +850,10 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_upcoming_reminders(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_write_backup(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_keyvault_seal(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_keyvault_open(
     ): Int
     external fun uniffi_kt_ffi_checksum_constructor_ktnode_open(
     ): Int
@@ -819,6 +875,7 @@ internal object UniffiLib {
 
     init {
         Native.register(UniffiLib::class.java, findLibraryName(componentName = "kt_ffi"))
+        uniffiCallbackInterfaceKeyVault.register(this)
         uniffiCallbackInterfaceKtListener.register(this)
         
     }
@@ -858,12 +915,16 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_devices(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_diagnostics(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_display_name(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_export_list_file(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_export_markdown(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_first_round_done(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_import_list_file(`ptr`: Long,`groupId`: RustBuffer.ByValue,`file`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -890,6 +951,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_network_changed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_newer_version_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Byte
     external fun uniffi_kt_ffi_fn_method_ktnode_people(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_recent_links(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -910,6 +973,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_done(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`done`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_list_style(`ptr`: Long,`listId`: RustBuffer.ByValue,`hue`: RustBuffer.ByValue,`vivid`: Byte,`icon`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_reminder(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`atMs`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -928,6 +993,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_tasks(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_theme_colors(`ptr`: Long,`dark`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_undo_changes_by(`ptr`: Long,`listId`: RustBuffer.ByValue,`person`: RustBuffer.ByValue,`sinceMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_unlink_device(`ptr`: Long,`deviceId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -936,10 +1003,34 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_write_backup(`ptr`: Long,`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_clone_keyvault(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Long
+    external fun uniffi_kt_ffi_fn_free_keyvault(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_init_callback_vtable_keyvault(`vtable`: UniffiVTableCallbackInterfaceKeyVault,
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_keyvault_seal(`ptr`: Long,`plain`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_keyvault_open(`ptr`: Long,`sealed`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_accent_color(`themeId`: RustBuffer.ByValue,`hue`: RustBuffer.ByValue,`vivid`: Byte,`dark`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_func_android_context_ready(uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_kt_ffi_fn_func_export_file_stem(`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_icon_symbol(`id`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_list_hues(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_list_icons(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_func_qr_matrix(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_themes(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_func_set_key_vault(`vault`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun ffi_kt_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun ffi_kt_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1059,10 +1150,31 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if ((lib.uniffi_kt_ffi_checksum_func_accent_color() and 0xFFFF) != 5026) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_func_android_context_ready() and 0xFFFF) != 19053) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_func_export_file_stem() and 0xFFFF) != 28662) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_func_icon_symbol() and 0xFFFF) != 39886) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_func_list_hues() and 0xFFFF) != 65160) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_func_list_icons() and 0xFFFF) != 61793) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_func_qr_matrix() and 0xFFFF) != 37680) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_func_themes() and 0xFFFF) != 24043) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_func_set_key_vault() and 0xFFFF) != 50155) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktlistener_on_change() and 0xFFFF) != 2985) {
@@ -1095,6 +1207,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_devices() and 0xFFFF) != 35103) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_diagnostics() and 0xFFFF) != 44672) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_display_name() and 0xFFFF) != 16726) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1102,6 +1217,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_export_markdown() and 0xFFFF) != 59735) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_first_round_done() and 0xFFFF) != 41880) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_groups() and 0xFFFF) != 61646) {
@@ -1143,6 +1261,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_network_changed() and 0xFFFF) != 26352) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen() and 0xFFFF) != 52805) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_people() and 0xFFFF) != 15932) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1173,6 +1294,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_done() and 0xFFFF) != 30112) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_list_style() and 0xFFFF) != 38267) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1200,6 +1324,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_tasks() and 0xFFFF) != 31507) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_theme_colors() and 0xFFFF) != 16109) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_undo_changes_by() and 0xFFFF) != 21194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1210,6 +1337,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_write_backup() and 0xFFFF) != 29557) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_keyvault_seal() and 0xFFFF) != 1760) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_keyvault_open() and 0xFFFF) != 25282) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_constructor_ktnode_open() and 0xFFFF) != 17990) {
@@ -1409,6 +1542,56 @@ private class JavaLangRefCleanable(
 /**
  * @suppress
  */
+public object FfiConverterUByte: FfiConverter<UByte, Byte> {
+    override fun lift(value: Byte): UByte {
+        return value.toUByte()
+    }
+
+    fun lift(value: Int): UByte {
+        return value.toUByte()
+    }
+
+    override fun read(buf: ByteBuffer): UByte {
+        return lift(buf.get())
+    }
+
+    override fun lower(value: UByte): Byte {
+        return value.toByte()
+    }
+
+    override fun allocationSize(value: UByte) = 1UL
+
+    override fun write(value: UByte, buf: ByteBuffer) {
+        buf.put(value.toByte())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterByte: FfiConverter<Byte, Byte> {
+    override fun lift(value: Byte): Byte {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Byte {
+        return buf.get()
+    }
+
+    override fun lower(value: Byte): Byte {
+        return value
+    }
+
+    override fun allocationSize(value: Byte) = 1UL
+
+    override fun write(value: Byte, buf: ByteBuffer) {
+        buf.put(value)
+    }
+}
+
+/**
+ * @suppress
+ */
 public object FfiConverterUInt: FfiConverter<UInt, Int> {
     override fun lift(value: Int): UInt {
         return value.toUInt()
@@ -1449,6 +1632,52 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
 
     override fun write(value: ULong, buf: ByteBuffer) {
         buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterFloat: FfiConverter<Float, Float> {
+    override fun lift(value: Float): Float {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Float {
+        return buf.getFloat()
+    }
+
+    override fun lower(value: Float): Float {
+        return value
+    }
+
+    override fun allocationSize(value: Float) = 4UL
+
+    override fun write(value: Float, buf: ByteBuffer) {
+        buf.putFloat(value)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterDouble: FfiConverter<Double, Double> {
+    override fun lift(value: Double): Double {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Double {
+        return buf.getDouble()
+    }
+
+    override fun lower(value: Double): Double {
+        return value
+    }
+
+    override fun allocationSize(value: Double) = 8UL
+
+    override fun write(value: Double, buf: ByteBuffer) {
+        buf.putDouble(value)
     }
 }
 
@@ -1548,6 +1777,365 @@ public object FfiConverterByteArray: FfiConverterRustBuffer<ByteArray> {
     override fun write(value: ByteArray, buf: ByteBuffer) {
         buf.putInt(value.size)
         buf.put(value)
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * A platform key store: seals with a key the OS holds and never hands out.
+ */
+public interface KeyVault {
+    
+    fun `seal`(`plain`: kotlin.ByteArray): kotlin.ByteArray
+    
+    fun `open`(`sealed`: kotlin.ByteArray): kotlin.ByteArray
+    
+    companion object
+}
+
+/**
+ * A platform key store: seals with a key the OS holds and never hands out.
+ */
+open class KeyVaultImpl: Disposable, AutoCloseable, KeyVault
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    /**
+     * Whether the current object has been destroyed and its reference is gone in the Rust side.
+     */
+    val uniffiIsDestroyed: Boolean get() = wasDestroyed.get()
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_kt_ffi_fn_free_keyvault(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_kt_ffi_fn_clone_keyvault(handle, status)
+        }
+    }
+
+    
+    @Throws(KtException::class)override fun `seal`(`plain`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_keyvault_seal(
+        it,
+        
+        FfiConverterByteArray.lower(`plain`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(KtException::class)override fun `open`(`sealed`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_keyvault_open(
+        it,
+        
+        FfiConverterByteArray.lower(`sealed`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+
+
+    
+    
+    /**
+     * @suppress
+     */
+    companion object
+    
+}
+
+
+
+// Put the implementation in an object so we don't pollute the top-level namespace
+internal object uniffiCallbackInterfaceKeyVault {
+    internal object `seal`: UniffiCallbackInterfaceKeyVaultMethod0 {
+        override fun callback(`uniffiHandle`: Long,`plain`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeKeyVault.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`seal`(
+                    FfiConverterByteArray.lift(`plain`),
+                )
+            }
+            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: KtException -> FfiConverterTypeKtError.lower(e) }
+            )
+        }
+    }
+    internal object `open`: UniffiCallbackInterfaceKeyVaultMethod1 {
+        override fun callback(`uniffiHandle`: Long,`sealed`: RustBuffer.ByValue,`uniffiOutReturn`: RustBuffer,uniffiCallStatus: UniffiRustCallStatus,) {
+            val uniffiObj = FfiConverterTypeKeyVault.handleMap.get(uniffiHandle)
+            val makeCall = { ->
+                uniffiObj.`open`(
+                    FfiConverterByteArray.lift(`sealed`),
+                )
+            }
+            val writeReturn = { value: kotlin.ByteArray -> uniffiOutReturn.setValue(FfiConverterByteArray.lower(value)) }
+            uniffiTraitInterfaceCallWithError(
+                uniffiCallStatus,
+                makeCall,
+                writeReturn,
+                { e: KtException -> FfiConverterTypeKtError.lower(e) }
+            )
+        }
+    }
+
+    internal object uniffiFree: UniffiCallbackInterfaceFree {
+        override fun callback(handle: Long) {
+            FfiConverterTypeKeyVault.handleMap.remove(handle)
+        }
+    }
+
+    internal object uniffiClone: UniffiCallbackInterfaceClone {
+        override fun callback(handle: Long): Long {
+            return FfiConverterTypeKeyVault.handleMap.clone(handle)
+        }
+    }
+
+    internal var vtable = UniffiVTableCallbackInterfaceKeyVault.UniffiByValue(
+        uniffiFree,
+        uniffiClone,
+        `seal`,
+        `open`,
+    )
+
+    // Registers the foreign callback with the Rust side.
+    // This method is generated for each callback interface.
+    internal fun register(lib: UniffiLib) {
+        lib.uniffi_kt_ffi_fn_init_callback_vtable_keyvault(vtable)
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeKeyVault: FfiConverter<KeyVault, Long> {
+    internal val handleMap = UniffiHandleMap<KeyVault>()
+
+    override fun lower(value: KeyVault): Long {
+        if (value is KeyVaultImpl) {
+             // Rust-implemented object.  Clone the handle and return it
+            return value.uniffiCloneHandle()
+         } else {
+            // Kotlin object, generate a new vtable handle and return that.
+            return handleMap.insert(value)
+         }
+    }
+
+    override fun lift(value: Long): KeyVault {
+        if ((value and 1.toLong()) == 0.toLong()) {
+            // Rust-generated handle, construct a new class that uses the handle to implement the
+            // interface
+            return KeyVaultImpl(UniffiWithHandle, value)
+        } else {
+            // Kotlin-generated handle, get the object from the handle map
+            return handleMap.remove(value)
+        }
+    }
+
+    override fun read(buf: ByteBuffer): KeyVault {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: KeyVault) = 8UL
+
+    override fun write(value: KeyVault, buf: ByteBuffer) {
+        buf.putLong(lower(value))
     }
 }
 
@@ -1996,6 +2584,11 @@ public interface KtNodeInterface {
      */
     fun `devices`(): List<DeviceItem>
     
+    /**
+     * Everything the hidden diagnostics screen shows (and "Export log" writes out).
+     */
+    fun `diagnostics`(): Diagnostics
+    
     fun `displayName`(): kotlin.String
     
     /**
@@ -2007,6 +2600,12 @@ public interface KtNodeInterface {
      * The list as Markdown (Obsidian Tasks format).
      */
     fun `exportMarkdown`(`listId`: kotlin.String): kotlin.String
+    
+    /**
+     * Whether a full sync round has finished since the app opened ([`KtNode::start_live`]).
+     * The splash screen is held until then, or about 1.5 s (DESIGN §8).
+     */
+    fun `firstRoundDone`(): kotlin.Boolean
     
     fun `groups`(): List<GroupItem>
     
@@ -2071,6 +2670,12 @@ public interface KtNodeInterface {
     fun `networkChanged`()
     
     /**
+     * Data from a newer app version reached this device: the update notice says a newer
+     * version is available to use certain features (principle 8).
+     */
+    fun `newerVersionSeen`(): kotlin.Boolean
+    
+    /**
      * The people who edit a list (its group's members, by name).
      */
     fun `people`(`listId`: kotlin.String): List<PersonItem>
@@ -2114,6 +2719,11 @@ public interface KtNodeInterface {
     
     fun `setDone`(`listId`: kotlin.String, `taskId`: kotlin.String, `done`: kotlin.Boolean)
     
+    /**
+     * Set a list's color and icon (shared with everyone in the list's group).
+     */
+    fun `setListStyle`(`listId`: kotlin.String, `hue`: kotlin.Double?, `vivid`: kotlin.UByte, `icon`: kotlin.String?)
+    
     fun `setListener`(`listener`: KtListener)
     
     /**
@@ -2154,6 +2764,11 @@ public interface KtNodeInterface {
     fun `takeChanges`(): List<ChangeItem>
     
     fun `tasks`(`listId`: kotlin.String): List<TaskItem>
+    
+    /**
+     * The colors of the theme this device uses (per device, never synced).
+     */
+    fun `themeColors`(`dark`: kotlin.Boolean): ThemeColors
     
     /**
      * Undo what that person did in the list since `since_ms` (other people's work stays).
@@ -2425,6 +3040,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     
 
+    
+    /**
+     * Everything the hidden diagnostics screen shows (and "Export log" writes out).
+     */override fun `diagnostics`(): Diagnostics {
+            return FfiConverterTypeDiagnostics.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_diagnostics(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
     override fun `displayName`(): kotlin.String {
             return FfiConverterString.lift(
     callWithHandle {
@@ -2468,6 +3099,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Whether a full sync round has finished since the app opened ([`KtNode::start_live`]).
+     * The splash screen is held until then, or about 1.5 s (DESIGN §8).
+     */override fun `firstRoundDone`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_first_round_done(
+        it,
+        _status)
 }
     }
     )
@@ -2690,6 +3338,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * Data from a newer app version reached this device: the update notice says a newer
+     * version is available to use certain features (principle 8).
+     */override fun `newerVersionSeen`(): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_newer_version_seen(
+        it,
+        _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
      * The people who edit a list (its group's members, by name).
      */
     @Throws(KtException::class)override fun `people`(`listId`: kotlin.String): List<PersonItem> {
@@ -2854,6 +3519,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
     
 
+    
+    /**
+     * Set a list's color and icon (shared with everyone in the list's group).
+     */
+    @Throws(KtException::class)override fun `setListStyle`(`listId`: kotlin.String, `hue`: kotlin.Double?, `vivid`: kotlin.UByte, `icon`: kotlin.String?)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_list_style(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterOptionalDouble.lower(`hue`),
+        FfiConverterUByte.lower(`vivid`),
+        FfiConverterOptionalString.lower(`icon`),_status)
+}
+    }
+    
+    
+
     override fun `setListener`(`listener`: KtListener)
         = 
     callWithHandle {
@@ -2992,6 +3677,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterString.lower(`listId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * The colors of the theme this device uses (per device, never synced).
+     */override fun `themeColors`(`dark`: kotlin.Boolean): ThemeColors {
+            return FfiConverterTypeThemeColors.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_theme_colors(
+        it,
+        
+        FfiConverterBoolean.lower(`dark`),_status)
 }
     }
     )
@@ -3265,6 +3967,78 @@ public object FfiConverterTypeDeviceItem: FfiConverterRustBuffer<DeviceItem> {
 
 
 
+/**
+ * The hidden diagnostics screen (DESIGN §2): engineering state, never secrets or task
+ * content, so all of it may go into "Export log".
+ */
+data class Diagnostics (
+    var `version`: kotlin.String
+    , 
+    var `featureLevel`: kotlin.UInt
+    , 
+    var `layers`: List<LayerStatus>
+    , 
+    var `relays`: List<RelayStat>
+    , 
+    var `helperRelays`: List<kotlin.String>
+    , 
+    var `helpers`: List<HelperStat>
+    , 
+    var `storage`: List<GroupStorage>
+    , 
+    var `rounds`: List<RoundLog>
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeDiagnostics: FfiConverterRustBuffer<Diagnostics> {
+    override fun read(buf: ByteBuffer): Diagnostics {
+        return Diagnostics(
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterSequenceTypeLayerStatus.read(buf),
+            FfiConverterSequenceTypeRelayStat.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterSequenceTypeHelperStat.read(buf),
+            FfiConverterSequenceTypeGroupStorage.read(buf),
+            FfiConverterSequenceTypeRoundLog.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: Diagnostics) = (
+            FfiConverterString.allocationSize(value.`version`) +
+            FfiConverterUInt.allocationSize(value.`featureLevel`) +
+            FfiConverterSequenceTypeLayerStatus.allocationSize(value.`layers`) +
+            FfiConverterSequenceTypeRelayStat.allocationSize(value.`relays`) +
+            FfiConverterSequenceString.allocationSize(value.`helperRelays`) +
+            FfiConverterSequenceTypeHelperStat.allocationSize(value.`helpers`) +
+            FfiConverterSequenceTypeGroupStorage.allocationSize(value.`storage`) +
+            FfiConverterSequenceTypeRoundLog.allocationSize(value.`rounds`)
+    )
+
+    override fun write(value: Diagnostics, buf: ByteBuffer) {
+            FfiConverterString.write(value.`version`, buf)
+            FfiConverterUInt.write(value.`featureLevel`, buf)
+            FfiConverterSequenceTypeLayerStatus.write(value.`layers`, buf)
+            FfiConverterSequenceTypeRelayStat.write(value.`relays`, buf)
+            FfiConverterSequenceString.write(value.`helperRelays`, buf)
+            FfiConverterSequenceTypeHelperStat.write(value.`helpers`, buf)
+            FfiConverterSequenceTypeGroupStorage.write(value.`storage`, buf)
+            FfiConverterSequenceTypeRoundLog.write(value.`rounds`, buf)
+    }
+}
+
+
+
 data class GroupItem (
     var `id`: kotlin.String
     , 
@@ -3303,6 +4077,149 @@ public object FfiConverterTypeGroupItem: FfiConverterRustBuffer<GroupItem> {
             FfiConverterString.write(value.`id`, buf)
             FfiConverterString.write(value.`name`, buf)
             FfiConverterBoolean.write(value.`personal`, buf)
+    }
+}
+
+
+
+/**
+ * Disk used by one group's data on this device.
+ */
+data class GroupStorage (
+    var `name`: kotlin.String
+    , 
+    var `bytes`: kotlin.ULong
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGroupStorage: FfiConverterRustBuffer<GroupStorage> {
+    override fun read(buf: ByteBuffer): GroupStorage {
+        return GroupStorage(
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GroupStorage) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterULong.allocationSize(value.`bytes`)
+    )
+
+    override fun write(value: GroupStorage, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterULong.write(value.`bytes`, buf)
+    }
+}
+
+
+
+/**
+ * A storage helper as this device (and its groups) see it.
+ */
+data class HelperStat (
+    /**
+     * Short form of the helper's endpoint ID.
+     */
+    var `id`: kotlin.String
+    , 
+    var `reachable`: kotlin.UInt
+    , 
+    var `unreachable`: kotlin.UInt
+    , 
+    var `latencyMs`: kotlin.Double
+    , 
+    var `failing`: kotlin.Boolean
+    , 
+    var `excluded`: kotlin.Boolean
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeHelperStat: FfiConverterRustBuffer<HelperStat> {
+    override fun read(buf: ByteBuffer): HelperStat {
+        return HelperStat(
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: HelperStat) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterUInt.allocationSize(value.`reachable`) +
+            FfiConverterUInt.allocationSize(value.`unreachable`) +
+            FfiConverterDouble.allocationSize(value.`latencyMs`) +
+            FfiConverterBoolean.allocationSize(value.`failing`) +
+            FfiConverterBoolean.allocationSize(value.`excluded`)
+    )
+
+    override fun write(value: HelperStat, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterUInt.write(value.`reachable`, buf)
+            FfiConverterUInt.write(value.`unreachable`, buf)
+            FfiConverterDouble.write(value.`latencyMs`, buf)
+            FfiConverterBoolean.write(value.`failing`, buf)
+            FfiConverterBoolean.write(value.`excluded`, buf)
+    }
+}
+
+
+
+data class IconItem (
+    var `id`: kotlin.String
+    , 
+    var `symbol`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeIconItem: FfiConverterRustBuffer<IconItem> {
+    override fun read(buf: ByteBuffer): IconItem {
+        return IconItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: IconItem) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`symbol`)
+    )
+
+    override fun write(value: IconItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`symbol`, buf)
     }
 }
 
@@ -3401,6 +4318,47 @@ public object FfiConverterTypeJoinResult: FfiConverterRustBuffer<JoinResult> {
 
 
 /**
+ * One layer's state, in words (hidden diagnostics screen).
+ */
+data class LayerStatus (
+    var `name`: kotlin.String
+    , 
+    var `state`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeLayerStatus: FfiConverterRustBuffer<LayerStatus> {
+    override fun read(buf: ByteBuffer): LayerStatus {
+        return LayerStatus(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: LayerStatus) = (
+            FfiConverterString.allocationSize(value.`name`) +
+            FfiConverterString.allocationSize(value.`state`)
+    )
+
+    override fun write(value: LayerStatus, buf: ByteBuffer) {
+            FfiConverterString.write(value.`name`, buf)
+            FfiConverterString.write(value.`state`, buf)
+    }
+}
+
+
+
+/**
  * What a link code joins, shown before the user confirms (D6).
  */
 data class LinkPreview (
@@ -3455,6 +4413,21 @@ data class ListItem (
     var `name`: kotlin.String
     , 
     var `groupName`: kotlin.String
+    , 
+    /**
+     * HCT hue 0–360 (the theme picks the tone: [`accent_color`]); `None` is grey.
+     */
+    var `hue`: kotlin.Double?
+    , 
+    /**
+     * 0 soft, 1 normal, 2 vivid.
+     */
+    var `vivid`: kotlin.UByte
+    , 
+    /**
+     * An icon ID from [`list_icons`], if set.
+     */
+    var `icon`: kotlin.String?
     
 ){
     
@@ -3475,6 +4448,9 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
+            FfiConverterOptionalDouble.read(buf),
+            FfiConverterUByte.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -3482,7 +4458,10 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterString.allocationSize(value.`id`) +
             FfiConverterString.allocationSize(value.`groupId`) +
             FfiConverterString.allocationSize(value.`name`) +
-            FfiConverterString.allocationSize(value.`groupName`)
+            FfiConverterString.allocationSize(value.`groupName`) +
+            FfiConverterOptionalDouble.allocationSize(value.`hue`) +
+            FfiConverterUByte.allocationSize(value.`vivid`) +
+            FfiConverterOptionalString.allocationSize(value.`icon`)
     )
 
     override fun write(value: ListItem, buf: ByteBuffer) {
@@ -3490,6 +4469,9 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterString.write(value.`groupId`, buf)
             FfiConverterString.write(value.`name`, buf)
             FfiConverterString.write(value.`groupName`, buf)
+            FfiConverterOptionalDouble.write(value.`hue`, buf)
+            FfiConverterUByte.write(value.`vivid`, buf)
+            FfiConverterOptionalString.write(value.`icon`, buf)
     }
 }
 
@@ -3588,6 +4570,16 @@ data class PersonItem (
      * This account's own devices.
      */
     var `isMe`: kotlin.Boolean
+    , 
+    /**
+     * Generated avatar: initials on this hue, plus a short tag telling apart people with
+     * the same name ("Alex · 4F2A").
+     */
+    var `initials`: kotlin.String
+    , 
+    var `hue`: kotlin.Double
+    , 
+    var `tag`: kotlin.String
     
 ){
     
@@ -3606,17 +4598,26 @@ public object FfiConverterTypePersonItem: FfiConverterRustBuffer<PersonItem> {
         return PersonItem(
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterDouble.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
     override fun allocationSize(value: PersonItem) = (
             FfiConverterString.allocationSize(value.`name`) +
-            FfiConverterBoolean.allocationSize(value.`isMe`)
+            FfiConverterBoolean.allocationSize(value.`isMe`) +
+            FfiConverterString.allocationSize(value.`initials`) +
+            FfiConverterDouble.allocationSize(value.`hue`) +
+            FfiConverterString.allocationSize(value.`tag`)
     )
 
     override fun write(value: PersonItem, buf: ByteBuffer) {
             FfiConverterString.write(value.`name`, buf)
             FfiConverterBoolean.write(value.`isMe`, buf)
+            FfiConverterString.write(value.`initials`, buf)
+            FfiConverterDouble.write(value.`hue`, buf)
+            FfiConverterString.write(value.`tag`, buf)
     }
 }
 
@@ -3877,6 +4878,67 @@ public object FfiConverterTypeRestoreInfo: FfiConverterRustBuffer<RestoreInfo> {
 
 
 /**
+ * One sync round, for the sync log.
+ */
+data class RoundLog (
+    var `atMs`: kotlin.ULong
+    , 
+    var `tookMs`: kotlin.ULong
+    , 
+    var `written`: kotlin.UInt
+    , 
+    var `received`: kotlin.UInt
+    , 
+    var `rejected`: kotlin.UInt
+    , 
+    var `peersReached`: kotlin.UInt
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeRoundLog: FfiConverterRustBuffer<RoundLog> {
+    override fun read(buf: ByteBuffer): RoundLog {
+        return RoundLog(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: RoundLog) = (
+            FfiConverterULong.allocationSize(value.`atMs`) +
+            FfiConverterULong.allocationSize(value.`tookMs`) +
+            FfiConverterUInt.allocationSize(value.`written`) +
+            FfiConverterUInt.allocationSize(value.`received`) +
+            FfiConverterUInt.allocationSize(value.`rejected`) +
+            FfiConverterUInt.allocationSize(value.`peersReached`)
+    )
+
+    override fun write(value: RoundLog, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`atMs`, buf)
+            FfiConverterULong.write(value.`tookMs`, buf)
+            FfiConverterUInt.write(value.`written`, buf)
+            FfiConverterUInt.write(value.`received`, buf)
+            FfiConverterUInt.write(value.`rejected`, buf)
+            FfiConverterUInt.write(value.`peersReached`, buf)
+    }
+}
+
+
+
+/**
  * The settings screen (DESIGN settings table). A setting that doesn't exist on this
  * platform is `None` and isn't shown at all.
  */
@@ -3910,6 +4972,16 @@ data class Settings (
      * "Start with computer": desktops only.
      */
     var `startWithComputer`: kotlin.Boolean?
+    , 
+    /**
+     * Appearance: a theme ID from [`themes`].
+     */
+    var `theme`: kotlin.String
+    , 
+    /**
+     * Material You (wallpaper colors): phones only; the app shows it on Android 12+.
+     */
+    var `dynamicColor`: kotlin.Boolean?
     
 ){
     
@@ -3932,6 +5004,8 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterSequenceString.read(buf),
             FfiConverterOptionalBoolean.read(buf),
             FfiConverterOptionalBoolean.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalBoolean.read(buf),
         )
     }
 
@@ -3941,7 +5015,9 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterString.allocationSize(value.`helpOthers`) +
             FfiConverterSequenceString.allocationSize(value.`helpOptions`) +
             FfiConverterOptionalBoolean.allocationSize(value.`relayForOthers`) +
-            FfiConverterOptionalBoolean.allocationSize(value.`startWithComputer`)
+            FfiConverterOptionalBoolean.allocationSize(value.`startWithComputer`) +
+            FfiConverterString.allocationSize(value.`theme`) +
+            FfiConverterOptionalBoolean.allocationSize(value.`dynamicColor`)
     )
 
     override fun write(value: Settings, buf: ByteBuffer) {
@@ -3951,6 +5027,8 @@ public object FfiConverterTypeSettings: FfiConverterRustBuffer<Settings> {
             FfiConverterSequenceString.write(value.`helpOptions`, buf)
             FfiConverterOptionalBoolean.write(value.`relayForOthers`, buf)
             FfiConverterOptionalBoolean.write(value.`startWithComputer`, buf)
+            FfiConverterString.write(value.`theme`, buf)
+            FfiConverterOptionalBoolean.write(value.`dynamicColor`, buf)
     }
 }
 
@@ -4073,6 +5151,200 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterBoolean.write(value.`done`, buf)
             FfiConverterString.write(value.`notes`, buf)
             FfiConverterOptionalULong.write(value.`remindMs`, buf)
+    }
+}
+
+
+
+/**
+ * A theme's color roles as ARGB, plus its other design tokens.
+ */
+data class ThemeColors (
+    var `primary`: kotlin.UInt
+    , 
+    var `onPrimary`: kotlin.UInt
+    , 
+    var `primaryContainer`: kotlin.UInt
+    , 
+    var `onPrimaryContainer`: kotlin.UInt
+    , 
+    var `secondary`: kotlin.UInt
+    , 
+    var `onSecondary`: kotlin.UInt
+    , 
+    var `secondaryContainer`: kotlin.UInt
+    , 
+    var `onSecondaryContainer`: kotlin.UInt
+    , 
+    var `tertiary`: kotlin.UInt
+    , 
+    var `onTertiary`: kotlin.UInt
+    , 
+    var `error`: kotlin.UInt
+    , 
+    var `onError`: kotlin.UInt
+    , 
+    var `background`: kotlin.UInt
+    , 
+    var `onBackground`: kotlin.UInt
+    , 
+    var `surface`: kotlin.UInt
+    , 
+    var `onSurface`: kotlin.UInt
+    , 
+    var `surfaceVariant`: kotlin.UInt
+    , 
+    var `onSurfaceVariant`: kotlin.UInt
+    , 
+    var `surfaceContainer`: kotlin.UInt
+    , 
+    var `surfaceContainerHigh`: kotlin.UInt
+    , 
+    var `outline`: kotlin.UInt
+    , 
+    var `outlineVariant`: kotlin.UInt
+    , 
+    var `textScale`: kotlin.Float
+    , 
+    var `density`: kotlin.Byte
+    , 
+    var `cornerDp`: kotlin.UByte
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeThemeColors: FfiConverterRustBuffer<ThemeColors> {
+    override fun read(buf: ByteBuffer): ThemeColors {
+        return ThemeColors(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterFloat.read(buf),
+            FfiConverterByte.read(buf),
+            FfiConverterUByte.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ThemeColors) = (
+            FfiConverterUInt.allocationSize(value.`primary`) +
+            FfiConverterUInt.allocationSize(value.`onPrimary`) +
+            FfiConverterUInt.allocationSize(value.`primaryContainer`) +
+            FfiConverterUInt.allocationSize(value.`onPrimaryContainer`) +
+            FfiConverterUInt.allocationSize(value.`secondary`) +
+            FfiConverterUInt.allocationSize(value.`onSecondary`) +
+            FfiConverterUInt.allocationSize(value.`secondaryContainer`) +
+            FfiConverterUInt.allocationSize(value.`onSecondaryContainer`) +
+            FfiConverterUInt.allocationSize(value.`tertiary`) +
+            FfiConverterUInt.allocationSize(value.`onTertiary`) +
+            FfiConverterUInt.allocationSize(value.`error`) +
+            FfiConverterUInt.allocationSize(value.`onError`) +
+            FfiConverterUInt.allocationSize(value.`background`) +
+            FfiConverterUInt.allocationSize(value.`onBackground`) +
+            FfiConverterUInt.allocationSize(value.`surface`) +
+            FfiConverterUInt.allocationSize(value.`onSurface`) +
+            FfiConverterUInt.allocationSize(value.`surfaceVariant`) +
+            FfiConverterUInt.allocationSize(value.`onSurfaceVariant`) +
+            FfiConverterUInt.allocationSize(value.`surfaceContainer`) +
+            FfiConverterUInt.allocationSize(value.`surfaceContainerHigh`) +
+            FfiConverterUInt.allocationSize(value.`outline`) +
+            FfiConverterUInt.allocationSize(value.`outlineVariant`) +
+            FfiConverterFloat.allocationSize(value.`textScale`) +
+            FfiConverterByte.allocationSize(value.`density`) +
+            FfiConverterUByte.allocationSize(value.`cornerDp`)
+    )
+
+    override fun write(value: ThemeColors, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`primary`, buf)
+            FfiConverterUInt.write(value.`onPrimary`, buf)
+            FfiConverterUInt.write(value.`primaryContainer`, buf)
+            FfiConverterUInt.write(value.`onPrimaryContainer`, buf)
+            FfiConverterUInt.write(value.`secondary`, buf)
+            FfiConverterUInt.write(value.`onSecondary`, buf)
+            FfiConverterUInt.write(value.`secondaryContainer`, buf)
+            FfiConverterUInt.write(value.`onSecondaryContainer`, buf)
+            FfiConverterUInt.write(value.`tertiary`, buf)
+            FfiConverterUInt.write(value.`onTertiary`, buf)
+            FfiConverterUInt.write(value.`error`, buf)
+            FfiConverterUInt.write(value.`onError`, buf)
+            FfiConverterUInt.write(value.`background`, buf)
+            FfiConverterUInt.write(value.`onBackground`, buf)
+            FfiConverterUInt.write(value.`surface`, buf)
+            FfiConverterUInt.write(value.`onSurface`, buf)
+            FfiConverterUInt.write(value.`surfaceVariant`, buf)
+            FfiConverterUInt.write(value.`onSurfaceVariant`, buf)
+            FfiConverterUInt.write(value.`surfaceContainer`, buf)
+            FfiConverterUInt.write(value.`surfaceContainerHigh`, buf)
+            FfiConverterUInt.write(value.`outline`, buf)
+            FfiConverterUInt.write(value.`outlineVariant`, buf)
+            FfiConverterFloat.write(value.`textScale`, buf)
+            FfiConverterByte.write(value.`density`, buf)
+            FfiConverterUByte.write(value.`cornerDp`, buf)
+    }
+}
+
+
+
+data class ThemeItem (
+    var `id`: kotlin.String
+    , 
+    var `name`: kotlin.String
+    
+){
+    
+
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeThemeItem: FfiConverterRustBuffer<ThemeItem> {
+    override fun read(buf: ByteBuffer): ThemeItem {
+        return ThemeItem(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: ThemeItem) = (
+            FfiConverterString.allocationSize(value.`id`) +
+            FfiConverterString.allocationSize(value.`name`)
+    )
+
+    override fun write(value: ThemeItem, buf: ByteBuffer) {
+            FfiConverterString.write(value.`id`, buf)
+            FfiConverterString.write(value.`name`, buf)
     }
 }
 
@@ -4254,6 +5526,38 @@ public object FfiConverterOptionalULong: FfiConverterRustBuffer<kotlin.ULong?> {
 /**
  * @suppress
  */
+public object FfiConverterOptionalDouble: FfiConverterRustBuffer<kotlin.Double?> {
+    override fun read(buf: ByteBuffer): kotlin.Double? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterDouble.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.Double?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterDouble.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.Double?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterDouble.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterOptionalBoolean: FfiConverterRustBuffer<kotlin.Boolean?> {
     override fun read(buf: ByteBuffer): kotlin.Boolean? {
         if (buf.get().toInt() == 0) {
@@ -4372,6 +5676,34 @@ public object FfiConverterOptionalTypeUpdateItem: FfiConverterRustBuffer<UpdateI
         } else {
             buf.put(1)
             FfiConverterTypeUpdateItem.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceDouble: FfiConverterRustBuffer<List<kotlin.Double>> {
+    override fun read(buf: ByteBuffer): List<kotlin.Double> {
+        val len = buf.getInt()
+        return List<kotlin.Double>(len) {
+            FfiConverterDouble.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<kotlin.Double>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterDouble.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<kotlin.Double>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterDouble.write(it, buf)
         }
     }
 }
@@ -4522,6 +5854,118 @@ public object FfiConverterSequenceTypeGroupItem: FfiConverterRustBuffer<List<Gro
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeGroupStorage: FfiConverterRustBuffer<List<GroupStorage>> {
+    override fun read(buf: ByteBuffer): List<GroupStorage> {
+        val len = buf.getInt()
+        return List<GroupStorage>(len) {
+            FfiConverterTypeGroupStorage.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<GroupStorage>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeGroupStorage.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<GroupStorage>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeGroupStorage.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeHelperStat: FfiConverterRustBuffer<List<HelperStat>> {
+    override fun read(buf: ByteBuffer): List<HelperStat> {
+        val len = buf.getInt()
+        return List<HelperStat>(len) {
+            FfiConverterTypeHelperStat.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<HelperStat>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeHelperStat.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<HelperStat>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeHelperStat.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeIconItem: FfiConverterRustBuffer<List<IconItem>> {
+    override fun read(buf: ByteBuffer): List<IconItem> {
+        val len = buf.getInt()
+        return List<IconItem>(len) {
+            FfiConverterTypeIconItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<IconItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeIconItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<IconItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeIconItem.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeLayerStatus: FfiConverterRustBuffer<List<LayerStatus>> {
+    override fun read(buf: ByteBuffer): List<LayerStatus> {
+        val len = buf.getInt()
+        return List<LayerStatus>(len) {
+            FfiConverterTypeLayerStatus.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<LayerStatus>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeLayerStatus.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<LayerStatus>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeLayerStatus.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeListItem: FfiConverterRustBuffer<List<ListItem>> {
     override fun read(buf: ByteBuffer): List<ListItem> {
         val len = buf.getInt()
@@ -4662,6 +6106,34 @@ public object FfiConverterSequenceTypeReminderItem: FfiConverterRustBuffer<List<
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeRoundLog: FfiConverterRustBuffer<List<RoundLog>> {
+    override fun read(buf: ByteBuffer): List<RoundLog> {
+        val len = buf.getInt()
+        return List<RoundLog>(len) {
+            FfiConverterTypeRoundLog.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<RoundLog>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeRoundLog.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<RoundLog>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeRoundLog.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<TaskItem>> {
     override fun read(buf: ByteBuffer): List<TaskItem> {
         val len = buf.getInt()
@@ -4683,6 +6155,51 @@ public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<Task
         }
     }
 }
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterSequenceTypeThemeItem: FfiConverterRustBuffer<List<ThemeItem>> {
+    override fun read(buf: ByteBuffer): List<ThemeItem> {
+        val len = buf.getInt()
+        return List<ThemeItem>(len) {
+            FfiConverterTypeThemeItem.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<ThemeItem>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeThemeItem.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<ThemeItem>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeThemeItem.write(it, buf)
+        }
+    }
+}
+        /**
+         * A list's or avatar's accent color (ARGB) in a theme: the hue at the theme's tone.
+         */ fun `accentColor`(`themeId`: kotlin.String, `hue`: kotlin.Double?, `vivid`: kotlin.UByte, `dark`: kotlin.Boolean): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_accent_color(
+    
+        
+        FfiConverterString.lower(`themeId`),
+        FfiConverterOptionalDouble.lower(`hue`),
+        FfiConverterUByte.lower(`vivid`),
+        FfiConverterBoolean.lower(`dark`),_status)
+}
+    )
+    }
+    
+
         /**
          * Android: is the app Context registered for iroh's DNS resolver and network monitor?
          * (Always true elsewhere.)
@@ -4690,6 +6207,57 @@ public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<Task
             return FfiConverterBoolean.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_kt_ffi_fn_func_android_context_ready(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * A safe file name (without extension) for exporting a list with this title (D60).
+         */ fun `exportFileStem`(`title`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_export_file_stem(
+    
+        
+        FfiConverterString.lower(`title`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The symbol for an icon ID (empty if unknown).
+         */ fun `iconSymbol`(`id`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_icon_symbol(
+    
+        
+        FfiConverterString.lower(`id`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The curated list hues for the color picker.
+         */ fun `listHues`(): List<kotlin.Double> {
+            return FfiConverterSequenceDouble.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_list_hues(
+    
+        _status)
+}
+    )
+    }
+    
+ fun `listIcons`(): List<IconItem> {
+            return FfiConverterSequenceTypeIconItem.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_list_icons(
     
         _status)
 }
@@ -4710,6 +6278,32 @@ public object FfiConverterSequenceTypeTaskItem: FfiConverterRustBuffer<List<Task
 }
     )
     }
+    
+
+        /**
+         * The built-in themes.
+         */ fun `themes`(): List<ThemeItem> {
+            return FfiConverterSequenceTypeThemeItem.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_themes(
+    
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Use this key store for the device identity. Call before opening a node.
+         */ fun `setKeyVault`(`vault`: KeyVault)
+        = 
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_func_set_key_vault(
+    
+        
+        FfiConverterTypeKeyVault.lower(`vault`),_status)
+}
+    
     
 
 

@@ -32,6 +32,10 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("loro: {0}")]
     Loro(String),
+    /// Data from a newer app version (a format version or message kind this build doesn't
+    /// know): kept and passed on untouched, never an error to the user (principle 8).
+    #[error("newer format: {0}")]
+    Newer(String),
 }
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;

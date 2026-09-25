@@ -81,11 +81,23 @@ struct StatusBody {
     acks: Vec<(DocId, u32, Vec<u8>)>,
 }
 
+/// Status format 2: adds the device's feature level (the group's feature floor).
+#[derive(Serialize, Deserialize)]
+struct StatusBodyV2 {
+    group: GroupId,
+    device: DeviceId,
+    created_ms: u64,
+    acks: Vec<(DocId, u32, Vec<u8>)>,
+    features: u32,
+}
+
 /// What a member last told us (its newest status).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MemberStatus {
     pub created_ms: u64,
     pub acks: std::collections::BTreeMap<DocId, (u32, Vec<u8>)>,
+    /// The device's feature level (1 for status format 1).
+    pub features: u32,
 }
 
 /// Our acknowledgments as last published (they change with every import; republished
@@ -298,6 +310,7 @@ impl Replica {
         let mut out: Vec<Vec<u8>> = self.carried_records(&t.group)?.into_iter().collect();
         out.extend(self.invite_messages(&t.group)?);
         out.extend(self.mailbox_set_messages(&t.group));
+        out.extend(self.newer_messages(&t.group));
         if t.role == SlotRole::Main {
             for (d, ds) in &state.docs {
                 let cur = ds.doc.oplog_vv().get(&me_peer).copied().unwrap_or(0);
@@ -441,8 +454,8 @@ impl Replica {
                 (*d, ds.generation, vv)
             })
             .collect();
-        let body = StatusBody { group: *g, device: self.identity.id(), created_ms: super::now_ms(), acks };
-        let body = wire::encode(STATUS_TAG, 1, &body)?;
+        let body = StatusBodyV2 { group: *g, device: self.identity.id(), created_ms: super::now_ms(), acks, features: super::FEATURE_LEVEL };
+        let body = wire::encode(STATUS_TAG, 2, &body)?;
         let sig = self.identity.sign(&body).to_vec();
         postcard::to_stdvec(&StatusRecord { body, sig }).map_err(|e| Error::Encoding(e.to_string()))
     }
@@ -459,7 +472,14 @@ impl Replica {
 
     pub(super) fn receive_status(&mut self, bytes: &[u8]) -> Result<()> {
         let rec: StatusRecord = postcard::from_bytes(bytes).map_err(|e| Error::Encoding(e.to_string()))?;
-        let body: StatusBody = wire::decode(STATUS_TAG, 1, &rec.body)?.1;
+        // Format 1 (no feature level) and 2 both read; newer ones are kept and passed on.
+        let body = match rec.body.get(2..4).map(|v| u16::from_le_bytes([v[0], v[1]])) {
+            Some(1) => {
+                let b: StatusBody = wire::decode(STATUS_TAG, 1, &rec.body)?.1;
+                StatusBodyV2 { group: b.group, device: b.device, created_ms: b.created_ms, acks: b.acks, features: 1 }
+            }
+            _ => wire::decode::<StatusBodyV2>(STATUS_TAG, 2, &rec.body)?.1,
+        };
         let sig: [u8; 64] = rec.sig.as_slice().try_into().map_err(|_| Error::Crypto("bad signature length"))?;
         crypto::verify(&body.device.0, &rec.body, &sig)?;
         let state = self.groups.get(&body.group).ok_or_else(|| Error::NotFound("group".into()))?;
@@ -473,7 +493,7 @@ impl Replica {
         if all.get(&body.device).is_some_and(|s| s.created_ms >= body.created_ms) {
             return Ok(());
         }
-        all.insert(body.device, MemberStatus { created_ms: body.created_ms, acks: body.acks.into_iter().map(|(d, g, v)| (d, (g, v))).collect() });
+        all.insert(body.device, MemberStatus { created_ms: body.created_ms, acks: body.acks.into_iter().map(|(d, g, v)| (d, (g, v))).collect(), features: body.features });
         let b = postcard::to_stdvec(&all).map_err(|e| Error::Encoding(e.to_string()))?;
         crate::storage::write_atomic(&self.layout.group_dir(&body.group).join("member_status"), &b)
     }
@@ -498,6 +518,8 @@ impl Replica {
         for r in self.carried_records(&t.group)? {
             messages.push(Message::Epoch(r).encode()?);
         }
+        // Newer apps' messages we can't read ourselves, passed on untouched.
+        messages.extend(self.newer_messages(&t.group));
         if t.role == SlotRole::Forward {
             return Ok(messages);
         }
@@ -612,8 +634,13 @@ impl Replica {
         }
         let parked_before = self.events.iter().filter(|e| matches!(e, super::Event::Parked)).count();
         for m in epochs.iter().chain(others.iter()) {
-            if self.receive(m).is_err() {
-                report.failed += 1;
+            match self.receive(m) {
+                Ok(()) => {}
+                // A newer app's message: kept and passed on, not a failure (principle 8).
+                Err(Error::Newer(_)) => {
+                    let _ = self.keep_newer(&t.group, m);
+                }
+                Err(_) => report.failed += 1,
             }
         }
         report.parked = self.events.iter().filter(|e| matches!(e, super::Event::Parked)).count().saturating_sub(parked_before);

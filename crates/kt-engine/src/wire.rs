@@ -29,8 +29,11 @@ pub fn decode<T: DeserializeOwned>(tag: [u8; 2], max_version: u16, bytes: &[u8])
         return Err(Error::Encoding("wrong or missing tag".into()));
     }
     let version = u16::from_le_bytes([bytes[2], bytes[3]]);
-    if version == 0 || version > max_version {
-        return Err(Error::Encoding(format!("unsupported version {version}")));
+    if version == 0 {
+        return Err(Error::Encoding("version 0".into()));
+    }
+    if version > max_version {
+        return Err(Error::Newer(format!("version {version}, this build reads up to {max_version}")));
     }
     let value = postcard::from_bytes(&bytes[4..]).map_err(|e| Error::Encoding(e.to_string()))?;
     Ok((version, value))
@@ -54,7 +57,7 @@ mod tests {
         assert_eq!(decode::<T>(*b"TT", 1, &bytes).unwrap(), (1, v));
         assert!(decode::<T>(*b"XX", 1, &bytes).is_err());
         let newer = encode(*b"TT", 2, &T { a: 1, b: vec![] }).unwrap();
-        assert!(decode::<T>(*b"TT", 1, &newer).is_err());
+        assert!(matches!(decode::<T>(*b"TT", 1, &newer), Err(Error::Newer(_))), "newer, not broken");
         assert!(decode::<T>(*b"TT", 1, &bytes[..5]).is_err());
         assert!(decode::<T>(*b"TT", 1, &[]).is_err());
     }

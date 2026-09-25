@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.testTag
 import com.jurisgames.tasks.ui.TasksApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,7 +56,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            TasksApp(node, onShare = { link ->
+            TasksApp(node, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
             }, update = update.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
@@ -63,8 +64,7 @@ class MainActivity : ComponentActivity() {
                 // Both formats at once: readable Markdown as text (Obsidian, notes apps,
                 // email) and the re-importable .tasklist file attached.
                 val dir = java.io.File(cacheDir, "exports").apply { mkdirs() }
-                val safe = l.name.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").take(60).ifBlank { "list" }
-                val file = java.io.File(dir, "$safe.tasklist")
+                val file = java.io.File(dir, com.jurisgames.tasks.core.exportFileStem(l.name) + ".tasklist")
                 file.writeBytes(node.exportListFile(l.id))
                 val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file)
                 val send = Intent(Intent.ACTION_SEND).setType("application/octet-stream")
@@ -74,7 +74,33 @@ class MainActivity : ComponentActivity() {
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 startActivity(Intent.createChooser(send, "Export ${l.name}"))
             }, onImport = { importList.launch(arrayOf("*/*")) })
+            var blocked by remember { mutableStateOf(BackgroundCheck.shouldExplain(this@MainActivity)) }
+            if (blocked) androidx.compose.material3.AlertDialog(
+                onDismissRequest = { blocked = false },
+                title = { androidx.compose.material3.Text("Updates only while the app is open") },
+                text = { androidx.compose.material3.Text("This phone is stopping Tasks from syncing in the background, so shared lists only update while the app is open. To fix it, allow background activity for Tasks in its battery settings.") },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = { blocked = false; BackgroundCheck.openSettings(this@MainActivity) }, modifier = androidx.compose.ui.Modifier.testTag("bgSettings")) {
+                        androidx.compose.material3.Text("Battery settings")
+                    }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { blocked = false }) { androidx.compose.material3.Text("Not now") } },
+            )
         }
+        holdSplash()
+    }
+
+    /** The splash stays until the first sync round or ~1.5 s (DESIGN §8), so lists open current. */
+    private fun holdSplash() {
+        val shownAt = android.os.SystemClock.uptimeMillis()
+        val content = findViewById<android.view.View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                val ready = app.node.firstRoundDone() || android.os.SystemClock.uptimeMillis() - shownAt > 1500
+                if (ready) content.viewTreeObserver.removeOnPreDrawListener(this)
+                return ready
+            }
+        })
     }
 
     /** A newer version, if the daily check found one. */
@@ -99,6 +125,41 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         opened.value = intent.dataString
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The clipboard is readable only with window focus (Android 10+).
+        if (hasFocus) checkClipboardOnce()
+    }
+
+    /**
+     * Install from an invite (DESIGN §7): the join page copies the link before sending
+     * people to the store, so the first launch of this install looks for it. The clip's
+     * description is checked first, which shows no "pasted" notice; the text is read only if
+     * it may be a link, and taken only if it is one of ours. Otherwise, tapping the link
+     * again opens the app with it.
+     */
+    private fun checkClipboardOnce() {
+        val marker = java.io.File(noBackupFilesDir, "clipboard_checked")
+        if (marker.exists()) return
+        marker.writeText("")
+        if (opened.value != null) return
+        val cm = getSystemService(android.content.ClipboardManager::class.java) ?: return
+        val d = cm.primaryClipDescription ?: return
+        if (!d.hasMimeType("text/*")) return
+        if (Build.VERSION.SDK_INT >= 31 && d.classificationStatus == android.content.ClipDescription.CLASSIFICATION_COMPLETE &&
+            d.getConfidenceScore(android.view.textclassifier.TextClassifier.TYPE_URL) < 0.5f
+        ) return
+        val text = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim() ?: return
+        if (INVITE_LINK.matches(text)) {
+            opened.value = text
+            if (Build.VERSION.SDK_INT >= 28) cm.clearPrimaryClip() // the code is a secret; don't leave it around
+        }
+    }
+
+    private companion object {
+        val INVITE_LINK = Regex("https://apps\\.jurisgames\\.com/(join|link)/?#[^\\s]+")
     }
 
     override fun onStart() {

@@ -37,3 +37,7 @@ tracing = { version = "0.1", default-features = false, features = ["release_max_
 # Register the app Context for iroh's DNS resolver and network monitor (src/android.rs).
 jni-sys = "=0.3.1"
 ndk-context = "=0.1.1"
+
+[target.'cfg(windows)'.dependencies]
+# DPAPI seals the device identity with the Windows user's key (src/vault.rs).
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Cryptography"] }

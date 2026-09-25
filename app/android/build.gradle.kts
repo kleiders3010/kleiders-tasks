@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -15,6 +17,9 @@ android {
         versionCode = 1
         versionName = "0.1.0-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The Rust core is built for these only (scripts/build-android-libs.sh); JNA's
+        // libraries for other ABIs would be dead weight.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     buildFeatures { compose = true }
     // play: Google Play (Block Store, code scanner, ...); foss: no proprietary Play libraries
@@ -38,6 +43,52 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+// Size ceilings (DESIGN §12, E6/E9): a release APK over 20 MB to download or 40 MB installed
+// fails the build. Measured per ABI, since a phone gets only its own native libraries:
+// download = the APK without other ABIs' libraries; installed = that plus its own libraries
+// extracted (legacy packaging).
+abstract class SizeCheck : DefaultTask() {
+    @get:InputFiles abstract val apkDir: DirectoryProperty
+    @get:Internal abstract val loader: Property<com.android.build.api.variant.BuiltArtifactsLoader>
+
+    @TaskAction fun measure() {
+        val mb = 1024.0 * 1024.0
+        val apks = loader.get().load(apkDir.get())?.elements ?: error("no APK in ${apkDir.get()}")
+        for (apk in apks) {
+            val f = File(apk.outputFile)
+            val packed = mutableMapOf<String, Long>()
+            val unpacked = mutableMapOf<String, Long>()
+            ZipFile(f).use { z ->
+                for (e in z.entries()) {
+                    if (!e.name.startsWith("lib/")) continue
+                    val abi = e.name.split("/")[1]
+                    packed[abi] = (packed[abi] ?: 0L) + e.compressedSize
+                    unpacked[abi] = (unpacked[abi] ?: 0L) + e.size
+                }
+            }
+            for (abi in packed.keys.ifEmpty { setOf("any") }) {
+                val others = packed.filterKeys { it != abi }.values.sum()
+                val download = (f.length() - others) / mb
+                val installed = download + (unpacked[abi] ?: 0L) / mb
+                logger.lifecycle("size: ${f.name} [$abi] %.1f MB download, %.1f MB installed".format(download, installed))
+                if (download > 20.0) throw GradleException("${f.name} [$abi]: %.1f MB download is over the 20 MB ceiling".format(download))
+                if (installed > 40.0) throw GradleException("${f.name} [$abi]: %.1f MB installed is over the 40 MB ceiling".format(installed))
+            }
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("release")) { v ->
+        val name = v.name.replaceFirstChar { it.uppercase() }
+        val check = tasks.register<SizeCheck>("checkSize$name") {
+            apkDir.set(v.artifacts.get(com.android.build.api.artifact.SingleArtifact.APK))
+            loader.set(v.artifacts.getBuiltArtifactsLoader())
+        }
+        tasks.matching { it.name == "assemble$name" }.configureEach { finalizedBy(check) }
     }
 }
 

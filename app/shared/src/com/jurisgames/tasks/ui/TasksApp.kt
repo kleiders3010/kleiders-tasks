@@ -56,6 +56,8 @@ fun TasksApp(
     onImport: (() -> Unit)? = null,
     update: com.jurisgames.tasks.core.UpdateItem? = null,
     onUpdate: ((String) -> Unit)? = null,
+    /** Android 12+: wallpaper colors (Material You), for light or dark. */
+    dynamicScheme: ((Boolean) -> androidx.compose.material3.ColorScheme?)? = null,
 ) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
@@ -68,13 +70,16 @@ fun TasksApp(
         onDispose { }
     }
     var open by remember { mutableStateOf<ListItem?>(null) }
-    MaterialTheme {
+    AppTheme(node, version, dynamicScheme) {
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
                 if (update != null && onUpdate != null) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Version ${update.versionName} is available", modifier = Modifier.weight(1f).testTag("update"))
+                        // Principle 8: newer data seen -> say why (text built in; the link only ever
+                        // comes from our own update manifest).
+                        val why = if (node.newerVersionSeen()) "A newer version is available to use certain features" else "Version ${update.versionName} is available"
+                        Text(why, modifier = Modifier.weight(1f).testTag("update"))
                         TextButton(onClick = { onUpdate(update.link) }, modifier = Modifier.testTag("updateGo")) { Text("Update") }
                     }
                 }
@@ -100,7 +105,7 @@ private fun ListsScreen(
     onOpen: (ListItem) -> Unit,
 ) {
     var settingsOpen by remember { mutableStateOf(false) }
-    if (settingsOpen) SettingsDialog(node, onSaved = { onSettings?.invoke(it) }, onClose = { settingsOpen = false })
+    if (settingsOpen) SettingsDialog(node, onSaved = { onSettings?.invoke(it); onChanged() }, onClose = { settingsOpen = false })
     val scope = rememberCoroutineScope()
     val lists = remember(node, version) { node.lists() }
     val groups = remember(node, version) { node.groups() }
@@ -193,10 +198,10 @@ private fun ListsScreen(
                     }
                 }
                 items(lists.filter { it.groupId == g.id }, key = { it.id }) { l ->
-                    Text(
-                        l.name,
-                        Modifier.fillMaxWidth().clickable { onOpen(l) }.padding(vertical = 10.dp, horizontal = 8.dp).testTag("list-" + l.name),
-                    )
+                    Row(Modifier.fillMaxWidth().clickable { onOpen(l) }.padding(vertical = 10.dp, horizontal = 8.dp).testTag("list-" + l.name), verticalAlignment = Alignment.CenterVertically) {
+                        ListBadge(l, Modifier.padding(end = 8.dp))
+                        Text(l.name, Modifier.weight(1f))
+                    }
                 }
                 item(key = "n" + g.id) {
                     var n by remember { mutableStateOf("") }
@@ -347,12 +352,18 @@ private fun ListsScreen(
 private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((ListItem) -> Unit)?, onChanged: () -> Unit, onBack: () -> Unit) {
     var undoOpen by remember { mutableStateOf(false) }
     if (undoOpen) UndoDialog(node, list, onDone = { onChanged() }, onClose = { undoOpen = false })
+    var styleOpen by remember { mutableStateOf(false) }
+    // The list as it is now (its style may have just changed, here or on another device).
+    val shown = remember(node, version, list.id) { node.lists().find { it.id == list.id } ?: list }
+    if (styleOpen) StyleDialog(node, shown, onDone = onChanged, onClose = { styleOpen = false })
     val tasks = remember(node, version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
     var title by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack, modifier = Modifier.testTag("back")) { Text("‹ Lists") }
+            ListBadge(shown, Modifier.padding(end = 8.dp))
             Text("${list.name} · ${list.groupName}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            TextButton(onClick = { styleOpen = true }, modifier = Modifier.testTag("styleOpen")) { Text("Style…") }
             if (onExport != null) TextButton(onClick = { onExport(list) }, modifier = Modifier.testTag("export")) { Text("Export") }
             TextButton(onClick = { undoOpen = true }, modifier = Modifier.testTag("undoOpen")) { Text("Undo…") }
         }

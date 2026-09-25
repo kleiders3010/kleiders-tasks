@@ -30,6 +30,7 @@ uniffi::setup_scaffolding!();
 
 #[cfg(target_os = "android")]
 mod android;
+mod vault;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum KtError {
@@ -121,10 +122,27 @@ pub struct Settings {
     pub relay_for_others: Option<bool>,
     /// "Start with computer": desktops only.
     pub start_with_computer: Option<bool>,
+    /// Appearance: a theme ID from [`themes`].
+    pub theme: String,
+    /// Material You (wallpaper colors): phones only; the app shows it on Android 12+.
+    pub dynamic_color: Option<bool>,
 }
 
+/// This device's settings file (format 2: adds the appearance choice).
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct StoredSettings {
+    sync_in_background: bool,
+    notify_changes: bool,
+    net: NetSettings,
+    start_with_computer: bool,
+    /// Per device, never synced (DESIGN §2 appearance).
+    theme: String,
+    dynamic_color: bool,
+}
+
+/// Format 1, still read.
+#[derive(serde::Deserialize)]
+struct StoredSettingsV1 {
     sync_in_background: bool,
     notify_changes: bool,
     net: NetSettings,
@@ -133,7 +151,32 @@ struct StoredSettings {
 
 impl StoredSettings {
     fn defaults(p: NetPlatform) -> StoredSettings {
-        StoredSettings { sync_in_background: true, notify_changes: true, net: NetSettings::defaults(p), start_with_computer: true }
+        StoredSettings {
+            sync_in_background: true,
+            notify_changes: true,
+            net: NetSettings::defaults(p),
+            start_with_computer: true,
+            theme: "default".into(),
+            dynamic_color: false,
+        }
+    }
+
+    fn read(b: &[u8]) -> Option<StoredSettings> {
+        match b.get(2..4).map(|v| u16::from_le_bytes([v[0], v[1]])) {
+            Some(1) => kt_engine::wire::decode::<StoredSettingsV1>(*b"SE", 1, b).ok().map(|(_, o)| StoredSettings {
+                sync_in_background: o.sync_in_background,
+                notify_changes: o.notify_changes,
+                start_with_computer: o.start_with_computer,
+                ..StoredSettings::defaults(o.net.platform())
+            }
+            .with_net(o.net)),
+            _ => kt_engine::wire::decode::<StoredSettings>(*b"SE", 2, b).ok().map(|x| x.1),
+        }
+    }
+
+    fn with_net(mut self, net: NetSettings) -> StoredSettings {
+        self.net = net;
+        self
     }
 }
 
@@ -161,6 +204,11 @@ pub struct PersonItem {
     pub name: String,
     /// This account's own devices.
     pub is_me: bool,
+    /// Generated avatar: initials on this hue, plus a short tag telling apart people with
+    /// the same name ("Alex · 4F2A").
+    pub initials: String,
+    pub hue: f64,
+    pub tag: String,
 }
 
 /// What a restore did.
@@ -185,6 +233,12 @@ pub struct ListItem {
     pub group_id: String,
     pub name: String,
     pub group_name: String,
+    /// HCT hue 0–360 (the theme picks the tone: [`accent_color`]); `None` is grey.
+    pub hue: Option<f64>,
+    /// 0 soft, 1 normal, 2 vivid.
+    pub vivid: u8,
+    /// An icon ID from [`list_icons`], if set.
+    pub icon: Option<String>,
 }
 
 /// A task in display order, with its depth (children follow their parent).
@@ -236,6 +290,114 @@ pub fn android_context_ready() -> bool {
     true
 }
 
+/// A theme's color roles as ARGB, plus its other design tokens.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ThemeColors {
+    pub primary: u32,
+    pub on_primary: u32,
+    pub primary_container: u32,
+    pub on_primary_container: u32,
+    pub secondary: u32,
+    pub on_secondary: u32,
+    pub secondary_container: u32,
+    pub on_secondary_container: u32,
+    pub tertiary: u32,
+    pub on_tertiary: u32,
+    pub error: u32,
+    pub on_error: u32,
+    pub background: u32,
+    pub on_background: u32,
+    pub surface: u32,
+    pub on_surface: u32,
+    pub surface_variant: u32,
+    pub on_surface_variant: u32,
+    pub surface_container: u32,
+    pub surface_container_high: u32,
+    pub outline: u32,
+    pub outline_variant: u32,
+    pub text_scale: f32,
+    pub density: i8,
+    pub corner_dp: u8,
+}
+
+fn theme_colors_of(t: &kt_tasks::appearance::ThemeTokens, dark: bool) -> ThemeColors {
+    let c = kt_tasks::appearance::colors(t, dark);
+    ThemeColors {
+        primary: c.primary,
+        on_primary: c.on_primary,
+        primary_container: c.primary_container,
+        on_primary_container: c.on_primary_container,
+        secondary: c.secondary,
+        on_secondary: c.on_secondary,
+        secondary_container: c.secondary_container,
+        on_secondary_container: c.on_secondary_container,
+        tertiary: c.tertiary,
+        on_tertiary: c.on_tertiary,
+        error: c.error,
+        on_error: c.on_error,
+        background: c.background,
+        on_background: c.on_background,
+        surface: c.surface,
+        on_surface: c.on_surface,
+        surface_variant: c.surface_variant,
+        on_surface_variant: c.on_surface_variant,
+        surface_container: c.surface_container,
+        surface_container_high: c.surface_container_high,
+        outline: c.outline,
+        outline_variant: c.outline_variant,
+        text_scale: t.text_scale,
+        density: t.density,
+        corner_dp: t.corner_dp,
+    }
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct ThemeItem {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct IconItem {
+    pub id: String,
+    pub symbol: String,
+}
+
+/// The built-in themes.
+#[uniffi::export]
+pub fn themes() -> Vec<ThemeItem> {
+    kt_tasks::appearance::builtin_themes().into_iter().map(|t| ThemeItem { id: t.id, name: t.name }).collect()
+}
+
+/// The curated list hues for the color picker.
+#[uniffi::export]
+pub fn list_hues() -> Vec<f64> {
+    kt_tasks::appearance::LIST_HUES.to_vec()
+}
+
+#[uniffi::export]
+pub fn list_icons() -> Vec<IconItem> {
+    kt_tasks::appearance::LIST_ICONS.iter().map(|(id, s)| IconItem { id: id.to_string(), symbol: s.to_string() }).collect()
+}
+
+/// The symbol for an icon ID (empty if unknown).
+#[uniffi::export]
+pub fn icon_symbol(id: String) -> String {
+    kt_tasks::appearance::icon_symbol(&id).unwrap_or("").into()
+}
+
+/// A list's or avatar's accent color (ARGB) in a theme: the hue at the theme's tone.
+#[uniffi::export]
+pub fn accent_color(theme_id: String, hue: Option<f64>, vivid: u8, dark: bool) -> u32 {
+    kt_tasks::appearance::accent(&kt_tasks::appearance::find_theme(&theme_id), hue, vivid, dark)
+}
+
+/// A safe file name (without extension) for exporting a list with this title (D60).
+#[uniffi::export]
+pub fn export_file_stem(title: String) -> String {
+    kt_tasks::export::file_stem(&title)
+}
+
 /// Encode text (a share link) as a QR code.
 #[uniffi::export]
 pub fn qr_matrix(text: String) -> Result<QrMatrix, KtError> {
@@ -273,6 +435,74 @@ pub struct RelayStat {
     pub readback_misses: u64,
 }
 
+/// One layer's state, in words (hidden diagnostics screen).
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct LayerStatus {
+    pub name: String,
+    pub state: String,
+}
+
+/// A storage helper as this device (and its groups) see it.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct HelperStat {
+    /// Short form of the helper's endpoint ID.
+    pub id: String,
+    pub reachable: u32,
+    pub unreachable: u32,
+    pub latency_ms: f64,
+    pub failing: bool,
+    pub excluded: bool,
+}
+
+/// Disk used by one group's data on this device.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct GroupStorage {
+    pub name: String,
+    pub bytes: u64,
+}
+
+/// One sync round, for the sync log.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct RoundLog {
+    pub at_ms: u64,
+    pub took_ms: u64,
+    pub written: u32,
+    pub received: u32,
+    pub rejected: u32,
+    pub peers_reached: u32,
+}
+
+/// The hidden diagnostics screen (DESIGN §2): engineering state, never secrets or task
+/// content, so all of it may go into "Export log".
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct Diagnostics {
+    pub version: String,
+    pub feature_level: u32,
+    pub layers: Vec<LayerStatus>,
+    pub relays: Vec<RelayStat>,
+    pub helper_relays: Vec<String>,
+    pub helpers: Vec<HelperStat>,
+    pub storage: Vec<GroupStorage>,
+    pub rounds: Vec<RoundLog>,
+}
+
+/// Rounds kept for the sync log.
+const ROUND_LOG: usize = 50;
+
+fn dir_bytes(p: &std::path::Path) -> u64 {
+    std::fs::read_dir(p)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| match e.file_type() {
+                    Ok(t) if t.is_dir() => dir_bytes(&e.path()),
+                    Ok(t) if t.is_file() => e.metadata().map(|m| m.len()).unwrap_or(0),
+                    _ => 0,
+                })
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
 /// Something changed that the UI should show (lists, tasks, membership).
 #[uniffi::export(with_foreign)]
 pub trait KtListener: Send + Sync {
@@ -308,6 +538,10 @@ pub struct KtNode {
     constrained: std::sync::atomic::AtomicBool,
     /// Same-Wi-Fi discovery (rotating beacons, §6) while the app is open.
     lan: Mutex<Option<Arc<kt_net::lan::Lan>>>,
+    /// A full round has finished since the app opened (the splash waits for it).
+    first_round: std::sync::atomic::AtomicBool,
+    /// The last [`ROUND_LOG`] rounds (diagnostics).
+    rounds: Mutex<std::collections::VecDeque<RoundLog>>,
     /// Real networking (not a loopback test node).
     lan_enabled: bool,
     /// Desktops: the relay run for others (D51), when the setting is on.
@@ -334,6 +568,11 @@ fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mu
 }
 
 impl KtNode {
+    fn list_item(&self, l: ListInfo) -> ListItem {
+        let st = self.app.read(&l, kt_tasks::appearance::list_style).unwrap_or_default();
+        ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name, hue: st.hue, vivid: st.vivid, icon: st.icon }
+    }
+
     fn list(&self, list_id: &str) -> Result<ListInfo, KtError> {
         let d = DocId::from_hex(list_id).ok_or_else(|| fail("bad list id"))?;
         self.app.lists().into_iter().find(|l| l.doc == d).ok_or_else(|| fail("no such list"))
@@ -427,7 +666,7 @@ impl KtNode {
     }
 
     fn save_settings(&self, s: &StoredSettings) -> Result<(), KtError> {
-        kt_engine::storage::write_atomic(&self.data_dir.join("settings"), &kt_engine::wire::encode(*b"SE", 1, s).map_err(fail)?).map_err(fail)
+        kt_engine::storage::write_atomic(&self.data_dir.join("settings"), &kt_engine::wire::encode(*b"SE", 2, s).map_err(fail)?).map_err(fail)
     }
 
     fn notify(&self) {
@@ -438,6 +677,24 @@ impl KtNode {
 
     /// One full round on every layer: maintenance, sync, invites.
     async fn round(&self) -> SyncReport {
+        let started = std::time::Instant::now();
+        let rep = self.round_inner().await;
+        let mut log = self.rounds.lock().expect("lock");
+        if log.len() == ROUND_LOG {
+            log.pop_front();
+        }
+        log.push_back(RoundLog {
+            at_ms: kt_engine::replica::now_ms(),
+            took_ms: started.elapsed().as_millis() as u64,
+            written: rep.written,
+            received: rep.received,
+            rejected: rep.rejected,
+            peers_reached: rep.peers_reached,
+        });
+        rep
+    }
+
+    async fn round_inner(&self) -> SyncReport {
         let net = &self.net;
         // First, so a new recovery invite goes out with this same round.
         self.backup_if_due();
@@ -497,6 +754,7 @@ impl KtNode {
 
 impl KtNode {
     fn start(identity_dir: String, data_dir: String, worker_path: String, options: NodeOptions, restore: Option<Vec<u8>>, picked: bool) -> Result<Arc<KtNode>, KtError> {
+        vault::use_builtin();
         let sandbox = SandboxConfig { worker: PathBuf::from(worker_path), timeout: Duration::from_secs(20) };
         let data = PathBuf::from(&data_dir);
         let identity = PathBuf::from(identity_dir);
@@ -527,8 +785,7 @@ impl KtNode {
         };
         let stored = std::fs::read(data.join("settings"))
             .ok()
-            .and_then(|b| kt_engine::wire::decode::<StoredSettings>(*b"SE", 1, &b).ok())
-            .map(|x| x.1)
+            .and_then(|b| StoredSettings::read(&b))
             .filter(|s| s.net.platform() == platform)
             .unwrap_or_else(|| StoredSettings::defaults(platform));
         let settings = stored.net.clone();
@@ -592,6 +849,8 @@ impl KtNode {
             device_state: Mutex::new((platform == NetPlatform::Desktop, false, false)),
             constrained: std::sync::atomic::AtomicBool::new(false),
             lan: Mutex::new(None),
+            first_round: std::sync::atomic::AtomicBool::new(false),
+            rounds: Mutex::new(std::collections::VecDeque::new()),
             lan_enabled: options.bind.is_empty(),
             #[cfg(feature = "desktop")]
             relay_for_others: tokio::sync::Mutex::new(None),
@@ -652,7 +911,7 @@ impl KtNode {
         let g = group_id.as_deref().map(gid).transpose()?;
         let l = self.app.import_list_file(g, &file).map_err(fail)?;
         self.notify();
-        Ok(ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name })
+        Ok(self.list_item(l))
     }
 
     /// Write a sealed backup now (export, or before a risky operation).
@@ -683,14 +942,29 @@ impl KtNode {
     }
 
     pub fn lists(&self) -> Vec<ListItem> {
-        self.app.lists().into_iter().map(|l| ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name }).collect()
+        self.app.lists().into_iter().map(|l| self.list_item(l)).collect()
+    }
+
+    /// Set a list's color and icon (shared with everyone in the list's group).
+    pub fn set_list_style(&self, list_id: String, hue: Option<f64>, vivid: u8, icon: Option<String>) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        let style = kt_tasks::appearance::ListStyle { hue, vivid, icon };
+        self.app.edit(&l, |d| kt_tasks::appearance::set_list_style(d, &style)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// The colors of the theme this device uses (per device, never synced).
+    pub fn theme_colors(&self, dark: bool) -> ThemeColors {
+        let t = kt_tasks::appearance::find_theme(&self.settings.lock().expect("lock").theme);
+        theme_colors_of(&t, dark)
     }
 
     /// Create a list in a group (`None` = a solo list).
     pub fn create_list(&self, group_id: Option<String>, name: String) -> Result<ListItem, KtError> {
         let g = group_id.map(|s| gid(&s)).transpose()?;
         let l = self.app.create_list(g, &name).map_err(fail)?;
-        Ok(ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name })
+        Ok(self.list_item(l))
     }
 
     pub fn tasks(&self, list_id: String) -> Result<Vec<TaskItem>, KtError> {
@@ -829,6 +1103,8 @@ impl KtNode {
             help_options: s.net.help_options().into_iter().map(|h| help_name(h).into()).collect(),
             relay_for_others: s.net.relay_setting_available().then(|| s.net.relay_for_others()),
             start_with_computer: desktop.then_some(s.start_with_computer),
+            theme: s.theme.clone(),
+            dynamic_color: (!desktop).then_some(s.dynamic_color),
         }
     }
 
@@ -845,6 +1121,15 @@ impl KtNode {
         match (new.start_with_computer, s.net.platform()) {
             (Some(v), NetPlatform::Desktop) => s.start_with_computer = v,
             (Some(_), _) => return Err(fail("desktop only")),
+            (None, _) => {}
+        }
+        if !kt_tasks::appearance::builtin_themes().iter().any(|t| t.id == new.theme) {
+            return Err(fail("no such theme"));
+        }
+        s.theme = new.theme;
+        match (new.dynamic_color, s.net.platform()) {
+            (Some(v), NetPlatform::Phone) => s.dynamic_color = v,
+            (Some(_), _) => return Err(fail("phones only")),
             (None, _) => {}
         }
         if h == kt_net::settings::HelpOthers::Off {
@@ -898,10 +1183,25 @@ impl KtNode {
         let _ = self.app.mark_seen();
     }
 
+    /// Data from a newer app version reached this device: the update notice says a newer
+    /// version is available to use certain features (principle 8).
+    pub fn newer_version_seen(&self) -> bool {
+        self.app.with(|r| r.newer_version_seen())
+    }
+
     /// The people who edit a list (its group's members, by name).
     pub fn people(&self, list_id: String) -> Result<Vec<PersonItem>, KtError> {
         let l = self.list(&list_id)?;
-        Ok(self.app.people(&l).into_iter().map(|p| PersonItem { name: p.name, is_me: p.is_me }).collect())
+        Ok(self
+            .app
+            .people(&l)
+            .into_iter()
+            .map(|p| {
+                let key = p.devices.iter().min().map(|d| d.0).unwrap_or_default();
+                let (hue, tag) = kt_tasks::appearance::avatar(&key);
+                PersonItem { initials: kt_tasks::appearance::initials(&p.name), name: p.name, is_me: p.is_me, hue, tag }
+            })
+            .collect())
     }
 
     /// Undo what that person did in the list since `since_ms` (other people's work stays).
@@ -994,9 +1294,16 @@ impl KtNode {
         *self.listener.lock().expect("lock") = Some(listener);
     }
 
+    /// Whether a full sync round has finished since the app opened ([`KtNode::start_live`]).
+    /// The splash screen is held until then, or about 1.5 s (DESIGN §8).
+    pub fn first_round_done(&self) -> bool {
+        self.first_round.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// App open: live updates on every layer until [`KtNode::stop_live`].
     pub fn start_live(self: Arc<Self>) {
         self.stop_live(); // first: it marks the app as closed
+        self.first_round.store(false, std::sync::atomic::Ordering::Relaxed);
         self.device_state.lock().expect("lock").2 = true;
         self.apply_helping();
         let (tx, rx) = tokio::sync::watch::channel(false);
@@ -1034,6 +1341,7 @@ impl KtNode {
             loop {
                 if last_round.elapsed() > Duration::from_secs(45) {
                     me.round().await;
+                    me.first_round.store(true, std::sync::atomic::Ordering::Relaxed);
                     last_round = std::time::Instant::now();
                 }
                 let changed = me.app.with(|r| r.take_events()).iter().any(|e| {
@@ -1083,6 +1391,93 @@ impl KtNode {
             .collect();
         v.sort_by(|a, b| a.url.cmp(&b.url));
         v
+    }
+
+    /// Everything the hidden diagnostics screen shows (and "Export log" writes out).
+    pub fn diagnostics(&self) -> Diagnostics {
+        let relays = self.relay_stats();
+        let working = relays.iter().filter(|r| r.failures_in_a_row < 3).count();
+        let mut layers = vec![LayerStatus { name: "Nostr relays".into(), state: format!("{working} of {} working", relays.len()) }];
+        let p2p = self.net.p2p.as_ref();
+        layers.push(LayerStatus {
+            name: "Direct connections".into(),
+            state: match p2p {
+                None => "off".into(),
+                Some(p) if p.is_online() => "online (home relay connected)".into(),
+                Some(_) => "no home relay".into(),
+            },
+        });
+        let helper_relays = p2p.map(|p| p.helper_relays()).unwrap_or_default();
+        let mut helpers: Vec<HelperStat> = self
+            .net
+            .helpers
+            .as_ref()
+            .map(|(h, _)| {
+                h.records()
+                    .into_iter()
+                    .map(|(id, r)| HelperStat {
+                        id: hex::encode(&id.as_bytes()[..5]),
+                        reachable: r.reachable,
+                        unreachable: r.unreachable,
+                        latency_ms: r.latency_ms,
+                        failing: h.is_failing(&id),
+                        excluded: r.excluded,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        helpers.sort_by(|a, b| a.id.cmp(&b.id));
+        layers.push(LayerStatus {
+            name: "Storage helpers".into(),
+            state: match &self.net.helpers {
+                None => "off".into(),
+                Some(_) => format!("{} of {} working", helpers.iter().filter(|h| !h.failing).count(), helpers.len()),
+            },
+        });
+        layers.push(LayerStatus {
+            name: "DHT".into(),
+            state: match &self.net.dht {
+                None => "off".into(),
+                Some(d) => format!("on, {} member entry points", d.member_entry_points().len()),
+            },
+        });
+        layers.push(LayerStatus {
+            name: "Same Wi-Fi".into(),
+            state: if !self.lan_enabled { "off".into() } else if self.lan.lock().expect("lock").is_some() { "listening".into() } else { "only while open".into() },
+        });
+        // The address itself stays out: logs get shared.
+        #[cfg(feature = "desktop")]
+        let relaying = self.relay_for_others.try_lock().ok().map(|r| r.as_ref().map(|r| r.announced_url().is_some()));
+        #[cfg(not(feature = "desktop"))]
+        let relaying: Option<Option<bool>> = Some(None);
+        layers.push(LayerStatus {
+            name: "Relaying for others".into(),
+            state: match relaying {
+                None => "changing".into(),
+                Some(None) => "off".into(),
+                Some(Some(false)) => "on, not reachable from outside (not announced)".into(),
+                Some(Some(true)) => "on, reachable and announced".into(),
+            },
+        });
+        let storage = self
+            .app
+            .groups()
+            .into_iter()
+            .map(|g| GroupStorage {
+                name: if g.personal { "Your own lists".into() } else { g.name },
+                bytes: dir_bytes(&self.data_dir.join("groups").join(g.group.to_hex())),
+            })
+            .collect();
+        Diagnostics {
+            version: env!("CARGO_PKG_VERSION").into(),
+            feature_level: kt_engine::replica::FEATURE_LEVEL,
+            layers,
+            relays,
+            helper_relays,
+            helpers,
+            storage,
+            rounds: self.rounds.lock().expect("lock").iter().rev().cloned().collect(),
+        }
     }
 
     pub fn data_dir(&self) -> String {

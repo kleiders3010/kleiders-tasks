@@ -36,6 +36,7 @@ pub mod backup;
 pub mod handover;
 pub mod health;
 mod rotation;
+mod newer;
 pub use rotation::{DEFAULT_ROTATE_AFTER_MS, ROTATE_CASCADE_MS};
 mod fuzzing;
 mod compaction;
@@ -71,14 +72,29 @@ pub enum Message {
     Health(Vec<u8>),
 }
 
+/// How many message kinds this build knows. Kinds are only ever appended (principle 8),
+/// so a higher kind number is a newer app's, not garbage.
+const KNOWN_MESSAGE_KINDS: u8 = 9;
+
 impl Message {
     pub fn encode(&self) -> Result<Vec<u8>> {
         wire::encode(MSG_TAG, MSG_VERSION, self)
     }
     pub fn decode(b: &[u8]) -> Result<Self> {
-        Ok(wire::decode(MSG_TAG, MSG_VERSION, b)?.1)
+        match wire::decode(MSG_TAG, MSG_VERSION, b) {
+            Ok((_, m)) => Ok(m),
+            // postcard puts the kind first (a varint; any known kind fits in one byte).
+            Err(Error::Encoding(_)) if b.len() > 4 && b[..2] == MSG_TAG && b[4] >= KNOWN_MESSAGE_KINDS => {
+                Err(Error::Newer(format!("message kind {}", b[4])))
+            }
+            Err(e) => Err(e),
+        }
     }
 }
+
+/// This build's feature level, advertised in status records: a group uses a new kind of
+/// content only once every current member's device supports it (the feature floor, D28).
+pub const FEATURE_LEVEL: u32 = 1;
 
 /// App-specific knowledge the engine needs for document epochs (D24). The engine stays
 /// generic (principle 7); the domain crate implements this.

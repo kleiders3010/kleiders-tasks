@@ -134,9 +134,17 @@ pub fn verify(signer: &[u8; 32], msg: &[u8], sig: &[u8; 64]) -> Result<(), Error
     vk.verify(msg, &Signature::from_bytes(sig)).map_err(|_| Error::Crypto("bad signature"))
 }
 
+/// Key-wrap suite: X25519 + HKDF-SHA256 + XChaCha20-Poly1305.
+pub const SUITE_X25519: u8 = 1;
+/// Reserved (DESIGN §5): hybrid X25519 + ML-KEM-768, for when devices carry post-quantum
+/// keys. This build doesn't write it; reading it is [`Error::Newer`], never garbage.
+pub const SUITE_X25519_MLKEM768: u8 = 2;
+
 /// A symmetric key encrypted for one recipient device (ECIES-style).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WrappedKey {
+    /// Which suite wrapped it ([`SUITE_X25519`] today).
+    pub suite: u8,
     pub ephemeral: [u8; 32],
     pub sealed: Vec<u8>,
 }
@@ -150,11 +158,14 @@ pub fn wrap_key(recipient_kex: &[u8; 32], key: &SymKey, aad: &[u8]) -> WrappedKe
     info.extend_from_slice(&eph_pub);
     info.extend_from_slice(recipient_kex);
     let kek = derive(shared.as_bytes(), "kt/wrap/v1", &info);
-    WrappedKey { ephemeral: eph_pub, sealed: seal(&kek, aad, &key.0) }
+    WrappedKey { suite: SUITE_X25519, ephemeral: eph_pub, sealed: seal(&kek, aad, &key.0) }
 }
 
 /// Recover a key wrapped for this device.
 pub fn unwrap_key(me: &DeviceSecret, wrapped: &WrappedKey, aad: &[u8]) -> Result<SymKey, Error> {
+    if wrapped.suite != SUITE_X25519 {
+        return Err(Error::Newer(format!("key-wrap suite {}", wrapped.suite)));
+    }
     let shared = me.kex_secret().diffie_hellman(&XPublic::from(wrapped.ephemeral));
     let mut info = Vec::with_capacity(64);
     info.extend_from_slice(&wrapped.ephemeral);
@@ -195,6 +206,15 @@ mod tests {
         assert!(verify(&d.public().sign, b"msh", &sig).is_err());
         let other = DeviceSecret::generate();
         assert!(verify(&other.public().sign, b"msg", &sig).is_err());
+    }
+
+    #[test]
+    fn unknown_suite_is_newer() {
+        let d = DeviceSecret::generate();
+        let mut w = wrap_key(&d.public().kex, &SymKey::random(), b"ad");
+        assert!(unwrap_key(&d, &w, b"ad").is_ok());
+        w.suite = SUITE_X25519_MLKEM768;
+        assert!(matches!(unwrap_key(&d, &w, b"ad"), Err(Error::Newer(_))));
     }
 
     #[test]

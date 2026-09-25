@@ -56,3 +56,29 @@ fn backups_restored_by_the_app() {
         let _ = App::restore(&r.join("identity"), &r.join("data"), sandbox(), &backup::seal_file(b"KTB1", b"kt/backup/v1", p));
     });
 }
+
+/// File names made from list titles (D60): whatever the title, the name stays one plain
+/// file inside the chosen folder, on Windows, Linux and Android alike.
+#[test]
+fn export_file_names() {
+    // Found by this target: a device name near the length cap ("_" pushed it over).
+    let long_device = format!("con.{}", "x".repeat(80));
+    let seeds: Vec<Vec<u8>> = [long_device.as_str(), "Groceries", "../../x", "..\\..\\x", "C:\\Windows", "/etc/passwd", "con.txt", "a\u{0}b", ".  .", "\u{202e}exe.md", "Ünïcödé 日本 🛒"]
+        .iter()
+        .map(|s| s.as_bytes().to_vec())
+        .collect();
+    let dir = std::path::Path::new("exports");
+    kt_fuzz::run("file-stem", &seeds, 1.0, |b| {
+        let title = String::from_utf8_lossy(b);
+        let stem = tk::export::file_stem(&title);
+        let name = format!("{stem}.tasklist");
+        assert!(!stem.is_empty() && stem.chars().count() <= 60, "{title:?} -> {stem:?}");
+        assert!(!stem.starts_with('.') && !stem.ends_with('.') && !stem.ends_with(' '), "{title:?} -> {stem:?}");
+        assert!(stem.chars().all(|c| c.is_alphanumeric() || " -_.()".contains(c)), "{title:?} -> {stem:?}");
+        assert!(!tk::export::is_device_name(&stem), "{title:?} -> {stem:?}");
+        let p = dir.join(&name);
+        assert_eq!(p.parent(), Some(dir), "{title:?} stays in the folder");
+        assert_eq!(p.components().count(), 2, "{title:?} is one plain name");
+        assert_eq!(p.file_name().and_then(|n| n.to_str()), Some(name.as_str()));
+    });
+}

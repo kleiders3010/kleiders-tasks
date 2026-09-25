@@ -140,7 +140,7 @@ fun main(args: Array<String>) {
                 }
             }, onExport = { l ->
                 // Both formats side by side: readable Markdown and the re-importable file.
-                val dialog = FileDialog(null as Frame?, "Export ${l.name}", FileDialog.SAVE).apply { file = "${l.name}.md"; isVisible = true }
+                val dialog = FileDialog(null as Frame?, "Export ${l.name}", FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }
                 val md = dialog.file?.let { File(dialog.directory, it) }
                 if (md != null) {
                     md.writeText(node.exportMarkdown(l.id))

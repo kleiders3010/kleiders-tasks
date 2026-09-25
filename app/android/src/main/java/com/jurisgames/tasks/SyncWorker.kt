@@ -16,6 +16,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         if (!node.settings().syncInBackground) return Result.success() // sync only while open
         app.reportDeviceState()
         node.syncNow()
+        if (inputData.getBoolean(PERIODIC, false)) BackgroundCheck.ran(applicationContext)
         ChangeNotifier.post(applicationContext, node.takeChanges())
         TasksWidget.refresh(applicationContext) // every change redraws the widget
         Reminders.reschedule(applicationContext) // others' reminders arrive by sync too
@@ -23,6 +24,8 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
     }
 
     companion object {
+        const val PERIODIC = "periodic"
+
         /** Leaving the app: send pending changes now (expedited, no notification; DESIGN §8). */
         fun flushNow(ctx: Context) {
             val req = OneTimeWorkRequestBuilder<SyncWorker>().setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST).build()

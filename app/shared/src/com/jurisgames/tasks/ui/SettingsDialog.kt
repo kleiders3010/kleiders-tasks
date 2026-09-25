@@ -1,5 +1,6 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +33,10 @@ private val helpLabels = mapOf(
 fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Unit) {
     var s by remember(node) { mutableStateOf(node.settings()) }
     var error by remember { mutableStateOf("") }
+    val version = remember(node) { node.diagnostics().version }
+    var taps by remember { mutableStateOf(0) }
+    var diagnostics by remember { mutableStateOf(false) }
+    if (diagnostics) DiagnosticsDialog(node, onClose = { diagnostics = false })
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
@@ -60,7 +65,25 @@ fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Uni
                 }
                 s.relayForOthers?.let { v -> SwitchRow("Relay connections for others", v, "set-relay") { s = s.copy(relayForOthers = it) } }
                 s.startWithComputer?.let { v -> SwitchRow("Start with computer", v, "set-autostart") { s = s.copy(startWithComputer = it) } }
+                Text("Appearance", style = MaterialTheme.typography.titleSmall)
+                // Material You: offered where the platform has it (Android 12+).
+                val dynamic = s.dynamicColor
+                if (dynamic != null && LocalDynamicAvailable.current) SwitchRow("Use wallpaper colors", dynamic, "set-dynamic") { s = s.copy(dynamicColor = it) }
+                if (dynamic != true || !LocalDynamicAvailable.current) {
+                    for (t in com.jurisgames.tasks.core.themes()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            RadioButton(s.theme == t.id, { s = s.copy(theme = t.id) }, modifier = Modifier.testTag("theme-" + t.id))
+                            Text(t.name)
+                        }
+                    }
+                }
                 if (error.isNotEmpty()) Text(error, modifier = Modifier.testTag("settingsError"))
+                // Hidden diagnostics (DESIGN §2): tap the version seven times.
+                Text(
+                    "Version $version",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("version").clickable { if (++taps >= 7) { taps = 0; diagnostics = true } },
+                )
             }
         },
     )
