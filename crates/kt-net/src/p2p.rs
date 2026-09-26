@@ -240,14 +240,27 @@ pub struct P2p {
     cfg: P2pConfig,
 }
 
+/// How long a device keeps one network ID.
+pub const ID_PERIOD_DAYS: u64 = 30;
+
+/// The endpoint key for the period containing `now_ms`. Each device's periods start on its
+/// own day (from its secret), so devices don't all change ID at once.
+pub fn endpoint_seed(device_secret: &[u8], now_ms: u64) -> [u8; 32] {
+    let offset = u64::from(kt_engine::crypto::hash("kt/iroh-endpoint-offset/v1", device_secret)[0]) % ID_PERIOD_DAYS;
+    let period = (now_ms / 86_400_000 + offset) / ID_PERIOD_DAYS;
+    kt_engine::crypto::derive(device_secret, "kt/iroh-endpoint/v2", &period.to_le_bytes()).0
+}
+
 impl P2p {
     /// Start the endpoint. Its key is derived from the device secret (one-way, so the
-    /// network ID reveals nothing about the device key).
+    /// network ID reveals nothing about the device key) and the current [`ID_PERIOD_DAYS`]
+    /// period, so an old network ID stops pointing at the device (D23: rotation instead of
+    /// per-group identities). Members learn the new one from sealed whereabouts.
     pub async fn start(syncer: Arc<Syncer>, cfg: P2pConfig) -> Result<Arc<P2p>, String> {
         let seed = {
             let r = syncer.replica();
             let r = r.lock().expect("replica lock");
-            kt_engine::crypto::derive(&r.identity().secret().to_bytes(), "kt/iroh-endpoint/v1", b"").0
+            endpoint_seed(&r.identity().secret().to_bytes(), kt_engine::replica::now_ms())
         };
         let pins: crate::relay_tls::Pins = Default::default();
         let alpns = vec![ALPN.to_vec(), crate::helper::HELPER_ALPN.to_vec(), INVITE_ALPN.to_vec(), BLOB_ALPN.to_vec()];
@@ -713,6 +726,18 @@ impl P2p {
 #[cfg(test)]
 mod fuzz_tests {
     use super::*;
+
+    #[test]
+    fn the_network_id_rotates_by_period() {
+        let secret = [7u8; 64];
+        let day = 86_400_000u64;
+        let t0 = 1_800_000_000_000u64;
+        let ids: Vec<[u8; 32]> = (0..70).map(|d| endpoint_seed(&secret, t0 + d * day)).collect();
+        let changes = ids.windows(2).filter(|w| w[0] != w[1]).count();
+        assert!((2..=3).contains(&changes), "about one change per {ID_PERIOD_DAYS} days: {changes} in 70 days");
+        assert_eq!(endpoint_seed(&secret, t0), endpoint_seed(&secret, t0 + 1000), "stable within a period");
+        assert_ne!(endpoint_seed(&secret, t0), endpoint_seed(&[8u8; 64], t0), "per device");
+    }
 
     #[test]
     fn frames_and_addresses() {

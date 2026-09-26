@@ -1016,7 +1016,9 @@ impl KtNode {
                     helper,
                     // Best-effort public layers (D50), off for loopback tests.
                     n0_relays: options.bind.is_empty(),
-                    n0_dns: options.bind.is_empty(),
+                    // Not published to n0's public DNS (D23): addresses only travel inside
+                    // group-sealed data, so ex-members can't watch when a device is online.
+                    n0_dns: false,
                     ..Default::default()
                 };
                 if let Ok(p) = P2p::start(syncer.clone(), cfg).await {
