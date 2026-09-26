@@ -22,6 +22,12 @@ Current flow is "terrible". Wanted, in this order:
 - **Confirmation**: once the group's name is known, ask **"You are joining {group}, invited by {name}"** (confirm / cancel) before joining completes.
 - Don't state that 3 letters are enough; **prove it** by autofilling.
 
+## Waiting and loading (2026-09-26)
+- Joining can take **up to a minute** on a bad connection (real test: stuck on a flaky Wi-Fi, found the group **immediately** after switching to mobile data). Nobody should feel stuck.
+- A nice **"Finding…" animation**; **playful, rotating loading messages**, not one static line.
+- If it takes **more than ~2 seconds**, add near the loading text: **"This might take a bit, don't close the app!"** (wording to polish).
+- Same approach wherever the network makes people wait (joining, linking a device, an attachment still arriving).
+
 ## Settings (2026-09-26)
 - **No Save button: every change applies immediately** when a field changes (switches, choices, theme). No Cancel either; changes stand as made.
 
