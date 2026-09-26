@@ -9,7 +9,9 @@
 //!     threshold; longer notes are a text attachment, stored as [`BLOB_MARK`] + blob
 //!     reference + newline + a preview, in this one field so every edit, undo and merge
 //!     moves reference and preview together
-//!   - `images` (string): sealed image blobs, one [`kt_engine::blobs::BlobRef`] per line
+//!   - `image:<blob id>` (string, one field per image): "<added ms> <blob ref>" for a
+//!     sealed image blob, so concurrent additions on two devices both survive a merge
+//!     (the first builds' single `images` field, one ref per line, is still read)
 //!
 //! Task order is the tree's fractional-index order. Unknown fields are preserved
 //! (principle 8): the domain never deletes keys it doesn't know.
@@ -89,41 +91,59 @@ pub fn set_list_type(doc: &LoroDoc, t: ListType) -> Result<()> {
 /// Most images per task.
 pub const MAX_IMAGES: usize = 20;
 
-fn images_of(meta: &LoroMap) -> Vec<kt_engine::blobs::BlobRef> {
-    get_str(meta, "images").unwrap_or_default().lines().filter_map(|l| kt_engine::blobs::BlobRef::parse(l.trim()).ok()).collect()
-}
+/// Each image is its own field, `image:<blob id>` = "<added ms> <blob ref>", so two devices
+/// adding images to the same task at the same time both keep theirs when they merge.
+const IMAGE_KEY: &str = "image:";
+/// The first builds kept all refs in one `images` field (one line each): still read.
+const LEGACY_IMAGES: &str = "images";
 
-fn set_images(doc: &LoroDoc, task: &str, images: &[kt_engine::blobs::BlobRef]) -> Result<()> {
-    let n = find(doc, task)?;
-    let meta = tree(doc).get_meta(n).map_err(loro)?;
-    if images.is_empty() {
-        meta.delete("images").map_err(loro)?;
-    } else {
-        let v: Vec<String> = images.iter().map(|r| r.encode()).collect();
-        meta.insert("images", v.join("\n").as_str()).map_err(loro)?;
+fn images_of(meta: &LoroMap) -> Vec<kt_engine::blobs::BlobRef> {
+    let mut out: Vec<(u64, kt_engine::blobs::BlobRef)> = Vec::new();
+    for line in get_str(meta, LEGACY_IMAGES).unwrap_or_default().lines() {
+        if let Ok(r) = kt_engine::blobs::BlobRef::parse(line.trim()) {
+            out.push((0, r));
+        }
     }
-    doc.commit();
-    Ok(())
+    meta.for_each(|k, v| {
+        let (Some(_), ValueOrContainer::Value(LoroValue::String(s))) = (k.strip_prefix(IMAGE_KEY), v) else { return };
+        let (ms, r) = s.split_once(' ').unwrap_or(("0", &s));
+        if let Ok(r) = kt_engine::blobs::BlobRef::parse(r) {
+            out.push((ms.parse().unwrap_or(0), r));
+        }
+    });
+    out.sort_by(|a, b| (a.0, a.1.id).cmp(&(b.0, b.1.id))); // in the order they were added
+    let mut seen = std::collections::HashSet::new();
+    out.into_iter().map(|x| x.1).filter(|r| seen.insert(r.id)).collect()
 }
 
 /// Attach a sealed image blob to a task (the caller stores the blob).
 pub fn add_image(doc: &LoroDoc, task: &str, image: &kt_engine::blobs::BlobRef) -> Result<()> {
     let n = find(doc, task)?;
-    let mut images = images_of(&tree(doc).get_meta(n).map_err(loro)?);
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    let images = images_of(&meta);
     if images.iter().any(|r| r.id == image.id) {
         return Ok(());
     }
     if images.len() >= MAX_IMAGES {
         return Err(Error::Invalid(format!("a task holds at most {MAX_IMAGES} images")));
     }
-    images.push(image.clone());
-    set_images(doc, task, &images)
+    let key = format!("{IMAGE_KEY}{}", hex::encode(image.id));
+    meta.insert(&key, format!("{} {}", now_ms(), image.encode()).as_str()).map_err(loro)?;
+    doc.commit();
+    Ok(())
 }
 
 pub fn remove_image(doc: &LoroDoc, task: &str, id: &kt_engine::blobs::BlobId) -> Result<()> {
     let n = find(doc, task)?;
-    let images: Vec<_> = images_of(&tree(doc).get_meta(n).map_err(loro)?).into_iter().filter(|r| &r.id != id).collect();
-    set_images(doc, task, &images)
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    meta.delete(&format!("{IMAGE_KEY}{}", hex::encode(id))).map_err(loro)?;
+    // An image from the first builds' single field: rewrite that field without it.
+    let legacy: Vec<String> = get_str(&meta, LEGACY_IMAGES).unwrap_or_default().lines().map(str::trim).filter(|l| kt_engine::blobs::BlobRef::parse(l).is_ok_and(|r| &r.id != id)).map(String::from).collect();
+    if meta.get(LEGACY_IMAGES).is_some() {
+        if legacy.is_empty() { meta.delete(LEGACY_IMAGES) } else { meta.insert(LEGACY_IMAGES, legacy.join("\n").as_str()) }.map_err(loro)?;
+    }
+    doc.commit();
+    Ok(())
 }
 
 fn tree(doc: &LoroDoc) -> LoroTree {

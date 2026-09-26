@@ -86,3 +86,39 @@ fn images_on_tasks() {
     app.edit(&l, |d| tk::remove_image(d, &t, &r.id).map_err(Into::into)).unwrap();
     assert!(app.read(&l, tk::tasks).unwrap()[0].images.is_empty());
 }
+
+/// Two devices add a picture to the same task before hearing from each other: both stay.
+#[test]
+fn concurrent_images_both_survive() {
+    let a = LoroDoc::new();
+    a.set_peer_id(1).unwrap();
+    tk::init_list(&a, "Garden").unwrap();
+    let t = tk::add_task(&a, None, "fence").unwrap();
+    let b = LoroDoc::new();
+    b.set_peer_id(2).unwrap();
+    b.import(&a.export(ExportMode::all_updates()).unwrap()).unwrap();
+
+    let (ra, _) = kt_engine::blobs::seal(b"photo from A").unwrap();
+    let (rb, _) = kt_engine::blobs::seal(b"photo from B").unwrap();
+    tk::add_image(&a, &t, &ra).unwrap();
+    tk::add_image(&b, &t, &rb).unwrap();
+    a.import(&b.export(ExportMode::all_updates()).unwrap()).unwrap();
+    b.import(&a.export(ExportMode::all_updates()).unwrap()).unwrap();
+    for d in [&a, &b] {
+        let ids: Vec<_> = tk::tasks(d)[0].images.iter().map(|r| r.id).collect();
+        assert_eq!(ids.len(), 2, "both pictures kept");
+        assert!(ids.contains(&ra.id) && ids.contains(&rb.id));
+    }
+    // Removing one on one device leaves the other everywhere.
+    tk::remove_image(&a, &t, &ra.id).unwrap();
+    b.import(&a.export(ExportMode::all_updates()).unwrap()).unwrap();
+    assert_eq!(tk::tasks(&b)[0].images, vec![rb]);
+
+    // Images from the first builds (one field for all) still read, and can be removed.
+    let (old, _) = kt_engine::blobs::seal(b"older photo").unwrap();
+    let n = a.get_tree("tasks").nodes()[0];
+    a.get_tree("tasks").get_meta(n).unwrap().insert("images", old.encode().as_str()).unwrap();
+    assert!(tk::tasks(&a)[0].images.iter().any(|r| r.id == old.id));
+    tk::remove_image(&a, &t, &old.id).unwrap();
+    assert!(tk::tasks(&a)[0].images.iter().all(|r| r.id != old.id));
+}
