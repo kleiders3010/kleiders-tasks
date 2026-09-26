@@ -773,6 +773,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_first_round_done(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_flush(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_groups(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_import_list_file(
@@ -937,6 +939,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_first_round_done(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Byte
+    external fun uniffi_kt_ffi_fn_method_ktnode_flush(`ptr`: Long,`timeoutMs`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_import_list_file(`ptr`: Long,`groupId`: RustBuffer.ByValue,`file`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1244,6 +1248,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_first_round_done() and 0xFFFF) != 41880) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_flush() and 0xFFFF) != 60194) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_groups() and 0xFFFF) != 61646) {
@@ -2649,6 +2656,13 @@ public interface KtNodeInterface {
      */
     fun `firstRoundDone`(): kotlin.Boolean
     
+    /**
+     * Before the app quits (or goes to the background): push what this device hasn't sent
+     * yet (its changes and open invites) on every layer, for at most `timeout_ms`. Unlike
+     * [`KtNode::sync_now`] it reads nothing and does no upkeep, so it's quick.
+     */
+    fun `flush`(`timeoutMs`: kotlin.ULong): kotlin.UInt
+    
     fun `groups`(): List<GroupItem>
     
     /**
@@ -3193,6 +3207,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_first_round_done(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Before the app quits (or goes to the background): push what this device hasn't sent
+     * yet (its changes and open invites) on every layer, for at most `timeout_ms`. Unlike
+     * [`KtNode::sync_now`] it reads nothing and does no upkeep, so it's quick.
+     */override fun `flush`(`timeoutMs`: kotlin.ULong): kotlin.UInt {
+            return FfiConverterUInt.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_flush(
+        it,
+        
+        FfiConverterULong.lower(`timeoutMs`),_status)
 }
     }
     )

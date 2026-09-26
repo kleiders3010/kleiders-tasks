@@ -106,7 +106,20 @@ fun main(args: Array<String>) {
             val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
             update = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { node.checkUpdate(VERSION_CODE, channel) }.getOrNull() }
         }
-        Tray(
+        // Quitting: gone from view at once; unsent changes and invites go out (10 s at most),
+        // then the process ends. Never a full sync round on the UI thread.
+        var quitting by remember { mutableStateOf(false) }
+        fun quit() {
+            if (quitting) return
+            quitting = true
+            visible = false
+            Thread {
+                node.stopLive()
+                node.flush(10_000uL)
+                java.awt.EventQueue.invokeLater { exitApplication() }
+            }.start()
+        }
+        if (!quitting) Tray(
             state = trayState,
             icon = TrayIcon,
             tooltip = "Tasks",
@@ -115,12 +128,12 @@ fun main(args: Array<String>) {
                 Item("Open Tasks", onClick = { visible = true })
                 Item("Sync now", onClick = { Thread { node.syncNow() }.start() })
                 Separator()
-                Item("Quit", onClick = { node.stopLive(); node.syncNow(); exitApplication() })
+                Item("Quit", onClick = { quit() })
             },
         )
         // Closing the window: stay in the tray and keep syncing, unless background sync is off.
         Window(onCloseRequest = {
-            if (node.settings().syncInBackground) visible = false else { node.stopLive(); node.syncNow(); exitApplication() }
+            if (node.settings().syncInBackground) visible = false else quit()
         }, visible = visible, title = "Tasks") {
             val required = remember(node) {
                 val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"

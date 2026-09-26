@@ -708,6 +708,16 @@ impl KtNode {
         self.app.groups().into_iter().map(|g| (g.group, (if g.group == personal { summary.clone() } else { g.name }, me.clone()))).collect()
     }
 
+    /// Put open invites out on every layer (records for today and ahead).
+    async fn publish_invites(&self) {
+        let names = self.names();
+        let names_fn = |g: &GroupId| names.get(g).cloned().unwrap_or_default();
+        let layers = self.layers();
+        if kt_net::invite_net::publish(&self.net.syncer, &layers, &names_fn).await.records > 0 {
+            kt_net::invite_net::publish_ahead(&self.net.syncer, &layers, &names_fn).await;
+        }
+    }
+
     fn layers(&self) -> InviteLayers {
         InviteLayers {
             p2p: self.net.p2p.clone(),
@@ -839,12 +849,7 @@ impl KtNode {
             let pr = p.sync_round().await;
             peers = pr.peers_reached as u32;
         }
-        let names = self.names();
-        let names_fn = |g: &GroupId| names.get(g).cloned().unwrap_or_default();
-        let layers = self.layers();
-        if kt_net::invite_net::publish(&net.syncer, &layers, &names_fn).await.records > 0 {
-            kt_net::invite_net::publish_ahead(&net.syncer, &layers, &names_fn).await;
-        }
+        self.publish_invites().await;
         let joined = self.app.with(|r| r.settle_joins()).into_iter().map(|p| p.group_name).collect();
         let _ = self.app.settle_account();
         let _ = self.app.publish_names();
@@ -1182,14 +1187,36 @@ impl KtNode {
     }
 
     /// Create an invite to a group (8 words, valid `days`, 1–30).
-    pub fn invite(&self, group_id: String, days: u32) -> Result<InviteInfo, KtError> {
+    pub fn invite(self: Arc<Self>, group_id: String, days: u32) -> Result<InviteInfo, KtError> {
         let g = gid(&group_id)?;
         if g == self.app.personal_group() {
             return Err(fail("your personal group is for your own devices (device linking)"));
         }
         let ms = u64::from(days.clamp(1, 30)) * 86_400_000;
         let (code, expires) = self.app.with(|r| r.create_invite(&g, CodeKind::Invite, ms)).map_err(fail)?;
+        // Out on every layer now, not at the next round: the inviter may close the app
+        // right after showing the code.
+        let me = self.clone();
+        self.rt.spawn(async move { me.publish_invites().await });
         Ok(self.invite_info(&code, CodeKind::Invite, expires))
+    }
+
+    /// Before the app quits (or goes to the background): push what this device hasn't sent
+    /// yet (its changes and open invites) on every layer, for at most `timeout_ms`. Unlike
+    /// [`KtNode::sync_now`] it reads nothing and does no upkeep, so it's quick.
+    pub fn flush(&self, timeout_ms: u64) -> u32 {
+        let net = &self.net;
+        let work = async {
+            let writes = net.syncer.write_round();
+            let direct = async {
+                if let Some(p) = &net.p2p {
+                    p.sync_round().await;
+                }
+            };
+            let (w, _, _) = tokio::join!(writes, direct, self.publish_invites());
+            w.written as u32
+        };
+        self.rt.block_on(async { tokio::time::timeout(Duration::from_millis(timeout_ms), work).await.unwrap_or(0) })
     }
 
     /// Autocomplete one word of a code (3+ letters): the full word, if unique.
