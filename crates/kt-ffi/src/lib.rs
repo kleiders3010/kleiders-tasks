@@ -239,6 +239,8 @@ pub struct ListItem {
     pub vivid: u8,
     /// An icon ID from [`list_icons`], if set.
     pub icon: Option<String>,
+    /// "tasks" or "shopping" (shopping lists show completed items at the bottom).
+    pub list_type: String,
 }
 
 /// A task in display order, with its depth (children follow their parent).
@@ -253,6 +255,8 @@ pub struct TaskItem {
     pub notes: String,
     /// The notes continue in a text attachment.
     pub has_attachment: bool,
+    /// Attached images, by ID (bytes from [`KtNode::task_image`]).
+    pub images: Vec<String>,
     /// A timed reminder (ms since the epoch).
     pub remind_ms: Option<u64>,
 }
@@ -694,6 +698,7 @@ fn gid(s: &str) -> Result<GroupId, KtError> {
 fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
     for t in ts {
         out.push(TaskItem {
+            images: t.images.iter().map(|r| hex::encode(r.id)).collect(),
             id: t.id.clone(),
             parent_id: parent.map(str::to_string),
             depth,
@@ -710,7 +715,8 @@ fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mu
 impl KtNode {
     fn list_item(&self, l: ListInfo) -> ListItem {
         let st = self.app.read(&l, kt_tasks::appearance::list_style).unwrap_or_default();
-        ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name, hue: st.hue, vivid: st.vivid, icon: st.icon }
+        let list_type = self.app.read(&l, kt_tasks::list_type).map(|t| t.as_str()).unwrap_or("tasks").to_string();
+        ListItem { id: l.doc.to_hex(), group_id: l.group.to_hex(), name: l.name, group_name: l.group_name, hue: st.hue, vivid: st.vivid, icon: st.icon, list_type }
     }
 
     fn list(&self, list_id: &str) -> Result<ListInfo, KtError> {
@@ -1246,6 +1252,52 @@ impl KtNode {
     pub fn rename_task(&self, list_id: String, task_id: String, title: String) -> Result<(), KtError> {
         let l = self.list(&list_id)?;
         self.app.edit(&l, |d| kt_tasks::set_title(d, &task_id, &title)).map_err(fail)
+    }
+
+    /// Move a task under `parent_id` (or the top level) to position `index` among its new
+    /// siblings. The order is shared with everyone in the list.
+    pub fn move_task(&self, list_id: String, task_id: String, parent_id: Option<String>, index: u32) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::move_task(d, &task_id, parent_id.as_deref(), index as usize)).map_err(fail)
+    }
+
+    /// Move a task right before (or after) `other_id`, under its parent (a drop in the list).
+    pub fn move_task_next_to(&self, list_id: String, task_id: String, other_id: String, after: bool) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::move_task_next_to(d, &task_id, &other_id, after)).map_err(fail)
+    }
+
+    /// "tasks" or "shopping" for everyone in the list.
+    pub fn set_list_type(&self, list_id: String, list_type: String) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        let t = match list_type.as_str() {
+            "tasks" => kt_tasks::ListType::Tasks,
+            "shopping" => kt_tasks::ListType::Shopping,
+            _ => return Err(fail("unknown list type")),
+        };
+        self.app.edit(&l, |d| kt_tasks::set_list_type(d, t)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Attach an image (the app compresses it first, e.g. JPEG). Returns its ID.
+    pub fn add_image(&self, list_id: String, task_id: String, bytes: Vec<u8>) -> Result<String, KtError> {
+        let l = self.list(&list_id)?;
+        let r = self.app.add_image(&l, &task_id, &bytes).map_err(fail)?;
+        Ok(hex::encode(r.id))
+    }
+
+    /// An image's bytes, or nothing while it's still on its way to this device.
+    pub fn task_image(&self, list_id: String, image_id: String) -> Result<Option<Vec<u8>>, KtError> {
+        let l = self.list(&list_id)?;
+        let id: [u8; 32] = hex::decode(&image_id).ok().and_then(|v| v.try_into().ok()).ok_or_else(|| fail("bad image id"))?;
+        self.app.image(&l, &id).map_err(fail)
+    }
+
+    pub fn remove_image(&self, list_id: String, task_id: String, image_id: String) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        let id: [u8; 32] = hex::decode(&image_id).ok().and_then(|v| v.try_into().ok()).ok_or_else(|| fail("bad image id"))?;
+        self.app.edit(&l, |d| kt_tasks::remove_image(d, &task_id, &id)).map_err(fail)
     }
 
     pub fn delete_task(&self, list_id: String, task_id: String) -> Result<(), KtError> {

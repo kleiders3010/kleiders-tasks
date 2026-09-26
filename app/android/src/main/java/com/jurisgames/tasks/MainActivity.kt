@@ -32,6 +32,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             var node by remember { mutableStateOf(app.node) }
             val scope = rememberCoroutineScope()
+            // Images on tasks: the system photo picker (no storage permission), shrunk first.
+            var onPicked by remember { mutableStateOf<((ByteArray) -> Unit)?>(null) }
+            val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                val done = onPicked
+                onPicked = null
+                if (uri != null && done != null) scope.launch {
+                    val bytes = withContext(Dispatchers.IO) { Images.compress(this@MainActivity, uri) }
+                    if (bytes != null) done(bytes) else Toast.makeText(this@MainActivity, "Couldn't read that image", Toast.LENGTH_LONG).show()
+                }
+            }
             val importList = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) scope.launch {
                     val msg = try {
@@ -57,7 +67,10 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-            TasksApp(node, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
+            TasksApp(node, onPickImage = { done ->
+                onPicked = done
+                pickImage.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }, decodeImage = Images::decode, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
             }, update = update.value, required = required.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))

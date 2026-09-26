@@ -139,7 +139,13 @@ fun main(args: Array<String>) {
                 val channel = if (System.getProperty("os.name").lowercase().contains("win")) "windows" else "linux"
                 runCatching { node.requiredUpdate(VERSION_CODE, channel) }.getOrNull()
             }
-            TasksApp(node, required = required, onImport = {
+            TasksApp(node, required = required, decodeImage = Images::decode, onPickImage = { done ->
+                val dialog = FileDialog(null as Frame?, "Add an image", FileDialog.LOAD).apply {
+                    setFilenameFilter { _, name -> name.lowercase().substringAfterLast('.') in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp") }
+                    isVisible = true
+                }
+                dialog.file?.let { Images.compress(File(dialog.directory, it)) }?.let(done)
+            }, onImport = {
                 val dialog = FileDialog(null as Frame?, "Import a list file", FileDialog.LOAD).apply { file = "*.tasklist"; isVisible = true }
                 dialog.file?.let { f ->
                     runCatching { node.importListFile(null, File(dialog.directory, f).readBytes()) }

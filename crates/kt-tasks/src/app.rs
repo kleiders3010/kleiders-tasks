@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result, TaskSemantics};
 
 mod attachments;
-pub use attachments::NotesText;
+pub use attachments::{NotesText, MAX_IMAGE_BYTES};
 mod linking;
 mod notify;
 mod undo;

@@ -745,6 +745,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktlistener_on_change(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_add_image(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_add_task(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_check_update(
@@ -805,6 +807,10 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_measure_extra_endpoints(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_move_task(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_move_task_next_to(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_network_changed(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_newer_version_seen(
@@ -816,6 +822,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_recent_links(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_relay_stats(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_remove_image(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device(
     ): Int
@@ -835,6 +843,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_list_style(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_list_type(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_notes(
@@ -852,6 +862,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_sync_now(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_take_changes(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_task_image(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_tasks(
     ): Int
@@ -911,6 +923,8 @@ internal object UniffiLib {
     ): Long
     external fun uniffi_kt_ffi_fn_constructor_ktnode_open_restoring(`identityDir`: RustBuffer.ByValue,`dataDir`: RustBuffer.ByValue,`workerPath`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,`backup`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Long
+    external fun uniffi_kt_ffi_fn_method_ktnode_add_image(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`bytes`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_add_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,`parentId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_check_update(`ptr`: Long,`currentVersionCode`: Long,`channel`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -971,6 +985,10 @@ internal object UniffiLib {
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_measure_extra_endpoints(`ptr`: Long,`extra`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_kt_ffi_fn_method_ktnode_move_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`parentId`: RustBuffer.ByValue,`index`: Int,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_move_task_next_to(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`otherId`: RustBuffer.ByValue,`after`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_network_changed(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_newer_version_seen(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -983,6 +1001,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_relay_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_remove_image(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`imageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_remove_replaced_device(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_rename_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1001,6 +1021,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_list_style(`ptr`: Long,`listId`: RustBuffer.ByValue,`hue`: RustBuffer.ByValue,`vivid`: Byte,`icon`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_list_type(`ptr`: Long,`listId`: RustBuffer.ByValue,`listType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_notes(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1018,6 +1040,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_sync_now(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_take_changes(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_task_image(`ptr`: Long,`listId`: RustBuffer.ByValue,`imageId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_tasks(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1208,6 +1232,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktlistener_on_change() and 0xFFFF) != 2985) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_add_image() and 0xFFFF) != 34304) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_add_task() and 0xFFFF) != 41622) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1298,6 +1325,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_measure_extra_endpoints() and 0xFFFF) != 24753) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_move_task() and 0xFFFF) != 48996) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_move_task_next_to() and 0xFFFF) != 13524) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_network_changed() and 0xFFFF) != 26352) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1314,6 +1347,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_relay_stats() and 0xFFFF) != 64491) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_remove_image() and 0xFFFF) != 8286) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device() and 0xFFFF) != 49607) {
@@ -1343,6 +1379,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_list_style() and 0xFFFF) != 38267) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_list_type() and 0xFFFF) != 49964) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1368,6 +1407,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_take_changes() and 0xFFFF) != 24321) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_task_image() and 0xFFFF) != 19119) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_tasks() and 0xFFFF) != 31507) {
@@ -2601,6 +2643,11 @@ public object FfiConverterTypeKtListener: FfiConverter<KtListener, Long> {
 
 public interface KtNodeInterface {
     
+    /**
+     * Attach an image (the app compresses it first, e.g. JPEG). Returns its ID.
+     */
+    fun `addImage`(`listId`: kotlin.String, `taskId`: kotlin.String, `bytes`: kotlin.ByteArray): kotlin.String
+    
     fun `addTask`(`listId`: kotlin.String, `title`: kotlin.String, `parentId`: kotlin.String?): kotlin.String
     
     /**
@@ -2739,6 +2786,17 @@ public interface KtNodeInterface {
     fun `measureExtraEndpoints`(`extra`: kotlin.UInt): kotlin.UInt
     
     /**
+     * Move a task under `parent_id` (or the top level) to position `index` among its new
+     * siblings. The order is shared with everyone in the list.
+     */
+    fun `moveTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `parentId`: kotlin.String?, `index`: kotlin.UInt)
+    
+    /**
+     * Move a task right before (or after) `other_id`, under its parent (a drop in the list).
+     */
+    fun `moveTaskNextTo`(`listId`: kotlin.String, `taskId`: kotlin.String, `otherId`: kotlin.String, `after`: kotlin.Boolean)
+    
+    /**
      * The platform saw the network change (Wi-Fi to mobile, a new network, back online):
      * P2P re-checks its paths now instead of when its timers notice.
      */
@@ -2769,6 +2827,8 @@ public interface KtNodeInterface {
      * Relay health (diagnostics).
      */
     fun `relayStats`(): List<RelayStat>
+    
+    fun `removeImage`(`listId`: kotlin.String, `taskId`: kotlin.String, `imageId`: kotlin.String)
     
     /**
      * Remove the previous device from those groups (their keys rotate).
@@ -2809,6 +2869,11 @@ public interface KtNodeInterface {
      * Set a list's color and icon (shared with everyone in the list's group).
      */
     fun `setListStyle`(`listId`: kotlin.String, `hue`: kotlin.Double?, `vivid`: kotlin.UByte, `icon`: kotlin.String?)
+    
+    /**
+     * "tasks" or "shopping" for everyone in the list.
+     */
+    fun `setListType`(`listId`: kotlin.String, `listType`: kotlin.String)
     
     fun `setListener`(`listener`: KtListener)
     
@@ -2853,6 +2918,11 @@ public interface KtNodeInterface {
      * Changes older than a few days are dropped; none with "Notify me" off.
      */
     fun `takeChanges`(): List<ChangeItem>
+    
+    /**
+     * An image's bytes, or nothing while it's still on its way to this device.
+     */
+    fun `taskImage`(`listId`: kotlin.String, `imageId`: kotlin.String): kotlin.ByteArray?
     
     fun `tasks`(`listId`: kotlin.String): List<TaskItem>
     
@@ -2985,6 +3055,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
             UniffiLib.uniffi_kt_ffi_fn_clone_ktnode(handle, status)
         }
     }
+
+    
+    /**
+     * Attach an image (the app compresses it first, e.g. JPEG). Returns its ID.
+     */
+    @Throws(KtException::class)override fun `addImage`(`listId`: kotlin.String, `taskId`: kotlin.String, `bytes`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_add_image(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterByteArray.lower(`bytes`),_status)
+}
+    }
+    )
+    }
+    
 
     
     @Throws(KtException::class)override fun `addTask`(`listId`: kotlin.String, `title`: kotlin.String, `parentId`: kotlin.String?): kotlin.String {
@@ -3485,6 +3575,47 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
+     * Move a task under `parent_id` (or the top level) to position `index` among its new
+     * siblings. The order is shared with everyone in the list.
+     */
+    @Throws(KtException::class)override fun `moveTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `parentId`: kotlin.String?, `index`: kotlin.UInt)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_move_task(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterOptionalString.lower(`parentId`),
+        FfiConverterUInt.lower(`index`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Move a task right before (or after) `other_id`, under its parent (a drop in the list).
+     */
+    @Throws(KtException::class)override fun `moveTaskNextTo`(`listId`: kotlin.String, `taskId`: kotlin.String, `otherId`: kotlin.String, `after`: kotlin.Boolean)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_move_task_next_to(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterString.lower(`otherId`),
+        FfiConverterBoolean.lower(`after`),_status)
+}
+    }
+    
+    
+
+    
+    /**
      * The platform saw the network change (Wi-Fi to mobile, a new network, back online):
      * P2P re-checks its paths now instead of when its timers notice.
      */override fun `networkChanged`()
@@ -3583,6 +3714,22 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     )
     }
+    
+
+    
+    @Throws(KtException::class)override fun `removeImage`(`listId`: kotlin.String, `taskId`: kotlin.String, `imageId`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_remove_image(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterString.lower(`imageId`),_status)
+}
+    }
+    
     
 
     
@@ -3740,6 +3887,24 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
     
 
+    
+    /**
+     * "tasks" or "shopping" for everyone in the list.
+     */
+    @Throws(KtException::class)override fun `setListType`(`listId`: kotlin.String, `listType`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_list_type(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`listType`),_status)
+}
+    }
+    
+    
+
     override fun `setListener`(`listener`: KtListener)
         = 
     callWithHandle {
@@ -3882,6 +4047,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_take_changes(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * An image's bytes, or nothing while it's still on its way to this device.
+     */
+    @Throws(KtException::class)override fun `taskImage`(`listId`: kotlin.String, `imageId`: kotlin.String): kotlin.ByteArray? {
+            return FfiConverterOptionalByteArray.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_task_image(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`imageId`),_status)
 }
     }
     )
@@ -4657,6 +4841,11 @@ data class ListItem (
      * An icon ID from [`list_icons`], if set.
      */
     var `icon`: kotlin.String?
+    , 
+    /**
+     * "tasks" or "shopping" (shopping lists show completed items at the bottom).
+     */
+    var `listType`: kotlin.String
     
 ){
     
@@ -4680,6 +4869,7 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterOptionalDouble.read(buf),
             FfiConverterUByte.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterString.read(buf),
         )
     }
 
@@ -4690,7 +4880,8 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterString.allocationSize(value.`groupName`) +
             FfiConverterOptionalDouble.allocationSize(value.`hue`) +
             FfiConverterUByte.allocationSize(value.`vivid`) +
-            FfiConverterOptionalString.allocationSize(value.`icon`)
+            FfiConverterOptionalString.allocationSize(value.`icon`) +
+            FfiConverterString.allocationSize(value.`listType`)
     )
 
     override fun write(value: ListItem, buf: ByteBuffer) {
@@ -4701,6 +4892,7 @@ public object FfiConverterTypeListItem: FfiConverterRustBuffer<ListItem> {
             FfiConverterOptionalDouble.write(value.`hue`, buf)
             FfiConverterUByte.write(value.`vivid`, buf)
             FfiConverterOptionalString.write(value.`icon`, buf)
+            FfiConverterString.write(value.`listType`, buf)
     }
 }
 
@@ -5402,6 +5594,11 @@ data class TaskItem (
     var `hasAttachment`: kotlin.Boolean
     , 
     /**
+     * Attached images, by ID (bytes from [`KtNode::task_image`]).
+     */
+    var `images`: List<kotlin.String>
+    , 
+    /**
      * A timed reminder (ms since the epoch).
      */
     var `remindMs`: kotlin.ULong?
@@ -5428,6 +5625,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterBoolean.read(buf),
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterSequenceString.read(buf),
             FfiConverterOptionalULong.read(buf),
         )
     }
@@ -5440,6 +5638,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterBoolean.allocationSize(value.`done`) +
             FfiConverterString.allocationSize(value.`notes`) +
             FfiConverterBoolean.allocationSize(value.`hasAttachment`) +
+            FfiConverterSequenceString.allocationSize(value.`images`) +
             FfiConverterOptionalULong.allocationSize(value.`remindMs`)
     )
 
@@ -5451,6 +5650,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterBoolean.write(value.`done`, buf)
             FfiConverterString.write(value.`notes`, buf)
             FfiConverterBoolean.write(value.`hasAttachment`, buf)
+            FfiConverterSequenceString.write(value.`images`, buf)
             FfiConverterOptionalULong.write(value.`remindMs`, buf)
     }
 }
@@ -5913,6 +6113,38 @@ public object FfiConverterOptionalString: FfiConverterRustBuffer<kotlin.String?>
         } else {
             buf.put(1)
             FfiConverterString.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteArray?> {
+    override fun read(buf: ByteBuffer): kotlin.ByteArray? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterByteArray.read(buf)
+    }
+
+    override fun allocationSize(value: kotlin.ByteArray?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterByteArray.allocationSize(value)
+        }
+    }
+
+    override fun write(value: kotlin.ByteArray?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterByteArray.write(value, buf)
         }
     }
 }

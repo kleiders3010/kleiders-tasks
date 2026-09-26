@@ -1,13 +1,15 @@
 //! kt-tasks: the task-list domain on top of kt-engine (thin, app-specific).
 //!
 //! Schema of one list document:
-//! - map `meta`: `name` (string), `hue` (i64 0–360 or absent), `icon` (string or absent)
+//! - map `meta`: `name` (string), `hue` (i64 0–360 or absent), `icon` (string or absent),
+//!   `type` ("tasks" or "shopping"; anything else reads as "tasks")
 //! - tree `tasks`: each node's meta map holds
 //!   - `id`: stable task ID (random hex); survives document epochs, which recreate tree nodes
 //!   - `title` (string), `done` (bool), `notes` (string): inline text up to the attachment
 //!     threshold; longer notes are a text attachment, stored as [`BLOB_MARK`] + blob
 //!     reference + newline + a preview, in this one field so every edit, undo and merge
 //!     moves reference and preview together
+//!   - `images` (string): sealed image blobs, one [`kt_engine::blobs::BlobRef`] per line
 //!
 //! Task order is the tree's fractional-index order. Unknown fields are preserved
 //! (principle 8): the domain never deletes keys it doesn't know.
@@ -47,7 +49,81 @@ pub struct TaskView {
     pub notes: String,
     /// A timed reminder (ms since the epoch), shared like any field.
     pub remind_ms: Option<u64>,
+    /// Attached images (sealed blobs; the bytes travel like text attachments).
+    pub images: Vec<kt_engine::blobs::BlobRef>,
     pub children: Vec<TaskView>,
+}
+
+/// How a list is shown. Both behave the same underneath; the type is shared with members.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ListType {
+    Tasks,
+    /// Completed items drop to the bottom (the apps do it a moment after checking).
+    Shopping,
+}
+
+impl ListType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ListType::Tasks => "tasks",
+            ListType::Shopping => "shopping",
+        }
+    }
+
+    /// Unknown values (a newer version's types) read as a plain task list.
+    pub fn parse(s: &str) -> ListType {
+        if s == "shopping" { ListType::Shopping } else { ListType::Tasks }
+    }
+}
+
+pub fn list_type(doc: &LoroDoc) -> ListType {
+    ListType::parse(&get_str(&doc.get_map("meta"), "type").unwrap_or_default())
+}
+
+pub fn set_list_type(doc: &LoroDoc, t: ListType) -> Result<()> {
+    doc.get_map("meta").insert("type", t.as_str()).map_err(loro)?;
+    doc.commit();
+    Ok(())
+}
+
+/// Most images per task.
+pub const MAX_IMAGES: usize = 20;
+
+fn images_of(meta: &LoroMap) -> Vec<kt_engine::blobs::BlobRef> {
+    get_str(meta, "images").unwrap_or_default().lines().filter_map(|l| kt_engine::blobs::BlobRef::parse(l.trim()).ok()).collect()
+}
+
+fn set_images(doc: &LoroDoc, task: &str, images: &[kt_engine::blobs::BlobRef]) -> Result<()> {
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    if images.is_empty() {
+        meta.delete("images").map_err(loro)?;
+    } else {
+        let v: Vec<String> = images.iter().map(|r| r.encode()).collect();
+        meta.insert("images", v.join("\n").as_str()).map_err(loro)?;
+    }
+    doc.commit();
+    Ok(())
+}
+
+/// Attach a sealed image blob to a task (the caller stores the blob).
+pub fn add_image(doc: &LoroDoc, task: &str, image: &kt_engine::blobs::BlobRef) -> Result<()> {
+    let n = find(doc, task)?;
+    let mut images = images_of(&tree(doc).get_meta(n).map_err(loro)?);
+    if images.iter().any(|r| r.id == image.id) {
+        return Ok(());
+    }
+    if images.len() >= MAX_IMAGES {
+        return Err(Error::Invalid(format!("a task holds at most {MAX_IMAGES} images")));
+    }
+    images.push(image.clone());
+    set_images(doc, task, &images)
+}
+
+pub fn remove_image(doc: &LoroDoc, task: &str, id: &kt_engine::blobs::BlobId) -> Result<()> {
+    let n = find(doc, task)?;
+    let images: Vec<_> = images_of(&tree(doc).get_meta(n).map_err(loro)?).into_iter().filter(|r| &r.id != id).collect();
+    set_images(doc, task, &images)
 }
 
 fn tree(doc: &LoroDoc) -> LoroTree {
@@ -249,6 +325,20 @@ pub fn move_task(doc: &LoroDoc, task: &str, parent: Option<&str>, index: usize) 
     Ok(())
 }
 
+/// Move a task right before (or after) another one, under that one's parent: what a drop in
+/// a list means, whatever the list shows in between (a shopping list hides checked items at
+/// the bottom).
+pub fn move_task_next_to(doc: &LoroDoc, task: &str, other: &str, after: bool) -> Result<()> {
+    let (n, o) = (find(doc, task)?, find(doc, other)?);
+    if n == o {
+        return Ok(());
+    }
+    let t = tree(doc);
+    if after { t.mov_after(n, o) } else { t.mov_before(n, o) }.map_err(loro)?;
+    doc.commit();
+    Ok(())
+}
+
 fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
     let meta = t.get_meta(n).ok()?;
     let children = t.children(Some(n)).unwrap_or_default().into_iter().filter_map(|c| view_of(t, c)).collect();
@@ -261,6 +351,7 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
         title: get_str(&meta, "title").unwrap_or_default(),
         done: get_bool(&meta, "done").unwrap_or(false),
         notes: get_str(&meta, "notes").unwrap_or_default(),
+        images: images_of(&meta),
         children,
     })
 }

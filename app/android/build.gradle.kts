@@ -111,6 +111,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.work:work-runtime-ktx:2.12.0")
     implementation("androidx.glance:glance-appwidget:1.2.0")
+    // Drag to reorder tasks (Apache-2.0; Compose Multiplatform).
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
     // The code scanner brings an old Fragment that breaks registerForActivityResult (lint).
     implementation("androidx.fragment:fragment-ktx:1.9.1")
     // QR scanning: Google's code scanner needs no camera permission; foss scans with the camera.

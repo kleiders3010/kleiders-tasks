@@ -56,6 +56,10 @@ fun TasksApp(
     onImport: (() -> Unit)? = null,
     update: com.jurisgames.tasks.core.UpdateItem? = null,
     onUpdate: ((String) -> Unit)? = null,
+    /** Pick an image (gallery / file) and hand over its compressed bytes. */
+    onPickImage: ((onPicked: (ByteArray) -> Unit) -> Unit)? = null,
+    /** Turn image bytes into a bitmap (per platform). */
+    decodeImage: ((ByteArray) -> androidx.compose.ui.graphics.ImageBitmap?)? = null,
     /** Why this build must update (signed operator manifest only, never peer data). */
     required: String? = null,
     /** Android 12+: wallpaper colors (Material You), for light or dark. */
@@ -72,7 +76,7 @@ fun TasksApp(
         onDispose { }
     }
     var open by remember { mutableStateOf<ListItem?>(null) }
-    AppTheme(node, version, dynamicScheme) {
+    AppTheme(node, version, dynamicScheme) { androidx.compose.runtime.CompositionLocalProvider(LocalImageDecoder provides decodeImage) {
         Surface(Modifier.fillMaxSize()) {
             val current = open
             if (current == null) {
@@ -93,10 +97,10 @@ fun TasksApp(
                 }
                 ListsScreen(node, version, onRestore, onShare, openedCode, onSettings, onScan, onImport, onChanged = { version++ }, onOpen = { open = it })
             } else {
-                TasksScreen(node, current, version, onExport, onChanged = { version++ }, onBack = { open = null })
+                TasksScreen(node, current, version, onExport, onPickImage, onChanged = { version++ }, onBack = { open = null })
             }
         }
-    }
+    } }
 }
 
 @Composable
@@ -220,6 +224,12 @@ private fun ListsScreen(
                                 node.createList(g.id, n.trim()); n = ""; onChanged()
                             }
                         }, modifier = Modifier.testTag("addlist-" + g.name)) { Text("Add") }
+                        // A shopping list (placeholder button, UX pending).
+                        TextButton(onClick = {
+                            if (n.isNotBlank()) {
+                                val l = node.createList(g.id, n.trim()); node.setListType(l.id, "shopping"); n = ""; onChanged()
+                            }
+                        }, modifier = Modifier.testTag("addshopping-" + g.name)) { Text("🛒") }
                     }
                 }
             }
@@ -359,7 +369,7 @@ private fun ListsScreen(
 }
 
 @Composable
-private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((ListItem) -> Unit)?, onChanged: () -> Unit, onBack: () -> Unit) {
+private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((ListItem) -> Unit)?, onPickImage: ((onPicked: (ByteArray) -> Unit) -> Unit)?, onChanged: () -> Unit, onBack: () -> Unit) {
     var undoOpen by remember { mutableStateOf(false) }
     if (undoOpen) UndoDialog(node, list, onDone = { onChanged() }, onClose = { undoOpen = false })
     var styleOpen by remember { mutableStateOf(false) }
@@ -379,20 +389,15 @@ private fun TasksScreen(node: KtNode, list: ListItem, version: Int, onExport: ((
             if (onExport != null) TextButton(onClick = { onExport(list) }, modifier = Modifier.testTag("export")) { Text("Export") }
             TextButton(onClick = { undoOpen = true }, modifier = Modifier.testTag("undoOpen")) { Text("Undo…") }
         }
-        LazyColumn(Modifier.weight(1f)) {
-            items(tasks, key = { it.id }) { t ->
-                Row(Modifier.fillMaxWidth().padding(start = (t.depth.toInt() * 24).dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(t.done, { node.setDone(list.id, t.id, it); onChanged() }, modifier = Modifier.testTag("done-" + t.title))
-                    Text(t.title, Modifier.weight(1f).testTag("task-" + t.title))
-                    TextButton(onClick = { notesFor = t.id }, modifier = Modifier.testTag("notes-" + t.title)) {
-                        Text(if (t.notes.isNotEmpty() || t.hasAttachment) "📝" else "🗒")
-                    }
-                    ReminderButton(node, list.id, t.id, t.remindMs, onChanged)
-                    TextButton(onClick = { node.addTask(list.id, "New subtask", t.id); onChanged() }) { Text("+") }
-                    TextButton(onClick = { node.deleteTask(list.id, t.id); onChanged() }, modifier = Modifier.testTag("delete-" + t.title)) { Text("✕") }
-                }
-            }
+        // Shopping list or task list: shared with everyone in the list (placeholder switch).
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Shopping list", Modifier.weight(1f))
+            androidx.compose.material3.Switch(shown.listType == "shopping", { on ->
+                node.setListType(list.id, if (on) "shopping" else "tasks")
+                onChanged()
+            }, modifier = Modifier.testTag("shoppingSwitch"))
         }
+        TaskRows(node, list.id, tasks, shown.listType == "shopping", version, onPickImage, onNotes = { notesFor = it }, onChanged = onChanged, modifier = Modifier.weight(1f).testTag("tasks"))
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(title, { title = it }, placeholder = { Text("Add a task") }, modifier = Modifier.weight(1f).testTag("newtask"))
             Spacer(Modifier.width(8.dp))

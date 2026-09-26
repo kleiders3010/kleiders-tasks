@@ -12,6 +12,8 @@ use crate::{Error, Notes, Result};
 
 /// Unreferenced blobs are kept this long: undo and history can bring a reference back.
 pub const BLOB_KEEP_MS: u64 = 30 * 86_400_000;
+/// Largest image accepted (the apps shrink photos well below this first).
+pub const MAX_IMAGE_BYTES: usize = 3 * 1024 * 1024;
 /// Attachment bytes a backup carries at most (Android backup allows 25 MB in all).
 pub const BACKUP_BLOB_BYTES: usize = 16 * 1024 * 1024;
 
@@ -75,6 +77,29 @@ impl App {
         out
     }
 
+    /// Attach an image (already compressed by the app, e.g. JPEG) to a task.
+    pub fn add_image(&self, list: &ListInfo, task: &str, bytes: &[u8]) -> Result<blobs::BlobRef> {
+        if bytes.len() > MAX_IMAGE_BYTES {
+            return Err(Error::Invalid(format!("images up to {} MB", MAX_IMAGE_BYTES / (1024 * 1024))));
+        }
+        let (r, sealed) = blobs::seal(bytes).map_err(eng)?;
+        self.blob_store().put(&sealed).map_err(eng)?;
+        self.edit(list, |d| crate::add_image(d, task, &r))?;
+        Ok(r)
+    }
+
+    /// An image's bytes, if this device has it yet (it may still be on its way).
+    pub fn image(&self, list: &ListInfo, id: &BlobId) -> Result<Option<Vec<u8>>> {
+        let r = self.read(list, |d| {
+            fn find(ts: &[crate::TaskView], id: &BlobId) -> Option<blobs::BlobRef> {
+                ts.iter().find_map(|t| t.images.iter().find(|r| &r.id == id).cloned().or_else(|| find(&t.children, id)))
+            }
+            find(&crate::tasks(d), id)
+        })?;
+        let Some(r) = r else { return Err(Error::NotFound) };
+        Ok(self.blob_store().get(&r.id).and_then(|b| blobs::open(&r, &b).ok()))
+    }
+
     /// Every blob the lists on this device refer to.
     pub fn referenced_blobs(&self) -> HashSet<BlobId> {
         self.blobs_of(&self.lists())
@@ -89,6 +114,7 @@ impl App {
                         if let Some(b) = t.attachment() {
                             out.insert(b.id);
                         }
+                        out.extend(t.images.iter().map(|r| r.id));
                         walk(&t.children, out);
                     }
                 }

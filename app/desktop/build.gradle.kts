@@ -10,6 +10,8 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation("net.java.dev.jna:jna:5.19.1")
+    // Drag to reorder tasks (Apache-2.0; Compose Multiplatform).
+    implementation("sh.calvin.reorderable:reorderable:3.1.0")
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.compose.ui:ui-test-junit4:1.12.1")
     testImplementation("junit:junit:4.13.2")
