@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         opened.value = intent?.dataString
+        QrScanner.prepare(this) // play: fetch Google's scanner module before anyone taps Scan
         setContent {
             var node by remember { mutableStateOf(app.node) }
             val scope = rememberCoroutineScope()
