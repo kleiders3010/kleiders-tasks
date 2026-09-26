@@ -425,6 +425,9 @@ pub struct JoinResult {
     pub inviter_name: String,
     /// True if already in; false if waiting for a member's device to let us in.
     pub joined: bool,
+    /// Not found yet: this device keeps looking (in the background too) and says when it's
+    /// in. The names are empty until then.
+    pub still_looking: bool,
 }
 
 #[derive(Clone, Debug, uniffi::Record)]
@@ -433,8 +436,24 @@ pub struct SyncReport {
     pub received: u32,
     pub rejected: u32,
     pub peers_reached: u32,
+    /// Groups this device got into this round (a join that was waiting, or a code that was
+    /// still being looked for).
     pub joined_groups: Vec<String>,
+    /// Codes given up on this round: never found within [`LOOKUP_FOR`].
+    pub lookups_given_up: u32,
 }
+
+/// A code the device couldn't find the invite for yet (terrible connection, or the inviter
+/// not online yet): rounds keep looking, in the background too.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct PendingLookup {
+    /// As entered: words or a link (links may carry the inviter's addresses).
+    entered: String,
+    started_ms: u64,
+}
+
+/// How long a code is looked for before giving up.
+const LOOKUP_FOR: Duration = Duration::from_secs(24 * 3600);
 
 /// One relay's health as this device sees it (hidden diagnostics screen).
 #[derive(Clone, Debug, uniffi::Record)]
@@ -708,6 +727,51 @@ impl KtNode {
         self.app.groups().into_iter().map(|g| (g.group, (if g.group == personal { summary.clone() } else { g.name }, me.clone()))).collect()
     }
 
+    fn pending_lookups(&self) -> Vec<PendingLookup> {
+        std::fs::read(self.data_dir.join("pending_lookups")).ok().and_then(|b| kt_engine::wire::decode::<Vec<PendingLookup>>(*b"PL", 1, &b).ok()).map(|x| x.1).unwrap_or_default()
+    }
+
+    fn save_pending_lookups(&self, v: &[PendingLookup]) {
+        if let Ok(b) = kt_engine::wire::encode(*b"PL", 1, &v) {
+            let _ = kt_engine::storage::write_atomic(&self.data_dir.join("pending_lookups"), &b);
+        }
+    }
+
+    fn add_pending_lookup(&self, entered: &str) {
+        let mut v = self.pending_lookups();
+        if !v.iter().any(|p| p.entered == entered) {
+            v.push(PendingLookup { entered: entered.to_string(), started_ms: kt_engine::replica::now_ms() });
+            self.save_pending_lookups(&v);
+        }
+    }
+
+    /// Look again for every code not found yet. Returns (groups joined or asked to join,
+    /// codes given up on).
+    async fn retry_lookups(&self) -> (Vec<String>, u32) {
+        let pending = self.pending_lookups();
+        if pending.is_empty() {
+            return (Vec::new(), 0);
+        }
+        let layers = self.layers();
+        let (mut keep, mut joined, mut gave_up) = (Vec::new(), Vec::new(), 0);
+        for p in pending {
+            let Ok(shared) = kt_net::invite_net::parse_shared(&p.entered) else { continue };
+            let direct: Vec<_> = shared.direct.into_iter().collect();
+            match kt_net::invite_net::fetch(&layers, &shared.code, CodeKind::Invite, &direct, Duration::from_millis(0)).await {
+                Some((rec, _)) => match kt_net::invite_net::join(&self.net.syncer, self.net.p2p.as_ref(), &rec).await {
+                    Ok(true) => joined.push(rec.group_name),
+                    // Asked to join: the pending join reports it once a member lets us in.
+                    Ok(false) => {}
+                    Err(_) => keep.push(p),
+                },
+                None if kt_engine::replica::now_ms().saturating_sub(p.started_ms) > LOOKUP_FOR.as_millis() as u64 => gave_up += 1,
+                None => keep.push(p),
+            }
+        }
+        self.save_pending_lookups(&keep);
+        (joined, gave_up)
+    }
+
     /// Put open invites out on every layer (records for today and ahead).
     async fn publish_invites(&self) {
         let names = self.names();
@@ -850,7 +914,8 @@ impl KtNode {
             peers = pr.peers_reached as u32;
         }
         self.publish_invites().await;
-        let joined = self.app.with(|r| r.settle_joins()).into_iter().map(|p| p.group_name).collect();
+        let (mut joined, lookups_given_up) = self.retry_lookups().await;
+        joined.extend(self.app.with(|r| r.settle_joins()).into_iter().map(|p| p.group_name));
         let _ = self.app.settle_account();
         let _ = self.app.publish_names();
         kt_net::health::exchange(&net.syncer, net.helpers.as_ref().map(|h| h.0.as_ref()), &net.nostr);
@@ -863,7 +928,7 @@ impl KtNode {
             self.notify();
         }
         self.app.collect_blob_garbage();
-        SyncReport { written: w.written as u32, received: r.slots_opened as u32, rejected: r.rejected as u32, peers_reached: peers, joined_groups: joined }
+        SyncReport { written: w.written as u32, received: r.slots_opened as u32, rejected: r.rejected as u32, peers_reached: peers, joined_groups: joined, lookups_given_up }
     }
 }
 
@@ -1240,11 +1305,13 @@ impl KtNode {
                 if kt_net::invite_net::fetch(&layers, &code, CodeKind::Link, &[], Duration::from_millis(0)).await.is_some() {
                     return Err(fail("this is a device link code, not an invite: use it to link this device to your account"));
                 }
-                return Err(fail("no invite found for these words: check them, or it may have expired"));
+                // Not out there yet, or no connection right now: keep looking.
+                self.add_pending_lookup(&words);
+                return Ok(JoinResult { group_name: String::new(), inviter_name: String::new(), joined: false, still_looking: true });
             };
             let joined = kt_net::invite_net::join(&self.net.syncer, self.net.p2p.as_ref(), &rec).await.map_err(fail)?;
             self.net.syncer.sync_once().await;
-            Ok(JoinResult { group_name: rec.group_name, inviter_name: rec.inviter_name, joined })
+            Ok(JoinResult { group_name: rec.group_name, inviter_name: rec.inviter_name, joined, still_looking: false })
         })
     }
 

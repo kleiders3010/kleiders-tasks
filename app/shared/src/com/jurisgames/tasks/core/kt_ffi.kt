@@ -4500,6 +4500,12 @@ data class JoinResult (
      * True if already in; false if waiting for a member's device to let us in.
      */
     var `joined`: kotlin.Boolean
+    , 
+    /**
+     * Not found yet: this device keeps looking (in the background too) and says when it's
+     * in. The names are empty until then.
+     */
+    var `stillLooking`: kotlin.Boolean
     
 ){
     
@@ -4519,19 +4525,22 @@ public object FfiConverterTypeJoinResult: FfiConverterRustBuffer<JoinResult> {
             FfiConverterString.read(buf),
             FfiConverterString.read(buf),
             FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
     override fun allocationSize(value: JoinResult) = (
             FfiConverterString.allocationSize(value.`groupName`) +
             FfiConverterString.allocationSize(value.`inviterName`) +
-            FfiConverterBoolean.allocationSize(value.`joined`)
+            FfiConverterBoolean.allocationSize(value.`joined`) +
+            FfiConverterBoolean.allocationSize(value.`stillLooking`)
     )
 
     override fun write(value: JoinResult, buf: ByteBuffer) {
             FfiConverterString.write(value.`groupName`, buf)
             FfiConverterString.write(value.`inviterName`, buf)
             FfiConverterBoolean.write(value.`joined`, buf)
+            FfiConverterBoolean.write(value.`stillLooking`, buf)
     }
 }
 
@@ -5312,7 +5321,16 @@ data class SyncReport (
     , 
     var `peersReached`: kotlin.UInt
     , 
+    /**
+     * Groups this device got into this round (a join that was waiting, or a code that was
+     * still being looked for).
+     */
     var `joinedGroups`: List<kotlin.String>
+    , 
+    /**
+     * Codes given up on this round: never found within [`LOOKUP_FOR`].
+     */
+    var `lookupsGivenUp`: kotlin.UInt
     
 ){
     
@@ -5334,6 +5352,7 @@ public object FfiConverterTypeSyncReport: FfiConverterRustBuffer<SyncReport> {
             FfiConverterUInt.read(buf),
             FfiConverterUInt.read(buf),
             FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
         )
     }
 
@@ -5342,7 +5361,8 @@ public object FfiConverterTypeSyncReport: FfiConverterRustBuffer<SyncReport> {
             FfiConverterUInt.allocationSize(value.`received`) +
             FfiConverterUInt.allocationSize(value.`rejected`) +
             FfiConverterUInt.allocationSize(value.`peersReached`) +
-            FfiConverterSequenceString.allocationSize(value.`joinedGroups`)
+            FfiConverterSequenceString.allocationSize(value.`joinedGroups`) +
+            FfiConverterUInt.allocationSize(value.`lookupsGivenUp`)
     )
 
     override fun write(value: SyncReport, buf: ByteBuffer) {
@@ -5351,6 +5371,7 @@ public object FfiConverterTypeSyncReport: FfiConverterRustBuffer<SyncReport> {
             FfiConverterUInt.write(value.`rejected`, buf)
             FfiConverterUInt.write(value.`peersReached`, buf)
             FfiConverterSequenceString.write(value.`joinedGroups`, buf)
+            FfiConverterUInt.write(value.`lookupsGivenUp`, buf)
     }
 }
 

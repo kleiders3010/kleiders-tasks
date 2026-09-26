@@ -17,7 +17,8 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         app.reportDeviceState()
         val started = android.os.SystemClock.elapsedRealtime()
         node.flush(10_000uL) // what this device hasn't sent yet goes first, even if the job is cut short
-        node.syncNow()
+        val report = node.syncNow()
+        ChangeNotifier.joined(applicationContext, report.joinedGroups, report.lookupsGivenUp.toInt())
         if (inputData.getBoolean(MORE_OFTEN, false)) Measure.roundDone(applicationContext, android.os.SystemClock.elapsedRealtime() - started)
         if (inputData.getBoolean(PERIODIC, false)) BackgroundCheck.ran(applicationContext)
         ChangeNotifier.post(applicationContext, node.takeChanges())

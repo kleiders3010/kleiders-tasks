@@ -42,6 +42,27 @@ object ChangeNotifier {
         }
     }
 
+    /**
+     * Our own joins that finished in the background (the code was still being looked for,
+     * or a member's device had to let us in), and codes given up on after a day.
+     * Placeholder wording (UX pending).
+     */
+    fun joined(ctx: Context, groups: List<String>, gaveUp: Int) {
+        if (groups.isEmpty() && gaveUp == 0) return
+        if (Build.VERSION.SDK_INT >= 33 && ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(JOINS, "Joining", NotificationManager.IMPORTANCE_DEFAULT))
+        val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        fun post(id: Int, title: String, text: String) = nm.notify(id, Notification.Builder(ctx, JOINS)
+            .setSmallIcon(android.R.drawable.checkbox_on_background)
+            .setContentTitle(title).setContentText(text)
+            .setContentIntent(open).setAutoCancel(true).build())
+        for (g in groups) post(("joined:" + g).hashCode(), "You're in $g", "Its lists are on this phone now.")
+        if (gaveUp > 0) post("gave-up".hashCode(), "Couldn't find that invite", "Check the code with the person who sent it, or ask for a new one.")
+    }
+
+    private const val JOINS = "joins"
+
     /** "Sam added milk, eggs and completed bread; Alex added apples", "Kim joined". */
     fun describe(cs: List<ChangeItem>): String =
         cs.groupBy { it.who }.entries.joinToString("; ") { (who, xs) ->

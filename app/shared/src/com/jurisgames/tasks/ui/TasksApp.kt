@@ -336,7 +336,9 @@ private fun ListsScreen(
                         result = try {
                             val r = withContext(Dispatchers.IO) { node.joinCode(words) }
                             onChanged()
-                            if (r.joined) "Joined ${r.groupName}" else "Asked to join ${r.groupName} (${r.inviterName}'s group): you'll be let in automatically"
+                            // Placeholder wording (UX pending).
+                            if (r.stillLooking) "Still looking for this invite. You can close the app: it keeps trying and tells you when you're in."
+                            else if (r.joined) "Joined ${r.groupName}" else "Asked to join ${r.groupName} (${r.inviterName}'s group): you'll be let in automatically"
                         } catch (e: Exception) {
                             e.message ?: "Failed"
                         }
