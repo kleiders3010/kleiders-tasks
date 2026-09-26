@@ -22,6 +22,9 @@ Current flow is "terrible". Wanted, in this order:
 - **Confirmation**: once the group's name is known, ask **"You are joining {group}, invited by {name}"** (confirm / cancel) before joining completes.
 - Don't state that 3 letters are enough; **prove it** by autofilling.
 
+## Settings (2026-09-26)
+- **No Save button: every change applies immediately** when a field changes (switches, choices, theme). No Cancel either; changes stand as made.
+
 ## Also noted along the way
 - **"Sync now" button**: leftover test scaffolding; syncing is automatic. Remove from the main UI (maybe keep in hidden diagnostics).
 - **Themes / background images**: UX first. Background images are never shared (design already says so). Theme sharing is low priority, only once custom themes exist.
