@@ -56,7 +56,7 @@ class DesktopLinkTest {
         rule.onNodeWithTag("linkThisWords").performTextInput(words)
         rule.onNodeWithTag("linkFind").performClick()
         rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("linkPreview")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNode(hasTestTag("linkPreview") and hasText("This will join Alex's account: Pixel 7 · 1 list (Groceries). The list on this device will be added to it.")).assertExists()
+        rule.onNode(hasTestTag("linkPreview") and hasText("Alex's lists: Pixel 7 · 1 list (Groceries)", substring = true)).assertExists()
         rule.onNodeWithTag("linkGo").performClick()
         rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("linkResult") and hasText("Linking", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         check(desk.isLinking())
@@ -72,7 +72,8 @@ class DesktopLinkTest {
         check(desk.displayName() == "Alex")
         check(phone.recentLinks().single().name == "Alex's PC")
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("list-Groceries")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNode(hasTestTag("devices") and hasText("Pixel 7", substring = true) and hasText("Alex's PC (this one)", substring = true)).assertExists()
+        rule.onNode(hasTestTag("linkDevice") and hasText("Your devices (2)", substring = true)).assertExists()
+        check(desk.devices().map { it.name }.toSet() == setOf("Pixel 7", "Alex's PC"))
         phone.close()
         desk.close()
     }

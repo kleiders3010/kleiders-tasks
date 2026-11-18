@@ -47,4 +47,6 @@ tasks.test {
     val exe = if (System.getProperty("os.name").lowercase().contains("win")) ".exe" else ""
     systemProperty("kt.worker", rustTarget.resolve("kt-import-worker$exe").absolutePath)
     systemProperty("kt.cli", rustTarget.resolve("kt$exe").absolutePath) // local test relay
+    // ScreenshotTest writes PNGs only when asked: gradlew :desktop:test -Pshots=<folder>
+    systemProperty("kt.shots", (project.findProperty("shots") as String?) ?: "")
 }

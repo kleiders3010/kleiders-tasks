@@ -20,6 +20,7 @@ import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
 
+
 /** Renaming, shopping lists, dragging to reorder and images, through the UI. */
 class DesktopListFeaturesTest {
     @get:Rule
@@ -40,41 +41,53 @@ class DesktopListFeaturesTest {
         val list = n.createList(null, "Groceries")
         for (t in listOf("milk", "eggs", "bread")) n.addTask(list.id, t, null)
         val decode = Images::decode
-        rule.setContent { TasksApp(n, decodeImage = decode) }
+        rule.setContent { TasksApp(n, decodeImage = decode, onPickImage = { }) }
         rule.onNodeWithTag("list-Groceries").performClick()
         rule.waitUntil(5_000) { shown("task-milk") }
 
-        // Tap a title to rename it.
+        // Tap an item: its details open; the title saves as you type.
         rule.onNodeWithTag("task-eggs", useUnmergedTree = true).performClick()
+        rule.waitUntil(5_000) { shown("edit-eggs") }
         rule.onNodeWithTag("edit-eggs").performTextClearance()
         rule.onNodeWithTag("edit-eggs").performTextInput("free-range eggs")
-        rule.onNodeWithTag("edit-eggs").performImeAction()
+        rule.waitUntil(5_000) { n.tasks(list.id).map { it.title } == listOf("milk", "free-range eggs", "bread") }
         rule.waitUntil(5_000) { shown("task-free-range eggs") }
-        check(n.tasks(list.id).map { it.title } == listOf("milk", "free-range eggs", "bread"))
+        rule.onNodeWithTag("detailsClose").performClick()
 
-        // A shopping list: a checked item stays a moment, then drops to the bottom.
-        rule.onNodeWithTag("shoppingSwitch").performClick()
-        rule.waitUntil(5_000) { n.lists().single().listType == "shopping" }
+        // A ticked item stays a moment, then folds into "Completed".
         rule.onNodeWithTag("done-milk", useUnmergedTree = true).performClick()
         rule.waitForIdle()
-        check(top("task-milk") < top("task-bread")) { "not yet: it settles first" }
+        check(shown("task-milk")) { "not yet: it settles first" }
         rule.mainClock.advanceTimeBy(1_500)
-        rule.waitUntil(5_000) { top("task-milk") > top("task-bread") }
+        rule.waitUntil(5_000) { !shown("task-milk") }
+        check(shown("completed"))
+        rule.onNodeWithTag("completed").performClick()
+        rule.waitUntil(5_000) { shown("task-milk") }
+        check(top("task-milk") > top("task-bread"))
         check(n.tasks(list.id).map { it.title }.first() == "milk") { "only the view moved it, not the list's order" }
-        // Unchecking puts it back in its place.
-        rule.onNodeWithTag("done-milk", useUnmergedTree = true).performClick()
-        rule.waitUntil(5_000) { top("task-milk") < top("task-free-range eggs") }
 
-        // Drag "bread" to the top by its handle.
+        // Shopping list: typing a finished item offers it back with one tap.
+        rule.onNodeWithTag("listMenu").performClick()
+        rule.onNodeWithTag("shoppingSwitch").performClick()
+        rule.waitUntil(5_000) { n.lists().single().listType == "shopping" }
+        rule.onNodeWithTag("newtask").performTextInput("mil")
+        rule.waitUntil(5_000) { shown("again-milk") }
+        rule.onNodeWithTag("again-milk").performClick()
+        rule.waitUntil(5_000) { !n.tasks(list.id).single { it.title == "milk" }.done }
+        check(n.tasks(list.id).size == 3) { "brought back, not added twice" }
+
+        // Long-press and drag "bread" to the top.
+        rule.waitUntil(5_000) { shown("task-bread") }
         val step = top("task-free-range eggs") - top("task-milk")
-        rule.onNodeWithTag("drag-bread", useUnmergedTree = true).performTouchInput {
+        rule.onNodeWithTag("task-bread", useUnmergedTree = true).performTouchInput {
             down(center)
+            advanceEventTime(1_000)
             repeat(20) { moveBy(Offset(0f, -(step * 2.5f) / 20)) }
             up()
         }
         rule.waitUntil(5_000) { n.tasks(list.id).map { it.title }.first() == "bread" }
 
-        // An image: shown as a thumbnail, full size on tap, removable.
+        // A picture: a thumbnail in the item's details, full size on tap, removable.
         val png = File.createTempFile("kt-img", ".png").apply {
             val img = BufferedImage(1200, 800, BufferedImage.TYPE_INT_ARGB)
             val g = img.createGraphics(); g.color = java.awt.Color.ORANGE; g.fillRect(0, 0, 1200, 800); g.dispose()
@@ -83,8 +96,7 @@ class DesktopListFeaturesTest {
         val bytes = Images.compress(png)!!
         val milk = n.tasks(list.id).single { it.title == "milk" }
         n.addImage(list.id, milk.id, bytes)
-        rule.onNodeWithTag("styleOpen").performClick() // anything that recomposes; the node notifies too
-        rule.onNodeWithTag("styleOpen").performClick()
+        rule.onNodeWithTag("task-milk", useUnmergedTree = true).performClick()
         rule.waitUntil(5_000) { shown("thumb-milk") }
         rule.onNodeWithTag("thumb-milk", useUnmergedTree = true).performClick()
         rule.waitUntil(5_000) { shown("imageFull") }

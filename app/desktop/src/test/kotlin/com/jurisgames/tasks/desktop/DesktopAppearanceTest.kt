@@ -33,6 +33,7 @@ class DesktopAppearanceTest {
         rule.waitUntil(5_000) { shown("list-Groceries") }
         check(shown("dot-Groceries") && !shown("icon-Groceries")) { "grey dot, no icon yet" }
         rule.onNodeWithTag("list-Groceries").performClick()
+        rule.onNodeWithTag("listMenu").performClick()
         rule.onNodeWithTag("styleOpen").performClick()
         rule.onNodeWithTag("hue-130").performClick()
         rule.onNodeWithTag("vivid-2").performClick()
@@ -45,7 +46,6 @@ class DesktopAppearanceTest {
         // Themes are per device and decide the tone: same hue, different color.
         val before = accentColor("default", l.hue, l.vivid, false)
         check(before != accentColor("default", l.hue, l.vivid, true)) { "dark mode has its own tone" }
-        rule.onNodeWithTag("back").performClick()
         rule.onNodeWithTag("settingsOpen").performClick()
         rule.waitUntil(5_000) { shown("theme-ocean") }
         check(!shown("set-dynamic")) { "no wallpaper colors on desktop" }

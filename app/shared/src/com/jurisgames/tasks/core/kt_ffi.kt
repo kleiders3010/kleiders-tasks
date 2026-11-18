@@ -759,6 +759,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_data_dir(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_delete_list(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_delete_task(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_device_key(
@@ -827,11 +829,15 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_rename_list(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_rename_task(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_replaced_device_groups(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_required_update(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_restore_list(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
@@ -854,6 +860,8 @@ internal object IntegrityCheckingUniffiLib {
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_settings(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_settings(
+    ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_share_list(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_start_live(
     ): Int
@@ -937,6 +945,8 @@ internal object UniffiLib {
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_data_dir(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_delete_list(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_delete_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_device_key(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
@@ -1005,12 +1015,16 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_remove_replaced_device(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
+    external fun uniffi_kt_ffi_fn_method_ktnode_rename_list(`ptr`: Long,`listId`: RustBuffer.ByValue,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_rename_task(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`title`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_replaced_device_groups(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Int
     external fun uniffi_kt_ffi_fn_method_ktnode_required_update(`ptr`: Long,`version`: Long,`channel`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_restore_list(`ptr`: Long,`groupId`: RustBuffer.ByValue,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,`constrained`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1032,6 +1046,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_set_settings(`ptr`: Long,`new`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_settings(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_share_list(`ptr`: Long,`listId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     external fun uniffi_kt_ffi_fn_method_ktnode_start_live(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1253,6 +1269,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_data_dir() and 0xFFFF) != 62930) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_delete_list() and 0xFFFF) != 22912) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_delete_task() and 0xFFFF) != 11383) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1355,6 +1374,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_remove_replaced_device() and 0xFFFF) != 49607) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_rename_list() and 0xFFFF) != 1787) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_rename_task() and 0xFFFF) != 12754) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1362,6 +1384,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_required_update() and 0xFFFF) != 52608) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restore_list() and 0xFFFF) != 10349) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
@@ -1395,6 +1420,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_settings() and 0xFFFF) != 24849) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_share_list() and 0xFFFF) != 32667) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_start_live() and 0xFFFF) != 63714) {
@@ -2671,6 +2699,11 @@ public interface KtNodeInterface {
     
     fun `dataDir`(): kotlin.String
     
+    /**
+     * Delete a list for everyone in it. Undo with `restore_list(group_id, list_id)`.
+     */
+    fun `deleteList`(`listId`: kotlin.String)
+    
     fun `deleteTask`(`listId`: kotlin.String, `taskId`: kotlin.String)
     
     fun `deviceKey`(): kotlin.String
@@ -2835,6 +2868,8 @@ public interface KtNodeInterface {
      */
     fun `removeReplacedDevice`(): kotlin.UInt
     
+    fun `renameList`(`listId`: kotlin.String, `name`: kotlin.String)
+    
     fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
     
     /**
@@ -2848,6 +2883,8 @@ public interface KtNodeInterface {
      * data). `channel` as for [`KtNode::check_update`].
      */
     fun `requiredUpdate`(`version`: kotlin.ULong, `channel`: kotlin.String): kotlin.String?
+    
+    fun `restoreList`(`groupId`: kotlin.String, `listId`: kotlin.String)
     
     /**
      * Set when this node was opened from a backup.
@@ -2896,6 +2933,13 @@ public interface KtNodeInterface {
      * The settings screen's current values.
      */
     fun `settings`(): Settings
+    
+    /**
+     * Share a list: a list in the personal group moves into a new shared group named
+     * after it (people never see "group"); a list already in a shared group stays.
+     * Returns the list as it is now (its ID changes when it moves).
+     */
+    fun `shareList`(`listId`: kotlin.String): ListItem
     
     /**
      * App open: live updates on every layer until [`KtNode::stop_live`].
@@ -3175,6 +3219,23 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Delete a list for everyone in it. Undo with `restore_list(group_id, list_id)`.
+     */
+    @Throws(KtException::class)override fun `deleteList`(`listId`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_delete_list(
+        it,
+        
+        FfiConverterString.lower(`listId`),_status)
+}
+    }
+    
     
 
     
@@ -3750,6 +3811,21 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
 
     
+    @Throws(KtException::class)override fun `renameList`(`listId`: kotlin.String, `name`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_rename_list(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`name`),_status)
+}
+    }
+    
+    
+
+    
     @Throws(KtException::class)override fun `renameTask`(`listId`: kotlin.String, `taskId`: kotlin.String, `title`: kotlin.String)
         = 
     callWithHandle {
@@ -3799,6 +3875,21 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     )
     }
+    
+
+    
+    @Throws(KtException::class)override fun `restoreList`(`groupId`: kotlin.String, `listId`: kotlin.String)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_restore_list(
+        it,
+        
+        FfiConverterString.lower(`groupId`),
+        FfiConverterString.lower(`listId`),_status)
+}
+    }
+    
     
 
     
@@ -3983,6 +4074,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     UniffiLib.uniffi_kt_ffi_fn_method_ktnode_settings(
         it,
         _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Share a list: a list in the personal group moves into a new shared group named
+     * after it (people never see "group"); a list already in a shared group stays.
+     * Returns the list as it is now (its ID changes when it moves).
+     */
+    @Throws(KtException::class)override fun `shareList`(`listId`: kotlin.String): ListItem {
+            return FfiConverterTypeListItem.lift(
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_share_list(
+        it,
+        
+        FfiConverterString.lower(`listId`),_status)
 }
     }
     )

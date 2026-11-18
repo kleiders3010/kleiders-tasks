@@ -1280,6 +1280,42 @@ impl KtNode {
         Ok(())
     }
 
+    pub fn rename_list(&self, list_id: String, name: String) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.rename_list(&l, name.trim()).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Delete a list for everyone in it. Undo with `restore_list(group_id, list_id)`.
+    pub fn delete_list(&self, list_id: String) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.set_list_listed(l.group, l.doc, false).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    pub fn restore_list(&self, group_id: String, list_id: String) -> Result<(), KtError> {
+        let d = DocId::from_hex(&list_id).ok_or_else(|| fail("bad list id"))?;
+        self.app.set_list_listed(gid(&group_id)?, d, true).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Share a list: a list in the personal group moves into a new shared group named
+    /// after it (people never see "group"); a list already in a shared group stays.
+    /// Returns the list as it is now (its ID changes when it moves).
+    pub fn share_list(&self, list_id: String) -> Result<ListItem, KtError> {
+        let l = self.list(&list_id)?;
+        if l.group != self.app.personal_group() {
+            return Ok(self.list_item(l));
+        }
+        let g = self.app.create_group(&l.name).map_err(fail)?;
+        let moved = self.app.move_list(&l, g.group).map_err(fail)?;
+        self.notify();
+        Ok(self.list_item(moved))
+    }
+
     /// Attach an image (the app compresses it first, e.g. JPEG). Returns its ID.
     pub fn add_image(&self, list_id: String, task_id: String, bytes: Vec<u8>) -> Result<String, KtError> {
         let l = self.list(&list_id)?;

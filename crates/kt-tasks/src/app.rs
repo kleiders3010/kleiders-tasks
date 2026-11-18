@@ -323,6 +323,21 @@ impl App {
         Ok(ListInfo { group: to, doc: d, name: list.name.clone(), group_name })
     }
 
+    /// Rename a list (shared with everyone in its group like any edit).
+    pub fn rename_list(&self, list: &ListInfo, name: &str) -> Result<()> {
+        self.edit(list, |d| crate::rename_list(d, name))
+    }
+
+    /// Take a list off its group's index (or put it back, for Undo). The document stays,
+    /// so putting it back restores everything; every member's app stops showing it.
+    pub fn set_list_listed(&self, group: GroupId, doc: DocId, listed: bool) -> Result<()> {
+        let mut r = self.lock();
+        let gd = group_doc(&r, &group).ok_or(Error::NotFound)?;
+        r.doc(&group, &gd).unwrap().get_map("lists").insert(&doc.to_hex(), listed).map_err(eng)?;
+        r.commit(&group, &gd).map_err(eng)?;
+        Ok(())
+    }
+
     /// A sealed backup of everything on this device (DESIGN §11). Includes a recovery
     /// invite per shared group, valid `recovery_days`.
     pub fn backup(&self, recovery_days: u32) -> Result<Vec<u8>> {

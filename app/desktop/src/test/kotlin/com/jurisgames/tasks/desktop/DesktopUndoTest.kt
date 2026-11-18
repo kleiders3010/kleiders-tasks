@@ -31,8 +31,9 @@ class DesktopUndoTest {
         node.renameTask(list.id, id, "post office (closed?)")
 
         rule.setContent { TasksApp(node) }
-        rule.onNodeWithTag("lists").performScrollToNode(hasTestTag("list-Errands"))
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("list-Errands")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithTag("list-Errands").performClick()
+        rule.onNodeWithTag("listMenu").performClick()
         rule.onNodeWithTag("undoOpen").performClick()
         rule.onNodeWithTag("undoWho-Alex").performClick()
         rule.onNodeWithTag("undoSince-3600000").performClick()
