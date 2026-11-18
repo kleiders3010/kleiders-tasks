@@ -58,9 +58,9 @@ class StoreShotsTest {
     private fun shots(name: String, steps: androidx.compose.ui.test.ComposeUiTest.(KtNode) -> Unit) {
         out ?: return
         val n = sample()
-        runDesktopComposeUiTest(1080, 1920) {
+        runDesktopComposeUiTest(width = 1080, height = 1920) {
             setContent { CompositionLocalProvider(LocalDensity provides Density(2.7f)) { TasksApp(n) } }
-            waitUntil(5_000) { onAllNodes(hasTestTag("task-Call the bank")).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("task-Call the bank")).fetchSemanticsNodes().isNotEmpty() }
             steps(n)
             waitForIdle()
             ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(out, "$name.png"))
