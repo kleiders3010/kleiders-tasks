@@ -29,3 +29,4 @@ app/.gradle/
 app/local.properties
 app/**/build/
 app/android/src/main/jniLibs/
+dist/

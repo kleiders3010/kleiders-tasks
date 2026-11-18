@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private val app get() = application as TasksApplication
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge() // the app draws behind the status and navigation bars and pads itself
         super.onCreate(savedInstanceState)
         opened.value = intent?.dataString
         QrScanner.prepare(this) // play: fetch Google's scanner module before anyone taps Scan
@@ -209,11 +211,28 @@ class MainActivity : ComponentActivity() {
     /** Asked once, the first time there's a reminder the phone can't set on time (also
      *  after a restore: the permission doesn't come back with it, D43). */
     private fun askForExactAlarmsIfNeeded() {
-        if (Build.VERSION.SDK_INT < 31 || Reminders.canBeExact(this)) return
+        if (app.node.upcomingReminders().isEmpty()) return
         val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
-        if (prefs.getBoolean("asked", false) || app.node.upcomingReminders().isEmpty()) return
+        // A reminder is a notification: ask for that first (Android's own dialog says what it is).
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !prefs.getBoolean("askedNotify", false)
+        ) {
+            prefs.edit().putBoolean("askedNotify", true).apply()
+            notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        if (Build.VERSION.SDK_INT < 31 || Reminders.canBeExact(this)) return
+        if (prefs.getBoolean("asked", false)) return
         prefs.edit().putBoolean("asked", true).apply()
-        runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) }
+        // Our own words first (UX principle: permissions are explained before they're asked).
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Reminders on time")
+            .setMessage("Allow Tasks to set alarms so reminders ring exactly when you asked. Without it they still come, maybe a few minutes late.")
+            .setPositiveButton("Allow") { _, _ ->
+                runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) }
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     override fun onStop() {

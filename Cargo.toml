@@ -6,7 +6,7 @@ exclude = ["research"]
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
-license = "LicenseRef-Proprietary"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 loro = "=1.16.2"

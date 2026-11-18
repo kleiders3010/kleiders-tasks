@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -163,6 +164,15 @@ private fun Home(env: Env, openedCode: String?) {
     }
     var invite by remember { mutableStateOf<Pair<String, InviteInfo>?>(null) }
     val addFocus = remember { FocusRequester() }
+    // After the very first task makes the list, the add field comes back focused: keep typing.
+    var focusAdd by remember { mutableStateOf(false) }
+    LaunchedEffect(current?.id, focusAdd) {
+        if (focusAdd && current != null) {
+            kotlinx.coroutines.delay(150)
+            runCatching { addFocus.requestFocus() }
+            focusAdd = false
+        }
+    }
 
     fun share(l: ListItem) {
         runCatching {
@@ -217,7 +227,7 @@ private fun Home(env: Env, openedCode: String?) {
         val wide = maxWidth >= 720.dp
         if (wide) {
             Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
-                Row(Modifier.fillMaxSize().padding(pad)) {
+                Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                     Column(Modifier.width(280.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                             Text("Lists", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
@@ -231,7 +241,7 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Banners(env)
                         if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus)
-                        else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = ::open)
+                        else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
                     }
                 }
             }
@@ -248,14 +258,14 @@ private fun Home(env: Env, openedCode: String?) {
                 }
             }) {
                 Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
-                    Column(Modifier.fillMaxSize().padding(pad).imePadding()) {
+                    Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                         Banners(env)
                         if (current != null) {
                             ListPane(env, current, lists, wide = false, onMenu = { scope.launch { drawer.open() } }, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus) {
                                 ListChips(lists, current, ::open) { dialog = Dialog.NewList }
                             }
                         } else {
-                            FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = { scope.launch { drawer.open() } }, open = ::open)
+                            FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = { scope.launch { drawer.open() } }, open = { open(it); focusAdd = true })
                         }
                     }
                 }
@@ -534,7 +544,7 @@ private fun CodeDialog(title: String, hint: String, info: InviteInfo, onShare: (
     val clip = androidx.compose.ui.platform.LocalClipboardManager.current
     var qr by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf("") }
-    val until = java.time.format.DateTimeFormatter.ofPattern("d MMM").format(fromMillis(info.expiresMs.toLong()))
+    val until = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH).format(fromMillis(info.expiresMs.toLong()))
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = { TextButton(onClick = onClose, modifier = Modifier.testTag("codeDone")) { Text("Done") } },
