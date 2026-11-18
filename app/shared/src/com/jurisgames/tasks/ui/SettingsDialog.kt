@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -37,6 +39,9 @@ fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Uni
     var taps by remember { mutableStateOf(0) }
     var diagnostics by remember { mutableStateOf(false) }
     if (diagnostics) DiagnosticsDialog(node, onClose = { diagnostics = false })
+    var feedback by remember { mutableStateOf(false) }
+    var thanked by remember { mutableStateOf(false) }
+    if (feedback) FeedbackDialog(node, onSent = { feedback = false; thanked = true }, onClose = { feedback = false })
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
@@ -53,7 +58,7 @@ fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Uni
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
         title = { Text("Settings") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 SwitchRow("Sync in the background", s.syncInBackground, "set-background") { s = s.copy(syncInBackground = it) }
                 SwitchRow("Notify me when others change a list", s.notifyChanges, "set-notify") { s = s.copy(notifyChanges = it) }
                 Text("Help others sync", style = MaterialTheme.typography.titleSmall)
@@ -78,12 +83,17 @@ fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Uni
                     }
                 }
                 if (error.isNotEmpty()) Text(error, modifier = Modifier.testTag("settingsError"))
-                // Hidden diagnostics (DESIGN §2): tap the version seven times.
-                Text(
-                    "Version $version",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.testTag("version").clickable { if (++taps >= 7) { taps = 0; diagnostics = true } },
-                )
+                if (thanked) Text("Thanks! Your message was sent.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("feedbackThanks"))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    // Hidden diagnostics (DESIGN §2): tap the version seven times.
+                    Text(
+                        "Version $version",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f).testTag("version").clickable { if (++taps >= 7) { taps = 0; diagnostics = true } },
+                    )
+                    // a problem or an idea: to the person who makes the app (with the diagnostics, if the tick stays on)
+                    TextButton(onClick = { feedback = true }, modifier = Modifier.testTag("feedbackOpen")) { Text("Send feedback") }
+                }
             }
         },
     )
