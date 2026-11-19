@@ -70,8 +70,9 @@ private object TrayIcon : Painter() {
  * computer). Closing the window keeps it syncing; Quit ends it. Started at login with
  * `--background`, it opens straight into the tray.
  */
-/** This build's version code (the update manifest compares against it). */
-const val VERSION_CODE = 1uL
+/** This build's version code (the update manifest compares against it): the same number as the Android build
+ * (app/android/build.gradle.kts versionCode), checked by VersionCodeTest. */
+const val VERSION_CODE = 4uL
 
 fun main(args: Array<String>) {
     // Packaged app: the Rust library and the import worker ship in its resources folder.
