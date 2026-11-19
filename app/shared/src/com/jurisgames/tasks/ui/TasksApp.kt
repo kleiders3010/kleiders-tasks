@@ -155,9 +155,19 @@ private fun Home(env: Env, openedCode: String?) {
     val lists = remember(node, env.version) { node.lists().sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) }
     var currentId by remember { mutableStateOf(runCatching { lastListFile(node).readText().trim() }.getOrDefault("")) }
     val current = lists.find { it.id == currentId } ?: lists.firstOrNull()
+    // Google Tasks' Starred view: every starred task in one place (shown once something is starred)
+    var starredView by remember { mutableStateOf(false) }
+    var openFirst by remember { mutableStateOf<String?>(null) }
+    val anyStarred = remember(node, env.version, lists) { starredTasks(node, lists).isNotEmpty() }
     fun open(l: ListItem) {
         currentId = l.id
+        starredView = false
+        openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
+    }
+    fun openStarred(l: ListItem, task: String) {
+        open(l)
+        openFirst = task
     }
     val opened = openedCode?.takeIf { it.isNotBlank() }
     var dialog by remember(opened) {
@@ -232,7 +242,8 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.width(280.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                             Text("Lists", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                            for (l in lists) SidebarRow(l, l.id == current?.id) { open(l) }
+                            if (anyStarred || starredView) StarredRow(starredView) { starredView = true }
+                            for (l in lists) SidebarRow(l, !starredView && l.id == current?.id) { open(l) }
                             SidebarRow(null, false, "New list") { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
@@ -241,7 +252,8 @@ private fun Home(env: Env, openedCode: String?) {
                     VerticalDivider()
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Banners(env)
-                        if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus)
+                        if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
                         else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
                     }
                 }
@@ -261,9 +273,14 @@ private fun Home(env: Env, openedCode: String?) {
                 Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                     Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                         Banners(env)
-                        if (current != null) {
-                            ListPane(env, current, lists, wide = false, onMenu = { scope.launch { drawer.open() } }, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus) {
-                                ListChips(lists, current, ::open) { dialog = Dialog.NewList }
+                        val starredChip = if (anyStarred || starredView) StarredChip(starredView) { starredView = true } else null
+                        if (starredView) {
+                            StarredPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
+                                ListChips(lists, null, ::open, starredChip) { dialog = Dialog.NewList }
+                            }
+                        } else if (current != null) {
+                            ListPane(env, current, lists, wide = false, onMenu = { scope.launch { drawer.open() } }, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst) {
+                                ListChips(lists, current, ::open, starredChip) { dialog = Dialog.NewList }
                             }
                         } else {
                             FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = { scope.launch { drawer.open() } }, open = { open(it); focusAdd = true })
@@ -308,11 +325,29 @@ private fun SidebarRow(l: ListItem?, selected: Boolean, label: String? = null, o
     }
 }
 
+private class StarredChip(val selected: Boolean, val onClick: () -> Unit)
+
 @Composable
-private fun ListChips(lists: List<ListItem>, current: ListItem, open: (ListItem) -> Unit, newList: () -> Unit) {
+private fun StarredRow(selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp).background(bg, RoundedCornerShape(24.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp).testTag("starredView"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Ic.Star, null, Modifier.padding(end = 10.dp).size(18.dp), tint = StarColor)
+        Text("Starred", maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+    }
+}
+
+@Composable
+private fun ListChips(lists: List<ListItem>, current: ListItem?, open: (ListItem) -> Unit, starred: StarredChip?, newList: () -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        starred?.let { s ->
+            FilterChip(s.selected, s.onClick, label = { Text("Starred") }, leadingIcon = { Icon(Ic.Star, null, Modifier.size(18.dp), tint = StarColor) }, modifier = Modifier.testTag("starredView"))
+        }
         for (l in lists) {
-            FilterChip(l.id == current.id, { open(l) }, label = { Text(l.name, maxLines = 1) }, leadingIcon = { ListBadge(l) }, modifier = Modifier.testTag("list-" + l.name))
+            FilterChip(l.id == current?.id,{ open(l) }, label = { Text(l.name, maxLines = 1) }, leadingIcon = { ListBadge(l) }, modifier = Modifier.testTag("list-" + l.name))
         }
         FilterChip(false, newList, label = { Text("New list") }, leadingIcon = { Icon(Ic.Add, null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("newList"))
     }
@@ -397,6 +432,7 @@ private fun ListPane(
     listMenu: ListActions,
     snackbar: SnackbarHostState,
     addFocus: FocusRequester,
+    openFirst: String? = null,
     chips: (@Composable () -> Unit)? = null,
 ) {
     val node = env.node
@@ -407,6 +443,7 @@ private fun ListPane(
     val people = remember(node, env.version, list.id) { if (shared) runCatching { node.people(list.id) }.getOrDefault(emptyList()) else emptyList() }
     var menuOpen by remember { mutableStateOf(false) }
     val shopping = list.listType == "shopping"
+    var sort by remember(list.id) { mutableStateOf(sortOf(node, list.id)) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, "Menu") } else Spacer(Modifier.width(16.dp))
@@ -428,6 +465,17 @@ private fun ListPane(
                     item("Color and icon", "styleOpen", listMenu.style)
                     item(if (shopping) "Make it a to-do list" else "Make it a shopping list", "shoppingSwitch") {
                         node.setListType(list.id, if (shopping) "tasks" else "shopping"); env.changed()
+                    }
+                    if (!shopping) {
+                        HorizontalDivider()
+                        Text("Sort by", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        for (s in Sort.entries) DropdownMenuItem(
+                            text = { Text(s.label) },
+                            leadingIcon = { if (s == sort) Icon(Ic.Check, null, Modifier.size(18.dp)) else Spacer(Modifier.size(18.dp)) },
+                            onClick = { menuOpen = false; sort = s; setSortOf(node, list.id, s) },
+                            modifier = Modifier.testTag("sort-" + s.key),
+                        )
+                        HorizontalDivider()
                     }
                     item("Delete completed", "clearDone") {
                         val done = runCatching { node.tasks(list.id) }.getOrDefault(emptyList()).filter { it.done && it.parentId == null }
@@ -454,7 +502,7 @@ private fun ListPane(
             )
         }
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
-        ListBody(env, list, lists, shopping, snackbar, addFocus, wide, Modifier.weight(1f))
+        ListBody(env, list, lists, shopping, snackbar, addFocus, wide, Modifier.weight(1f), sort, openFirst)
     }
 }
 

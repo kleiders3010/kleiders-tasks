@@ -53,6 +53,8 @@ pub struct TaskView {
     pub remind_ms: Option<u64>,
     /// How the reminder repeats ([`valid_repeat`]): ticking it off moves it to its next date.
     pub repeat: Option<String>,
+    /// Starred (Google Tasks' star), and when: the Starred view and "Starred recently" sort by it.
+    pub starred_ms: Option<u64>,
     /// Attached images (sealed blobs; the bytes travel like text attachments).
     pub images: Vec<kt_engine::blobs::BlobRef>,
     pub children: Vec<TaskView>,
@@ -351,6 +353,19 @@ pub fn set_repeat(doc: &LoroDoc, task: &str, rule: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// Star or unstar a task (shared like any field; the time it was starred orders the Starred view).
+pub fn set_star(doc: &LoroDoc, task: &str, on: bool) -> Result<()> {
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    if on {
+        meta.insert("star_ms", now_ms() as i64).map_err(loro)?;
+    } else {
+        meta.delete("star_ms").map_err(loro)?;
+    }
+    doc.commit();
+    Ok(())
+}
+
 /// A repeating task was ticked off: it stays, due again at `next_ms`, with its steps unticked
 /// (Todoist's recurring tasks: the same task moves to its next date). One commit, one undo.
 pub fn repeat_done(doc: &LoroDoc, task: &str, next_ms: u64) -> Result<()> {
@@ -418,6 +433,10 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
             _ => None,
         },
         repeat: get_str(&meta, "repeat").filter(|r| valid_repeat(r)),
+        starred_ms: match meta.get("star_ms") {
+            Some(ValueOrContainer::Value(LoroValue::I64(v))) if v > 0 => Some(v as u64),
+            _ => None,
+        },
         id: get_str(&meta, "id").unwrap_or_default(),
         title: get_str(&meta, "title").unwrap_or_default(),
         done: get_bool(&meta, "done").unwrap_or(false),
@@ -755,6 +774,25 @@ mod tests {
         assert!(!v[0].children[0].done);
         set_repeat(&d, &bins, None).unwrap();
         assert_eq!(tasks(&d)[0].repeat, None);
+    }
+
+    #[test]
+    fn star_is_shared_and_survives_a_rebase() {
+        let base = doc();
+        let a = add_task(&base, None, "call mum").unwrap();
+        set_star(&base, &a, true).unwrap();
+        assert!(tasks(&base)[0].starred_ms.is_some());
+        let local = LoroDoc::new();
+        local.import(&base.export(ExportMode::Snapshot).unwrap()).unwrap();
+        local.set_peer_id(3).unwrap();
+        let b = add_task(&local, None, "buy stamps").unwrap();
+        set_star(&local, &b, true).unwrap();
+        set_star(&local, &a, false).unwrap();
+        let target = rebuild(&base, 2).unwrap();
+        rebase(&base, &local, &target).unwrap();
+        let v = tasks(&target);
+        let star = |t: &str| v.iter().find(|x| x.title == t).unwrap().starred_ms.is_some();
+        assert!(!star("call mum") && star("buy stamps"));
     }
 
     #[test]

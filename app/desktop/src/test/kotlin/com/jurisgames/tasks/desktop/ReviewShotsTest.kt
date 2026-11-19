@@ -73,6 +73,8 @@ class ReviewShotsTest {
         n.setDone(todo.id, done, true)
         val work = n.createList(null, "Work")
         n.setListStyle(work.id, 20.0, 1u, null)
+        n.setStar(work.id, n.addTask(work.id, "Send the report", null), true)
+        n.setStar(todo.id, bank, true)
         File(n.dataDir(), "ui-last-list").writeText(todo.id)
         return n
     }
@@ -111,4 +113,7 @@ class ReviewShotsTest {
     @Test fun c10() = shot("10-pc-list", true) { }
     @Test fun c11() = shot("11-pc-task-details", true) { onNodeWithTag("task-Plan the trip").performClick() }
     @Test fun c12() = shot("12-pc-share-list", true) { onNodeWithTag("share").performClick() }
+    @Test fun p13() = shot("13-phone-starred", false) { onNodeWithTag("starredView").performClick() }
+    @Test fun c14() = shot("14-pc-starred", true) { onNodeWithTag("starredView").performClick() }
+    @Test fun c15() = shot("15-pc-list-more", true) { onNodeWithTag("listMenu").performClick() }
 }

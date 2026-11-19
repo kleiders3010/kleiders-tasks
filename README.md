@@ -7,6 +7,8 @@ account and no company server holding your data.
 - **Quick:** Enter adds and keeps the field open; "tomorrow at 5" becomes a reminder and "every monday" a repeating one
   (ticked off, it comes back on its next date, like Todoist's); shopping lists bring finished
   items back with one tap; swipe to delete with Undo.
+- **Starred:** star what matters (like Google Tasks): every starred task of every list in one place, and each list
+  sorted by your order, by date, or starred first.
 - **Shared:** any list can be shared; everyone edits at once and edits merge (CRDTs, [Loro](https://loro.dev)).
 - **No servers you depend on:** devices reach each other directly ([iroh](https://iroh.computer)), over the same
   Wi-Fi, through public Nostr relays, the Mainline DHT, other users' apps that help carry changes, and a small mailbox.

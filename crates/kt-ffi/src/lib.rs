@@ -261,6 +261,8 @@ pub struct TaskItem {
     pub remind_ms: Option<u64>,
     /// How it repeats ("wd", "1d", "2w", "1m", "1y"); none for a one-off.
     pub repeat: Option<String>,
+    /// When it was starred (ms since the epoch); none if it isn't.
+    pub starred_ms: Option<u64>,
 }
 
 /// A task's full notes, as far as this device has them.
@@ -710,6 +712,7 @@ fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mu
             has_attachment: t.attachment().is_some(),
             remind_ms: t.remind_ms,
             repeat: t.repeat.clone(),
+            starred_ms: t.starred_ms,
         });
         flatten(&t.children, Some(&t.id), depth + 1, out);
     }
@@ -1229,7 +1232,14 @@ impl KtNode {
         Ok(())
     }
 
-    /// Reminders of open tasks from an hour ago on, across all lists, soonest first.
+    /// Star or unstar a task (shared like any field).
+    pub fn set_star(&self, list_id: String, task_id: String, on: bool) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::set_star(d, &task_id, on)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
     /// Set or clear how a task repeats (shared like any field).
     pub fn set_repeat(&self, list_id: String, task_id: String, rule: Option<String>) -> Result<(), KtError> {
         let l = self.list(&list_id)?;
@@ -1246,6 +1256,7 @@ impl KtNode {
         Ok(())
     }
 
+    /// Reminders of open tasks from an hour ago on, across all lists, soonest first.
     pub fn upcoming_reminders(&self) -> Vec<ReminderItem> {
         fn walk(ts: &[kt_tasks::TaskView], l: &ListInfo, from: u64, out: &mut Vec<ReminderItem>) {
             for t in ts {

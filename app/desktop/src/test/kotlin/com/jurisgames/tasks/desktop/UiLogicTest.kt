@@ -75,7 +75,7 @@ class UiLogicTest {
     }
 
     private fun task(id: String, done: Boolean = false, parent: String? = null, title: String = id) =
-        TaskItem(id, parent, if (parent == null) 0u else 1u, title, done, "", false, emptyList(), null, null)
+        TaskItem(id, parent, if (parent == null) 0u else 1u, title, done, "", false, emptyList(), null, null, null)
 
     @Test
     fun completedFoldsAway() {

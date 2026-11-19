@@ -98,6 +98,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                 modifier = Modifier.weight(1f).testTag("edit-" + t.title),
             )
+            if (list.listType != "shopping") StarButton(t.starredMs != null, "detailStar") { setStar(node, list.id, t, t.starredMs == null); env.changed() }
         }
 
         // Reminder

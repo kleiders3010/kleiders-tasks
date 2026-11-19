@@ -863,6 +863,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_settings(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_star(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_settings(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_share_list(
@@ -1052,6 +1054,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_set_repeat(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`rule`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_settings(`ptr`: Long,`new`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_star(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`on`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_settings(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -1427,10 +1431,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_reminder() and 0xFFFF) != 62604) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_repeat() and 0xFFFF) != 54854) {
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_repeat() and 0xFFFF) != 32996) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_settings() and 0xFFFF) != 5947) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_star() and 0xFFFF) != 25887) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_settings() and 0xFFFF) != 24849) {
@@ -1466,7 +1473,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_unlink_device() and 0xFFFF) != 3021) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_upcoming_reminders() and 0xFFFF) != 20085) {
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_upcoming_reminders() and 0xFFFF) != 16505) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_write_backup() and 0xFFFF) != 29557) {
@@ -2944,7 +2951,6 @@ public interface KtNodeInterface {
     fun `setReminder`(`listId`: kotlin.String, `taskId`: kotlin.String, `atMs`: kotlin.ULong?)
     
     /**
-     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
      * Set or clear how a task repeats (shared like any field).
      */
     fun `setRepeat`(`listId`: kotlin.String, `taskId`: kotlin.String, `rule`: kotlin.String?)
@@ -2953,6 +2959,11 @@ public interface KtNodeInterface {
      * Save the settings screen. Settings that don't exist on this platform are refused.
      */
     fun `setSettings`(`new`: Settings)
+    
+    /**
+     * Star or unstar a task (shared like any field).
+     */
+    fun `setStar`(`listId`: kotlin.String, `taskId`: kotlin.String, `on`: kotlin.Boolean)
     
     /**
      * The settings screen's current values.
@@ -3011,6 +3022,9 @@ public interface KtNodeInterface {
      */
     fun `unlinkDevice`(`deviceId`: kotlin.String)
     
+    /**
+     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
+     */
     fun `upcomingReminders`(): List<ReminderItem>
     
     /**
@@ -4090,7 +4104,6 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
 
     
     /**
-     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
      * Set or clear how a task repeats (shared like any field).
      */
     @Throws(KtException::class)override fun `setRepeat`(`listId`: kotlin.String, `taskId`: kotlin.String, `rule`: kotlin.String?)
@@ -4120,6 +4133,25 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterTypeSettings.lower(`new`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Star or unstar a task (shared like any field).
+     */
+    @Throws(KtException::class)override fun `setStar`(`listId`: kotlin.String, `taskId`: kotlin.String, `on`: kotlin.Boolean)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_star(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterBoolean.lower(`on`),_status)
 }
     }
     
@@ -4314,7 +4346,10 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     
     
 
-    override fun `upcomingReminders`(): List<ReminderItem> {
+    
+    /**
+     * Reminders of open tasks from an hour ago on, across all lists, soonest first.
+     */override fun `upcomingReminders`(): List<ReminderItem> {
             return FfiConverterSequenceTypeReminderItem.lift(
     callWithHandle {
     uniffiRustCall() { _status ->
@@ -5776,6 +5811,11 @@ data class TaskItem (
      * How it repeats ("wd", "1d", "2w", "1m", "1y"); none for a one-off.
      */
     var `repeat`: kotlin.String?
+    , 
+    /**
+     * When it was starred (ms since the epoch); none if it isn't.
+     */
+    var `starredMs`: kotlin.ULong?
     
 ){
     
@@ -5802,6 +5842,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterSequenceString.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalULong.read(buf),
         )
     }
 
@@ -5815,7 +5856,8 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterBoolean.allocationSize(value.`hasAttachment`) +
             FfiConverterSequenceString.allocationSize(value.`images`) +
             FfiConverterOptionalULong.allocationSize(value.`remindMs`) +
-            FfiConverterOptionalString.allocationSize(value.`repeat`)
+            FfiConverterOptionalString.allocationSize(value.`repeat`) +
+            FfiConverterOptionalULong.allocationSize(value.`starredMs`)
     )
 
     override fun write(value: TaskItem, buf: ByteBuffer) {
@@ -5829,6 +5871,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterSequenceString.write(value.`images`, buf)
             FfiConverterOptionalULong.write(value.`remindMs`, buf)
             FfiConverterOptionalString.write(value.`repeat`, buf)
+            FfiConverterOptionalULong.write(value.`starredMs`, buf)
     }
 }
 

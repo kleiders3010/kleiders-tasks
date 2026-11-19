@@ -108,12 +108,12 @@ const val SETTLE_MS = 1000L
 /** The rows of a list: what's still to do (each with its subtasks), then what's completed. */
 data class Sections(val active: List<TaskItem>, val completed: List<TaskItem>)
 
-fun sections(tasks: List<TaskItem>, settling: Set<String>, hidden: Set<String> = emptySet()): Sections {
+fun sections(tasks: List<TaskItem>, settling: Set<String>, hidden: Set<String> = emptySet(), sort: Sort = Sort.Order): Sections {
     val byParent = tasks.filter { it.id !in hidden }.groupBy { it.parentId }
     fun subtree(t: TaskItem): List<TaskItem> = listOf(t) + byParent[t.id].orEmpty().flatMap { subtree(it) }
     val top = byParent[null].orEmpty()
     val (active, done) = top.partition { !it.done || it.id in settling }
-    return Sections(active.flatMap { subtree(it) }, done.flatMap { subtree(it) })
+    return Sections(sortTop(active, sort).flatMap { subtree(it) }, done.flatMap { subtree(it) })
 }
 
 /** Finished items in a shopping list that match what's being typed, to bring back with a tap. */
@@ -127,17 +127,19 @@ fun suggestions(tasks: List<TaskItem>, typed: String, max: Int = 4): List<TaskIt
 
 /** A list's items, the add field, and (wide screens) the details pane. */
 @Composable
-fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean, snackbar: SnackbarHostState, addFocus: FocusRequester, wide: Boolean, modifier: Modifier) {
+fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean, snackbar: SnackbarHostState, addFocus: FocusRequester, wide: Boolean, modifier: Modifier, sort: Sort = Sort.Order, openFirst: String? = null) {
     val node = env.node
     val scope = rememberCoroutineScope()
     val tasks = remember(node, env.version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
     val settling = remember(list.id) { mutableStateListOf<String>() }
     val hidden = remember(list.id) { mutableStateListOf<String>() } // deleted, Undo still possible
-    var openTask by remember(list.id) { mutableStateOf<String?>(null) }
+    var openTask by remember(list.id, openFirst) { mutableStateOf(openFirst) }
     var showDone by remember { mutableStateOf(false) }
-    val sec = sections(tasks, settling.toSet(), hidden.toSet())
+    val sec = sections(tasks, settling.toSet(), hidden.toSet(), if (shopping) Sort.Order else sort)
     var display by remember(list.id) { mutableStateOf(sec.active) }
-    LaunchedEffect(tasks, settling.toList(), hidden.toList()) { display = sec.active }
+    LaunchedEffect(tasks, settling.toList(), hidden.toList(), sort) { display = sec.active }
+    // like Google Tasks: tasks are dragged into place only in "My order"
+    val canDrag = shopping || sort == Sort.Order
 
     fun toggle(t: TaskItem) {
         val done = !t.done
@@ -200,9 +202,9 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                 }
                 items(display, key = { it.id }) { t ->
                     ReorderableItem(reorder, key = t.id) { dragging ->
-                        val handle = Modifier.longPressDraggableHandle(onDragStopped = { drop(t.id) })
+                        val handle = if (canDrag) Modifier.longPressDraggableHandle(onDragStopped = { drop(t.id) }) else Modifier
                         SwipeRow(onDelete = { delete(t) }) {
-                            TaskRow(env, list.id, t, dragging, selected = wide && openTask == t.id, handle, onToggle = { toggle(t) }, onOpen = { openTask = t.id })
+                            TaskRow(env, list.id, t, dragging, selected = wide && openTask == t.id, handle, star = !shopping, onToggle = { toggle(t) }, onOpen = { openTask = t.id })
                         }
                     }
                 }
@@ -219,7 +221,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                     }
                     if (showDone) items(sec.completed, key = { "c" + it.id }) { t ->
                         SwipeRow(onDelete = { delete(t) }) {
-                            TaskRow(env, list.id, t, false, selected = wide && openTask == t.id, Modifier, onToggle = { toggle(t) }, onOpen = { openTask = t.id })
+                            TaskRow(env, list.id, t, false, selected = wide && openTask == t.id, Modifier, star = false, onToggle = { toggle(t) }, onOpen = { openTask = t.id })
                         }
                     }
                 }
@@ -295,7 +297,7 @@ fun Tick(done: Boolean, tag: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, selected: Boolean, handle: Modifier, onToggle: () -> Unit, onOpen: () -> Unit) {
+private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, selected: Boolean, handle: Modifier, star: Boolean, onToggle: () -> Unit, onOpen: () -> Unit) {
     val c = MaterialTheme.colorScheme
     val bg = when {
         dragging -> c.surfaceContainerHigh
@@ -332,6 +334,7 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
             }
         }
         if (t.images.isNotEmpty()) Icon(Ic.Image, "Has pictures", tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+        if (star) StarButton(t.starredMs != null, "star-" + t.title) { setStar(env.node, listId, t, t.starredMs == null); env.changed() }
     }
 }
 
