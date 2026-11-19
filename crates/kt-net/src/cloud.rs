@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use iroh::SecretKey;
 use sha2::{Digest, Sha256};
@@ -99,7 +99,18 @@ fn parse_read(topic: [u8; 32], b: &[u8]) -> Option<(u64, Vec<SlotRead>)> {
     Some((rev, out))
 }
 
+/// A read that takes longer than this counts as the cloud being down.
+const READ_TIMEOUT: Duration = Duration::from_secs(10);
+/// The same for a write (a slot is at most 640 KB); below the syncer's limit for a layer, so a cloud that doesn't
+/// answer is noticed here and left alone, instead of being cut off by the syncer each time.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
+/// After the cloud didn't answer: leave it alone this long, doubling up to `DOWN_MAX` while it stays down.
+const DOWN_START: Duration = Duration::from_secs(60);
+const DOWN_MAX: Duration = Duration::from_secs(15 * 60);
+
 pub struct CloudMailbox {
+    /// Until when to leave the cloud alone, and the next wait.
+    down: Mutex<(Option<Instant>, Duration)>,
     base: String,
     client: reqwest::Client,
     mode: Mutex<CloudMode>,
@@ -113,7 +124,7 @@ impl CloudMailbox {
     pub fn new(base: &str, mode: CloudMode) -> Option<CloudMailbox> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let client = crate::http::client(Duration::from_secs(30))?;
-        Some(CloudMailbox { base: base.trim_end_matches('/').to_string(), client, mode: Mutex::new(mode), helpers: Mutex::new(None), rounds: AtomicU64::new(0), cache: Mutex::new(HashMap::new()) })
+        Some(CloudMailbox { down: Mutex::new((None, DOWN_START)), base: base.trim_end_matches('/').to_string(), client, mode: Mutex::new(mode), helpers: Mutex::new(None), rounds: AtomicU64::new(0), cache: Mutex::new(HashMap::new()) })
     }
 
     /// Helper health decides how often to read (and whether to write, in fallback mode).
@@ -127,6 +138,21 @@ impl CloudMailbox {
 
     fn helpers_weak(&self, topic: &[u8; 32]) -> bool {
         self.helpers.lock().expect("lock").as_ref().is_none_or(|h| h.healthy_helpers(topic) < WEAK_BELOW)
+    }
+
+    fn is_down(&self) -> bool {
+        self.down.lock().expect("lock").0.is_some_and(|t| Instant::now() < t)
+    }
+
+    /// No answer (a connection error or a timeout, not a refusal): leave it alone for a while.
+    fn went_down(&self) {
+        let mut d = self.down.lock().expect("lock");
+        d.0 = Some(Instant::now() + d.1);
+        d.1 = (d.1 * 2).min(DOWN_MAX);
+    }
+
+    fn answered(&self) {
+        *self.down.lock().expect("lock") = (None, DOWN_START);
     }
 
     fn url(&self, topic: &[u8; 32]) -> String {
@@ -144,10 +170,14 @@ impl CloudMailbox {
             body.extend_from_slice(&nonce.to_le_bytes());
             body.extend_from_slice(&sig);
             body.extend_from_slice(blob);
-            let r = match self.client.put(self.url(topic)).body(body).send().await {
+            let r = match self.client.put(self.url(topic)).body(body).timeout(WRITE_TIMEOUT).send().await {
                 Ok(r) => r,
-                Err(_) => return WriteOutcome::Unavailable,
+                Err(_) => {
+                    self.went_down();
+                    return WriteOutcome::Unavailable;
+                }
             };
+            self.answered();
             match r.status().as_u16() {
                 200 => return WriteOutcome::Stored { stored: 1, tried: 1 },
                 428 => {
@@ -192,6 +222,9 @@ impl Mailbox for CloudMailbox {
             if w.blob.len() > MAX_SLOT {
                 return WriteOutcome::Refused("slot too large for the cloud mailbox".into());
             }
+            if self.is_down() {
+                return WriteOutcome::Unavailable;
+            }
             self.put(&w.topic, &writer_key(&w.writer_seed), now_ms(), &w.blob).await
         })
     }
@@ -199,16 +232,34 @@ impl Mailbox for CloudMailbox {
     fn read<'a>(&'a self, topics: &'a [[u8; 32]]) -> BoxFut<'a, Vec<SlotRead>> {
         Box::pin(async move {
             let round = self.rounds.fetch_add(1, Ordering::Relaxed);
-            for t in topics {
-                if !self.helpers_weak(t) && round % READ_EVERY != 0 && self.cache.lock().expect("lock").contains_key(t) {
-                    continue; // helpers carry it; the cloud is checked every few rounds
-                }
+            let due: Vec<[u8; 32]> = if self.is_down() {
+                vec![] // what it gave before is still returned below
+            } else {
+                topics
+                    .iter()
+                    .filter(|t| self.helpers_weak(t) || round % READ_EVERY == 0 || !self.cache.lock().expect("lock").contains_key(*t))
+                    .copied()
+                    .collect() // (helpers carry the rest; the cloud is checked every few rounds)
+            };
+            // all topics at once, each with a short time limit: a cloud that doesn't answer costs one wait, not one per list
+            let got = futures_util::future::join_all(due.iter().map(|t| async move {
                 let after = self.cache.lock().expect("lock").get(t).map(|c| c.0).unwrap_or(0);
-                let Ok(r) = self.client.get(format!("{}?after={after}", self.url(t))).send().await else { continue };
-                if !r.status().is_success() {
-                    continue;
+                let r = self.client.get(format!("{}?after={after}", self.url(t))).timeout(READ_TIMEOUT).send().await.ok()?;
+                let ok = r.status().is_success();
+                let b = r.bytes().await.ok()?;
+                Some((*t, ok.then_some(b)))
+            }))
+            .await;
+            if !due.is_empty() {
+                if got.iter().all(|g| g.is_none()) {
+                    self.went_down();
+                } else {
+                    self.answered();
                 }
-                let Ok(b) = r.bytes().await else { continue };
+            }
+            for (t, b) in got.into_iter().flatten() {
+                let Some(b) = b else { continue };
+                let t = &t;
                 let Some((rev, slots)) = parse_read(*t, &b) else { continue };
                 let mut c = self.cache.lock().expect("lock");
                 let e = c.entry(*t).or_insert((0, HashMap::new()));

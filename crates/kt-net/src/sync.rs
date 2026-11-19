@@ -20,6 +20,25 @@ use crate::slotstore::SlotStore;
 /// Pseudo mailbox index for the local slot store in `written`.
 const STORE: usize = usize::MAX;
 
+/// No layer holds a round up for longer than this (a server that takes the connection and never answers).
+const LAYER_CAP: Duration = Duration::from_secs(25);
+/// Once one layer has answered a read, the others get this much longer; a layer that misses it is read next
+/// round (the slots it carries are the same ones the other layers carry, so nothing waits on it).
+const LAYER_GRACE: Duration = Duration::from_secs(10);
+
+/// Every mailbox's read, as each one answers; `None` for a layer that didn't answer in time.
+async fn read_all(mailboxes: &[Arc<dyn Mailbox>], topics: &[[u8; 32]]) -> Vec<Option<Vec<SlotRead>>> {
+    use futures_util::stream::{FuturesUnordered, StreamExt};
+    let mut out: Vec<Option<Vec<SlotRead>>> = (0..mailboxes.len()).map(|_| None).collect();
+    let mut pending: FuturesUnordered<_> = mailboxes.iter().enumerate().map(|(i, m)| async move { (i, m.read(topics).await) }).collect();
+    let mut deadline = tokio::time::Instant::now() + LAYER_CAP;
+    while let Ok(Some((i, slots))) = tokio::time::timeout_at(deadline, pending.next()).await {
+        out[i] = Some(slots);
+        deadline = deadline.min(tokio::time::Instant::now() + LAYER_GRACE);
+    }
+    out
+}
+
 /// Writer identity for own slots in the local store (and so on peer-to-peer links).
 pub fn store_writer(writer_seed: &[u8; 32]) -> [u8; 32] {
     *blake3::Hasher::new_derive_key("kt/store-writer/v1").update(writer_seed).finalize().as_bytes()
@@ -176,6 +195,8 @@ impl Syncer {
         .unwrap_or_default();
         let mut report = WriteReport::default();
         let mailboxes = self.mbs();
+        // layers that didn't answer within LAYER_CAP: not tried again this round (each slot would wait as long)
+        let slow: Mutex<HashSet<usize>> = Mutex::new(HashSet::new());
         for (t, fp) in plans {
             let due: Vec<usize> = (0..mailboxes.len())
                 .chain(std::iter::once(STORE))
@@ -206,7 +227,16 @@ impl Syncer {
                 self.written.lock().expect("lock").insert((STORE, t.topic, t.writer_seed), Written { fingerprint: fp, at: now_secs() });
             }
             let due: Vec<usize> = due.into_iter().filter(|mi| *mi != STORE).collect();
-            let outcomes = futures_util::future::join_all(due.iter().map(|mi| mailboxes[*mi].write(&w))).await;
+            let outcomes = futures_util::future::join_all(due.iter().map(|mi| async {
+                if slow.lock().expect("lock").contains(mi) {
+                    return WriteOutcome::Unavailable;
+                }
+                tokio::time::timeout(LAYER_CAP, mailboxes[*mi].write(&w)).await.unwrap_or_else(|_| {
+                    slow.lock().expect("lock").insert(*mi);
+                    WriteOutcome::Unavailable
+                })
+            }))
+            .await;
             for (mi, o) in due.iter().zip(outcomes) {
                 let key = (*mi, t.topic, t.writer_seed);
                 match o {
@@ -244,11 +274,13 @@ impl Syncer {
             let topic_ids: Vec<[u8; 32]> = new_topics.iter().map(|t| t.topic).collect();
             done_topics.extend(topic_ids.iter().copied());
             let mailboxes = self.mbs();
-            let reads = futures_util::future::join_all(mailboxes.iter().map(|m| m.read(&topic_ids))).await;
+            let reads = read_all(&mailboxes, &topic_ids).await;
             // Group new slot versions by topic.
             let mut by_topic: HashMap<[u8; 32], Vec<Vec<u8>>> = HashMap::new();
             let mut marked: HashMap<[u8; 32], Vec<Key>> = HashMap::new();
             for (mi, slots) in reads.into_iter().enumerate() {
+                // a layer that didn't answer in time: nothing from it this round (and no read-back verdict)
+                let Some(slots) = slots else { continue };
                 let own: HashMap<[u8; 32], [u8; 32]> =
                     my_targets.iter().map(|t| (mailboxes[mi].writer_id(&t.writer_seed), t.topic)).collect();
                 let mut own_seen: HashSet<([u8; 32], [u8; 32])> = HashSet::new();
