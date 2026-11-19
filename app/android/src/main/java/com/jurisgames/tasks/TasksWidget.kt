@@ -102,7 +102,12 @@ fun WidgetContent(state: WidgetState) {
 class ToggleTask : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val node = (context.applicationContext as TasksApplication).node
-        node.setDone(parameters[ListIdKey]!!, parameters[TaskIdKey]!!, parameters[DoneKey]!!)
+        val listId = parameters[ListIdKey]!!
+        val taskId = parameters[TaskIdKey]!!
+        val task = runCatching { node.tasks(listId).firstOrNull { it.id == taskId } }.getOrNull()
+        // a repeating task moves to its next date instead of being done
+        if (task != null) com.jurisgames.tasks.ui.tickTask(node, listId, task, parameters[DoneKey]!!)
+        else node.setDone(listId, taskId, parameters[DoneKey]!!)
         SyncWorker.flushNow(context)
         TasksWidget.refresh(context)
     }

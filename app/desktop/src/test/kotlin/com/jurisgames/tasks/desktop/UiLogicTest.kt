@@ -1,6 +1,7 @@
 package com.jurisgames.tasks.desktop
 
 import com.jurisgames.tasks.core.TaskItem
+import com.jurisgames.tasks.ui.Repeat
 import com.jurisgames.tasks.ui.parseWhen
 import com.jurisgames.tasks.ui.sections
 import com.jurisgames.tasks.ui.settleWord
@@ -37,8 +38,44 @@ class UiLogicTest {
         assertNull(parseWhen("milk", now))
     }
 
+    // pinned: Todoist's "every" words and rule meanings (Repeat.kt), English and Spanish
+    @Test
+    fun repeatWords() {
+        fun p(s: String) = parseWhen(s, now)!!.let { Triple(it.title, it.repeat, it.at) }
+        assertEquals(Triple("bins out", "1w", LocalDateTime.of(2026, 11, 23, 9, 0)), p("bins out every monday"))
+        assertEquals(Triple("standup", "wd", LocalDateTime.of(2026, 11, 19, 9, 30)), p("standup every weekday at 9:30"))
+        assertEquals(Triple("pay rent", "1m", LocalDateTime.of(2026, 11, 19, 9, 0)), p("pay rent every month"))
+        assertEquals("2d", p("water plants every 2 days").second)
+        assertEquals(Triple("gym", "2w", LocalDateTime.of(2026, 11, 19, 9, 0)), p("every other week gym"))
+        assertEquals(Triple("vitamins", "1d", LocalDateTime.of(2026, 11, 19, 9, 0)), p("daily vitamins"))
+        assertEquals(Triple("call grandma", "1w", LocalDateTime.of(2026, 11, 22, 18, 0)), p("call grandma every sunday at 6"))
+        assertEquals(Triple("sacar la basura", "1w", LocalDateTime.of(2026, 11, 23, 9, 0)), p("sacar la basura todos los lunes"))
+        assertEquals(Triple("revisar cuentas", "2w", LocalDateTime.of(2026, 11, 19, 9, 0)), p("revisar cuentas cada 2 semanas"))
+        assertEquals("1d", p("regar todos los días").second)
+        assertNull(parseWhen("buy every flavour", now))
+        assertNull(parseWhen("call mum tomorrow", now)!!.repeat)
+    }
+
+    @Test
+    fun repeatNextDates() {
+        val mon = LocalDateTime.of(2026, 11, 23, 9, 0)
+        assertEquals(LocalDateTime.of(2026, 11, 30, 9, 0), Repeat.next("1w", mon, mon.plusHours(1)))
+        // ticked late: counts from when it was due, and never lands in the past
+        assertEquals(LocalDateTime.of(2026, 11, 19, 9, 0), Repeat.next("1d", LocalDateTime.of(2026, 11, 10, 9, 0), now))
+        assertEquals(LocalDateTime.of(2026, 11, 24, 9, 0), Repeat.next("1w", LocalDateTime.of(2026, 11, 17, 9, 0), now))
+        // ticked early: still one step on
+        assertEquals(LocalDateTime.of(2026, 11, 30, 9, 0), Repeat.next("1w", mon, now))
+        val fri = LocalDateTime.of(2026, 11, 20, 9, 0)
+        assertEquals(LocalDateTime.of(2026, 11, 23, 9, 0), Repeat.next("wd", fri, fri.plusHours(1)))
+        assertEquals(LocalDateTime.of(2027, 2, 28, 9, 0), Repeat.next("1m", LocalDateTime.of(2027, 1, 31, 9, 0), LocalDateTime.of(2027, 2, 1, 0, 0)))
+        assertEquals(LocalDateTime.of(2027, 11, 23, 9, 0), Repeat.next("1y", mon, mon))
+        assertEquals("Every 2 weeks", Repeat.label("2w"))
+        for (r in Repeat.CHOICES) check(Repeat.valid(r)) { r }
+        check(!Repeat.valid("0d") && !Repeat.valid("weekly"))
+    }
+
     private fun task(id: String, done: Boolean = false, parent: String? = null, title: String = id) =
-        TaskItem(id, parent, if (parent == null) 0u else 1u, title, done, "", false, emptyList(), null)
+        TaskItem(id, parent, if (parent == null) 0u else 1u, title, done, "", false, emptyList(), null, null)
 
     @Test
     fun completedFoldsAway() {

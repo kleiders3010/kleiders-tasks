@@ -466,6 +466,7 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
         val w = parseWhen(t)
         val id = runCatching { env.node.addTask(l.id, w?.title?.ifBlank { t } ?: t, null) }.getOrNull()
         if (id != null && w != null) runCatching { env.node.setReminder(l.id, id, w.at.millis().toULong()) }
+        if (id != null && w?.repeat != null) runCatching { env.node.setRepeat(l.id, id, w.repeat) }
         text = ""
         open(l)
         env.changed()

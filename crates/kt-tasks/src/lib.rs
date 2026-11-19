@@ -51,6 +51,8 @@ pub struct TaskView {
     pub notes: String,
     /// A timed reminder (ms since the epoch), shared like any field.
     pub remind_ms: Option<u64>,
+    /// How the reminder repeats ([`valid_repeat`]): ticking it off moves it to its next date.
+    pub repeat: Option<String>,
     /// Attached images (sealed blobs; the bytes travel like text attachments).
     pub images: Vec<kt_engine::blobs::BlobRef>,
     pub children: Vec<TaskView>,
@@ -326,6 +328,54 @@ pub fn set_reminder(doc: &LoroDoc, task: &str, at_ms: Option<u64>) -> Result<()>
     Ok(())
 }
 
+/// A repeat rule: "wd" (Monday to Friday) or a count and a unit, "1d", "2w", "1m", "1y" (like
+/// Todoist's "every": the next date counts from the date it was due, not from when it was done).
+pub fn valid_repeat(rule: &str) -> bool {
+    if rule == "wd" {
+        return true;
+    }
+    let (n, u) = rule.split_at(rule.len().saturating_sub(1));
+    matches!(u, "d" | "w" | "m" | "y") && !n.is_empty() && n.len() <= 2 && !n.starts_with('0') && n.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Set or clear how a task repeats.
+pub fn set_repeat(doc: &LoroDoc, task: &str, rule: Option<&str>) -> Result<()> {
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    match rule {
+        Some(r) if !valid_repeat(r) => return Err(Error::Invalid(format!("not a repeat rule: {r}"))),
+        Some(r) => meta.insert("repeat", r).map_err(loro)?,
+        None => meta.delete("repeat").map_err(loro)?,
+    }
+    doc.commit();
+    Ok(())
+}
+
+/// A repeating task was ticked off: it stays, due again at `next_ms`, with its steps unticked
+/// (Todoist's recurring tasks: the same task moves to its next date). One commit, one undo.
+pub fn repeat_done(doc: &LoroDoc, task: &str, next_ms: u64) -> Result<()> {
+    let n = find(doc, task)?;
+    let t = tree(doc);
+    let meta = t.get_meta(n).map_err(loro)?;
+    meta.insert("remind_ms", next_ms as i64).map_err(loro)?;
+    meta.insert("done", false).map_err(loro)?;
+    meta.insert("last_done_ms", now_ms() as i64).map_err(loro)?;
+    fn untick(t: &LoroTree, n: TreeID) -> Result<()> {
+        for c in t.children(Some(n)).unwrap_or_default() {
+            if let Ok(m) = t.get_meta(c) {
+                if get_bool(&m, "done").unwrap_or(false) {
+                    m.insert("done", false).map_err(loro)?;
+                }
+            }
+            untick(t, c)?;
+        }
+        Ok(())
+    }
+    untick(&t, n)?;
+    doc.commit();
+    Ok(())
+}
+
 pub fn delete_task(doc: &LoroDoc, task: &str) -> Result<()> {
     let n = find(doc, task)?;
     tree(doc).delete(n).map_err(loro)?;
@@ -367,6 +417,7 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
             Some(ValueOrContainer::Value(LoroValue::I64(v))) if v > 0 => Some(v as u64),
             _ => None,
         },
+        repeat: get_str(&meta, "repeat").filter(|r| valid_repeat(r)),
         id: get_str(&meta, "id").unwrap_or_default(),
         title: get_str(&meta, "title").unwrap_or_default(),
         done: get_bool(&meta, "done").unwrap_or(false),
@@ -640,6 +691,26 @@ pub fn rebase(base: &LoroDoc, local: &LoroDoc, target: &LoroDoc) -> Result<()> {
                 if lp != bp {
                     let _ = move_task(target, id, lp.as_deref(), usize::MAX);
                 }
+                // Every other field changed here (reminder, repeat, pictures, ...), set or removed.
+                let fields = |d: &LoroDoc| match find(d, id).ok().and_then(|n| tree(d).get_meta(n).ok()).map(|m| m.get_deep_value()) {
+                    Some(LoroValue::Map(m)) => m.iter().map(|(k, v)| (k.clone(), v.clone())).collect::<BTreeMap<_, _>>(),
+                    _ => BTreeMap::new(),
+                };
+                let (bf, lf) = (fields(base), fields(local));
+                const DONE_ABOVE: [&str; 5] = ["id", "title", "done", "done_ms", "notes"];
+                if let Ok(tm) = find(target, id).and_then(|n| tree(target).get_meta(n).map_err(loro)) {
+                    for (k, v) in lf.iter().filter(|(k, _)| !DONE_ABOVE.contains(&k.as_str())) {
+                        if bf.get(k) != Some(v) {
+                            let _ = match v {
+                                LoroValue::Map(_) | LoroValue::List(_) => put_deep(&tm, k, v),
+                                other => tm.insert(k, other.clone()).map_err(loro),
+                            };
+                        }
+                    }
+                    for k in bf.keys().filter(|k| !lf.contains_key(*k) && !DONE_ABOVE.contains(&k.as_str())) {
+                        let _ = tm.delete(k);
+                    }
+                }
             }
         }
     }
@@ -657,6 +728,53 @@ mod tests {
         d.set_peer_id(1).unwrap();
         init_list(&d, "Groceries").unwrap();
         d
+    }
+
+    #[test]
+    fn repeat_rules() {
+        for ok in ["wd", "1d", "2w", "1m", "1y", "12w"] {
+            assert!(valid_repeat(ok), "{ok}");
+        }
+        for bad in ["", "d", "0d", "01w", "123d", "1h", "w1", "weekly"] {
+            assert!(!valid_repeat(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn repeating_task_moves_on_with_steps_unticked() {
+        let d = doc();
+        let bins = add_task(&d, None, "bins out").unwrap();
+        let step = add_task(&d, Some(&bins), "recycling").unwrap();
+        set_reminder(&d, &bins, Some(1_000)).unwrap();
+        set_repeat(&d, &bins, Some("1w")).unwrap();
+        assert!(set_repeat(&d, &bins, Some("weekly")).is_err());
+        set_done(&d, &step, true).unwrap();
+        repeat_done(&d, &bins, 2_000).unwrap();
+        let v = tasks(&d);
+        assert_eq!((v[0].done, v[0].remind_ms, v[0].repeat.as_deref()), (false, Some(2_000), Some("1w")));
+        assert!(!v[0].children[0].done);
+        set_repeat(&d, &bins, None).unwrap();
+        assert_eq!(tasks(&d)[0].repeat, None);
+    }
+
+    #[test]
+    fn rebase_carries_reminder_and_repeat() {
+        // A device changed a reminder and a repeat while a document epoch was being made.
+        let base = doc();
+        let a = add_task(&base, None, "pay rent").unwrap();
+        let b = add_task(&base, None, "water plants").unwrap();
+        set_reminder(&base, &b, Some(5)).unwrap();
+        let local = LoroDoc::new();
+        local.import(&base.export(ExportMode::Snapshot).unwrap()).unwrap();
+        local.set_peer_id(3).unwrap();
+        set_reminder(&local, &a, Some(7)).unwrap();
+        set_repeat(&local, &a, Some("1m")).unwrap();
+        set_reminder(&local, &b, None).unwrap();
+        let target = rebuild(&base, 2).unwrap();
+        rebase(&base, &local, &target).unwrap();
+        let v = tasks(&target);
+        assert_eq!((v[0].remind_ms, v[0].repeat.as_deref()), (Some(7), Some("1m")));
+        assert_eq!(v[1].remind_ms, None);
     }
 
     #[test]

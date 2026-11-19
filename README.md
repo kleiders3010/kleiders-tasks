@@ -4,7 +4,8 @@ A free, open-source to-do and shopping list app for Android and Windows. Open it
 list. Share a list with a link, QR code or 8 words; changes reach everyone's devices end-to-end encrypted, with no
 account and no company server holding your data.
 
-- **Quick:** Enter adds and keeps the field open; "tomorrow at 5" becomes a reminder; shopping lists bring finished
+- **Quick:** Enter adds and keeps the field open; "tomorrow at 5" becomes a reminder and "every monday" a repeating one
+  (ticked off, it comes back on its next date, like Todoist's); shopping lists bring finished
   items back with one tap; swipe to delete with Undo.
 - **Shared:** any list can be shared; everyone edits at once and edits merge (CRDTs, [Loro](https://loro.dev)).
 - **No servers you depend on:** devices reach each other directly ([iroh](https://iroh.computer)), over the same

@@ -141,7 +141,13 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
 
     fun toggle(t: TaskItem) {
         val done = !t.done
-        runCatching { node.setDone(list.id, t.id, done) }
+        val next = tickTask(node, list.id, t, done)
+        if (next != null) {
+            // a repeating task stays in the list, due again on its next date
+            env.changed()
+            scope.launch { snackbar.showSnackbar("“${t.title}” again ${whenLabel(next)}", duration = SnackbarDuration.Short) }
+            return
+        }
         if (done && t.parentId == null) settling.add(t.id)
         env.changed()
         if (done && t.parentId == null) scope.launch {
@@ -306,7 +312,7 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
         t.remindMs?.let { ms ->
             val at = fromMillis(ms.toLong())
             val late = !t.done && at.isBefore(LocalDateTime.now())
-            Text(whenLabel(at), style = MaterialTheme.typography.labelMedium, color = if (late) c.error else marks, modifier = Modifier.padding(start = 8.dp).testTag("when-" + t.title))
+            Text((if (t.repeat != null) "↻ " else "") + whenLabel(at), style = MaterialTheme.typography.labelMedium, color = if (late) c.error else marks, modifier = Modifier.padding(start = 8.dp).testTag("when-" + t.title))
         }
     }
 }
@@ -335,6 +341,7 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
         val title = parsed?.title?.ifBlank { raw } ?: raw
         val id = runCatching { node.addTask(list.id, title, null) }.getOrNull()
         if (id != null && parsed != null) runCatching { node.setReminder(list.id, id, parsed.at.millis().toULong()) }
+        if (id != null && parsed?.repeat != null) runCatching { node.setRepeat(list.id, id, parsed.repeat) }
         text = ""; ignoreWhen = false
         env.changed()
     }
@@ -348,7 +355,7 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
         if (parsed != null) {
             InputChip(
                 true, { ignoreWhen = true },
-                label = { Text("Remind " + whenLabel(parsed.at)) },
+                label = { Text("Remind " + whenLabel(parsed.at) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "")) },
                 leadingIcon = { Icon(Ic.Bell, null, Modifier.size(16.dp)) },
                 trailingIcon = { Icon(Ic.Close, "Don't remind", Modifier.size(16.dp)) },
                 modifier = Modifier.testTag("whenChip"),

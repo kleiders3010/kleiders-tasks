@@ -80,7 +80,7 @@ mod tests {
     }
 
     fn t(title: &str, done: bool, notes: &str, children: Vec<TaskView>) -> TaskView {
-        TaskView { id: String::new(), title: title.into(), done, notes: notes.into(), remind_ms: None, images: vec![], children }
+        TaskView { id: String::new(), title: title.into(), done, notes: notes.into(), remind_ms: None, repeat: None, images: vec![], children }
     }
 
     #[test]

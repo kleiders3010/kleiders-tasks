@@ -24,6 +24,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
@@ -90,7 +91,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Tick(t.done, "detailDone") { runCatching { node.setDone(list.id, t.id, !t.done) }; env.changed() }
+            Tick(t.done, "detailDone") { tickTask(node, list.id, t, !t.done); env.changed() }
             OutlinedTextField(
                 title, { title = it }, textStyle = MaterialTheme.typography.titleMedium,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -112,6 +113,23 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 AssistChip({ picking = true }, label = { Text("Pick…") }, modifier = Modifier.testTag("remindPick"))
             }
             if (picking) PickMoment(t.remindMs?.let { fromMillis(it.toLong()) }, onPicked = { set(it); picking = false }, onClose = { picking = false })
+        }
+
+        // Repeat (like Todoist's "every"): ticked off, it comes back on its next date
+        Section(Ic.Repeat, "Repeat") {
+            fun pick(rule: String?) {
+                runCatching {
+                    if (rule != null && t.remindMs == null) node.setReminder(list.id, t.id, firstDate(rule).millis().toULong())
+                    node.setRepeat(list.id, t.id, rule)
+                }
+                env.changed()
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (rule in Repeat.CHOICES) {
+                    val on = t.repeat == rule
+                    FilterChip(on, { pick(if (on) null else rule) }, label = { Text(Repeat.label(rule)) }, modifier = Modifier.testTag("repeat-$rule"))
+                }
+            }
         }
 
         // Notes (long notes are an attachment: read-only until all of it is here)
@@ -207,6 +225,7 @@ fun moveTask(node: KtNode, from: String, t: TaskItem, all: List<TaskItem>, to: S
         val id = node.addTask(to, x.title, parent)
         runCatching { node.notes(from, x.id) }.getOrNull()?.takeIf { it.complete && it.text.isNotEmpty() }?.let { node.setNotes(to, id, it.text) }
         x.remindMs?.let { node.setReminder(to, id, it) }
+        x.repeat?.let { node.setRepeat(to, id, it) }
         for (img in x.images) runCatching { node.taskImage(from, img) }.getOrNull()?.let { runCatching { node.addImage(to, id, it) } }
         if (x.done) node.setDone(to, id, true)
         for (c in all.filter { it.parentId == x.id }) copy(c, id)

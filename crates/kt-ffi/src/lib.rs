@@ -259,6 +259,8 @@ pub struct TaskItem {
     pub images: Vec<String>,
     /// A timed reminder (ms since the epoch).
     pub remind_ms: Option<u64>,
+    /// How it repeats ("wd", "1d", "2w", "1m", "1y"); none for a one-off.
+    pub repeat: Option<String>,
 }
 
 /// A task's full notes, as far as this device has them.
@@ -707,6 +709,7 @@ fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mu
             notes: t.notes_preview().to_string(),
             has_attachment: t.attachment().is_some(),
             remind_ms: t.remind_ms,
+            repeat: t.repeat.clone(),
         });
         flatten(&t.children, Some(&t.id), depth + 1, out);
     }
@@ -1227,6 +1230,22 @@ impl KtNode {
     }
 
     /// Reminders of open tasks from an hour ago on, across all lists, soonest first.
+    /// Set or clear how a task repeats (shared like any field).
+    pub fn set_repeat(&self, list_id: String, task_id: String, rule: Option<String>) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::set_repeat(d, &task_id, rule.as_deref())).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// A repeating task ticked off: due again at `next_ms`, steps unticked, still in the list.
+    pub fn repeat_done(&self, list_id: String, task_id: String, next_ms: u64) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        self.app.edit(&l, |d| kt_tasks::repeat_done(d, &task_id, next_ms)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
     pub fn upcoming_reminders(&self) -> Vec<ReminderItem> {
         fn walk(ts: &[kt_tasks::TaskView], l: &ListInfo, from: u64, out: &mut Vec<ReminderItem>) {
             for t in ts {
