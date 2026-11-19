@@ -9,6 +9,8 @@ account and no company server holding your data.
   items back with one tap; swipe to delete with Undo.
 - **Starred:** star what matters (like Google Tasks): every starred task of every list in one place, and each list
   sorted by your order, by date, or starred first.
+- **Upcoming:** every task with a date, from every list, under its day (like Todoist's Today and Upcoming);
+  overdue ones move to today in one tap.
 - **Shared:** any list can be shared; everyone edits at once and edits merge (CRDTs, [Loro](https://loro.dev)).
 - **No servers you depend on:** devices reach each other directly ([iroh](https://iroh.computer)), over the same
   Wi-Fi, through public Nostr relays, the Mainline DHT, other users' apps that help carry changes, and a small mailbox.

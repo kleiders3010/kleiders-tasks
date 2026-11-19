@@ -68,12 +68,15 @@ class ReviewShotsTest {
         n.setNotes(todo.id, trip, "Train or bus? Check prices first.")
         n.addTask(todo.id, "Book the hotel", trip)
         n.addTask(todo.id, "Ask for days off", trip)
-        n.addTask(todo.id, "Water the plants", null)
+        val plants = n.addTask(todo.id, "Water the plants", null)
+        n.setReminder(todo.id, plants, LocalDateTime.now().minusDays(1).withHour(18).withMinute(0).millis().toULong())
         val done = n.addTask(todo.id, "Renew passport", null)
         n.setDone(todo.id, done, true)
         val work = n.createList(null, "Work")
         n.setListStyle(work.id, 20.0, 1u, null)
-        n.setStar(work.id, n.addTask(work.id, "Send the report", null), true)
+        val report = n.addTask(work.id, "Send the report", null)
+        n.setStar(work.id, report, true)
+        n.setReminder(work.id, report, LocalDateTime.now().withHour(17).withMinute(0).millis().toULong())
         n.setStar(todo.id, bank, true)
         File(n.dataDir(), "ui-last-list").writeText(todo.id)
         return n
@@ -116,4 +119,6 @@ class ReviewShotsTest {
     @Test fun p13() = shot("13-phone-starred", false) { onNodeWithTag("starredView").performClick() }
     @Test fun c14() = shot("14-pc-starred", true) { onNodeWithTag("starredView").performClick() }
     @Test fun c15() = shot("15-pc-list-more", true) { onNodeWithTag("listMenu").performClick() }
+    @Test fun p16() = shot("16-phone-upcoming", false) { onNodeWithTag("upcomingView").performClick() }
+    @Test fun c17() = shot("17-pc-upcoming", true) { onNodeWithTag("upcomingView").performClick() }
 }

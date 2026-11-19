@@ -55,6 +55,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -159,9 +161,15 @@ private fun Home(env: Env, openedCode: String?) {
     var starredView by remember { mutableStateOf(false) }
     var openFirst by remember { mutableStateOf<String?>(null) }
     val anyStarred = remember(node, env.version, lists) { starredTasks(node, lists).isNotEmpty() }
+    // Todoist's Today/Upcoming: every dated task by day (shown once any open task has a date)
+    var upcomingView by remember { mutableStateOf(false) }
+    val anyDated = remember(node, env.version, lists) { datedTasks(node, lists).isNotEmpty() }
+    fun showStarred() { starredView = true; upcomingView = false }
+    fun showUpcoming() { upcomingView = true; starredView = false }
     fun open(l: ListItem) {
         currentId = l.id
         starredView = false
+        upcomingView = false
         openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
     }
@@ -242,8 +250,9 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.width(280.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                             Text("Lists", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                            if (anyStarred || starredView) StarredRow(starredView) { starredView = true }
-                            for (l in lists) SidebarRow(l, !starredView && l.id == current?.id) { open(l) }
+                            if (anyDated || upcomingView) ViewRow(Ic.Event, "Upcoming", "upcomingView", upcomingView, null) { showUpcoming() }
+                            if (anyStarred || starredView) ViewRow(Ic.Star, "Starred", "starredView", starredView, StarColor) { showStarred() }
+                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && l.id == current?.id) { open(l) }
                             SidebarRow(null, false, "New list") { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
@@ -252,7 +261,8 @@ private fun Home(env: Env, openedCode: String?) {
                     VerticalDivider()
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Banners(env)
-                        if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        else if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
                         else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
                     }
@@ -273,14 +283,21 @@ private fun Home(env: Env, openedCode: String?) {
                 Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                     Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                         Banners(env)
-                        val starredChip = if (anyStarred || starredView) StarredChip(starredView) { starredView = true } else null
-                        if (starredView) {
+                        val viewChips = listOfNotNull(
+                            if (anyDated || upcomingView) ViewChip(Ic.Event, "Upcoming", "upcomingView", upcomingView, null) { showUpcoming() } else null,
+                            if (anyStarred || starredView) ViewChip(Ic.Star, "Starred", "starredView", starredView, StarColor) { showStarred() } else null,
+                        )
+                        if (upcomingView) {
+                            UpcomingPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
+                                ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
+                            }
+                        } else if (starredView) {
                             StarredPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
-                                ListChips(lists, null, ::open, starredChip) { dialog = Dialog.NewList }
+                                ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
                             }
                         } else if (current != null) {
                             ListPane(env, current, lists, wide = false, onMenu = { scope.launch { drawer.open() } }, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst) {
-                                ListChips(lists, current, ::open, starredChip) { dialog = Dialog.NewList }
+                                ListChips(lists, current, ::open, viewChips) { dialog = Dialog.NewList }
                             }
                         } else {
                             FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = { scope.launch { drawer.open() } }, open = { open(it); focusAdd = true })
@@ -325,26 +342,27 @@ private fun SidebarRow(l: ListItem?, selected: Boolean, label: String? = null, o
     }
 }
 
-private class StarredChip(val selected: Boolean, val onClick: () -> Unit)
+/** A place across lists (Upcoming, Starred) as a phone chip. */
+private class ViewChip(val icon: ImageVector, val label: String, val tag: String, val selected: Boolean, val tint: Color?, val onClick: () -> Unit)
 
 @Composable
-private fun StarredRow(selected: Boolean, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent
+private fun ViewRow(icon: ImageVector, label: String, tag: String, selected: Boolean, tint: Color?, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp).background(bg, RoundedCornerShape(24.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp).testTag("starredView"),
+            .padding(horizontal = 12.dp, vertical = 10.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Ic.Star, null, Modifier.padding(end = 10.dp).size(18.dp), tint = StarColor)
-        Text("Starred", maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Icon(icon, null, Modifier.padding(end = 10.dp).size(18.dp), tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, maxLines = 1, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
 @Composable
-private fun ListChips(lists: List<ListItem>, current: ListItem?, open: (ListItem) -> Unit, starred: StarredChip?, newList: () -> Unit) {
+private fun ListChips(lists: List<ListItem>, current: ListItem?, open: (ListItem) -> Unit, views: List<ViewChip>, newList: () -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        starred?.let { s ->
-            FilterChip(s.selected, s.onClick, label = { Text("Starred") }, leadingIcon = { Icon(Ic.Star, null, Modifier.size(18.dp), tint = StarColor) }, modifier = Modifier.testTag("starredView"))
+        for (v in views) {
+            FilterChip(v.selected, v.onClick, label = { Text(v.label) }, leadingIcon = { Icon(v.icon, null, Modifier.size(18.dp), tint = v.tint ?: MaterialTheme.colorScheme.onSurfaceVariant) }, modifier = Modifier.testTag(v.tag))
         }
         for (l in lists) {
             FilterChip(l.id == current?.id,{ open(l) }, label = { Text(l.name, maxLines = 1) }, leadingIcon = { ListBadge(l) }, modifier = Modifier.testTag("list-" + l.name))
