@@ -27,7 +27,7 @@ class DesktopSmokeTest {
         val node = KtNode.open(File(home, "identity").path, File(home, "data").path, worker, NodeOptions(Platform.DESKTOP, listOf("ws://127.0.0.1:9"), false, false, "127.0.0.1:0", "", ""))
         rule.setContent { TasksApp(node) }
         // First launch: ready to type into; the first task makes the list.
-        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("empty")).fetchSemanticsNodes().isNotEmpty() }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("firstLink")).fetchSemanticsNodes().isNotEmpty() }
         check(node.isPristine()) { "nothing made yet, so a backup can still be restored" }
         rule.onNodeWithTag("newtask").performTextInput("call the bank")
         rule.onNodeWithTag("addtask").performClick()

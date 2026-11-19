@@ -63,7 +63,7 @@ class StoreShotsTest {
             waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("task-Call the bank")).fetchSemanticsNodes().isNotEmpty() }
             steps(n)
             waitForIdle()
-            ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(out, "$name.png"))
+            ImageIO.write(captureAll(1080, 1920), "png", File(out, "$name.png"))
         }
         n.close()
     }

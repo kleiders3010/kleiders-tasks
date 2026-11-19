@@ -151,7 +151,8 @@ private fun Home(env: Env, openedCode: String?) {
     val node = env.node
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val lists = remember(node, env.version) { node.lists() }
+    // by name only: sharing a list moves it into a group of its own, and that must not move its tab
+    val lists = remember(node, env.version) { node.lists().sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }) }
     var currentId by remember { mutableStateOf(runCatching { lastListFile(node).readText().trim() }.getOrDefault("")) }
     val current = lists.find { it.id == currentId } ?: lists.firstOrNull()
     fun open(l: ListItem) {
@@ -335,8 +336,8 @@ private fun MenuPanel(env: Env, a: MenuActions, compact: Boolean) {
         if (isLinking) {
             Text("Linking: this device joins your other one as soon as it's online", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp).testTag("linkingStatus"))
         } else {
-            MenuRow(if (devices.size > 1) "Your devices (${devices.size}) · Add a device" else "Use on another device", "linkDevice", a.linkCode)
-            if (devices.size <= 1) MenuRow("Link to your other device", "linkThis", a.linkThis)
+            MenuRow(if (devices.size > 1) "Your devices (${devices.size}) · Add a device" else "Add a device", "linkDevice", a.linkCode)
+            if (devices.size <= 1) MenuRow("Join your other device", "linkThis", a.linkThis)
         }
         env.onImport?.let { MenuRow("Import a list file", "importList", it) }
         if (env.onRestore != null && remember(node, env.version) { node.isPristine() }) MenuRow("Restore from a backup", "restore", env.onRestore)
@@ -435,7 +436,12 @@ private fun ListPane(
                     }
                     env.onExport?.let { ex -> item("Export", "export") { ex(list) } }
                     item("Undo changes…", "undoOpen", listMenu.undo)
-                    item("Delete list", "deleteList", listMenu.delete)
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Delete list", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Ic.Delete, null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; listMenu.delete() }, modifier = Modifier.testTag("deleteList"),
+                    )
                 }
             }
         }
@@ -459,11 +465,13 @@ private fun ListPane(
 @Composable
 private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit, onMenu: (() -> Unit)?, open: (ListItem) -> Unit) {
     var text by remember { mutableStateOf("") }
+    var ignoreWhen by remember { mutableStateOf(false) }
+    val parsed = if (ignoreWhen) null else parseWhen(text)
     fun add() {
         val t = text.trim()
         if (t.isEmpty()) return
         val l = runCatching { env.node.createList(null, "My tasks") }.getOrNull() ?: return
-        val w = parseWhen(t)
+        val w = parsed
         val id = runCatching { env.node.addTask(l.id, w?.title?.ifBlank { t } ?: t, null) }.getOrNull()
         if (id != null && w != null) runCatching { env.node.setReminder(l.id, id, w.at.millis().toULong()) }
         if (id != null && w?.repeat != null) runCatching { env.node.setRepeat(l.id, id, w.repeat) }
@@ -477,20 +485,15 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
             Text("My tasks", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("title"))
         }
         Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Add your first task below", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("empty"))
             Text(
                 "Using it on another device? Link this one", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.clickable(onClick = onLinkThis).testTag("firstLink"),
             )
         }
         HorizontalDivider()
-        OutlinedTextField(
-            text, { text = it }, placeholder = { Text("Add a task") }, singleLine = true,
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { add() }),
-            trailingIcon = { if (text.isNotBlank()) IconButton(onClick = ::add, modifier = Modifier.testTag("addtask")) { Icon(Ic.Check, "Add") } },
-            modifier = Modifier.fillMaxWidth().padding(8.dp).focusRequester(addFocus).testTag("newtask"),
-        )
+        Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, "Add a task", addFocus, ::add)
+        }
     }
 }
 

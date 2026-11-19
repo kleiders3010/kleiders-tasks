@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -77,7 +78,7 @@ fun reminderChoices(now: LocalDateTime = LocalDateTime.now()): List<Pair<String,
  * Everything about one item, all visible at once (UI-SPEC "Details sheet"): title, reminder,
  * notes, pictures, subtasks, move, delete. Changes save as they're made.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: () -> Unit, onMoved: () -> Unit, onOpen: (String) -> Unit) {
     val node = env.node
@@ -105,7 +106,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             fun set(at: LocalDateTime?) {
                 runCatching { node.setReminder(list.id, t.id, at?.millis()?.toULong()) }; env.changed()
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 t.remindMs?.let { ms ->
                     InputChip(true, { set(null) }, label = { Text(whenLabel(fromMillis(ms.toLong()))) }, trailingIcon = { Icon(Ic.Close, "No reminder", Modifier.size(16.dp)) }, modifier = Modifier.testTag("remindClear"))
                 }
@@ -124,7 +125,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 }
                 env.changed()
             }
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (rule in Repeat.CHOICES) {
                     val on = t.repeat == rule
                     FilterChip(on, { pick(if (on) null else rule) }, label = { Text(Repeat.label(rule)) }, modifier = Modifier.testTag("repeat-$rule"))
@@ -200,7 +201,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 }
             }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = onDelete, modifier = Modifier.testTag("delete-" + t.title)) {
+            TextButton(onClick = onDelete, modifier = Modifier.testTag("delete-" + t.title), colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
                 Icon(Ic.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Delete")
             }
         }

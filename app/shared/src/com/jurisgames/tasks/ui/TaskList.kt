@@ -249,7 +249,15 @@ private fun selected(tasks: List<TaskItem>, id: String?, hidden: List<String>) =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DetailsSheet(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: (TaskItem) -> Unit, onClose: () -> Unit, onOpen: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(
+        onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = {
+            Box(Modifier.fillMaxWidth()) {
+                androidx.compose.material3.BottomSheetDefaults.DragHandle(Modifier.align(Alignment.Center))
+                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).testTag("detailsClose")) { Icon(Ic.Close, "Close") }
+            }
+        },
+    ) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
             Details(env, list, lists, tasks, t, onDelete = { onDelete(t) }, onMoved = onClose, onOpen = onOpen)
         }
@@ -300,20 +308,30 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Tick(t.done, "done-" + t.title, onToggle)
-        Text(
-            t.title, Modifier.weight(1f).padding(vertical = 10.dp),
-            color = if (t.done) c.onSurfaceVariant else c.onSurface,
-            textDecoration = if (t.done) TextDecoration.LineThrough else null,
-            maxLines = 3, overflow = TextOverflow.Ellipsis,
-        )
         val marks = c.onSurfaceVariant
-        if (t.notes.isNotEmpty() || t.hasAttachment) Icon(Ic.Notes, "Has notes", tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
-        if (t.images.isNotEmpty()) Icon(Ic.Image, "Has pictures", tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
-        t.remindMs?.let { ms ->
-            val at = fromMillis(ms.toLong())
-            val late = !t.done && at.isBefore(LocalDateTime.now())
-            Text((if (t.repeat != null) "↻ " else "") + whenLabel(at), style = MaterialTheme.typography.labelMedium, color = if (late) c.error else marks, modifier = Modifier.padding(start = 8.dp).testTag("when-" + t.title))
+        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+            Text(
+                t.title,
+                color = if (t.done) c.onSurfaceVariant else c.onSurface,
+                textDecoration = if (t.done) TextDecoration.LineThrough else null,
+                maxLines = 3, overflow = TextOverflow.Ellipsis,
+            )
+            val note = t.notes.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+            if (t.remindMs != null || note != null || t.hasAttachment) Row(verticalAlignment = Alignment.CenterVertically) {
+                t.remindMs?.let { ms ->
+                    val at = fromMillis(ms.toLong())
+                    val late = !t.done && at.isBefore(LocalDateTime.now())
+                    Icon(Ic.Bell, null, tint = if (late) c.error else marks, modifier = Modifier.padding(end = 4.dp).size(14.dp))
+                    Text((if (t.repeat != null) "↻ " else "") + whenLabel(at), style = MaterialTheme.typography.labelMedium, color = if (late) c.error else marks, modifier = Modifier.testTag("when-" + t.title))
+                }
+                val text = note ?: if (t.hasAttachment) "Notes" else null
+                if (text != null) Text(
+                    (if (t.remindMs != null) "  ·  " else "") + text, style = MaterialTheme.typography.bodySmall, color = marks,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("notePeek-" + t.title),
+                )
+            }
         }
+        if (t.images.isNotEmpty()) Icon(Ic.Image, "Has pictures", tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
     }
 }
 
@@ -352,9 +370,17 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
                 for (s in suggested) SuggestionChip({ bringBack(s) }, label = { Text("${s.title}  ↺") }, modifier = Modifier.testTag("again-" + s.title))
             }
         }
+        AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, if (shopping) "Add an item" else "Add a task", focus, ::add)
+    }
+}
+
+/** The add field itself: a pill with +, the reminder its words make shown as a chip above it (tap to drop it). */
+@Composable
+internal fun AddField(text: String, onText: (String) -> Unit, parsed: When?, onIgnore: () -> Unit, placeholder: String, focus: FocusRequester, add: () -> Unit) {
+    Column {
         if (parsed != null) {
             InputChip(
-                true, { ignoreWhen = true },
+                true, onIgnore,
                 label = { Text("Remind " + whenLabel(parsed.at) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "")) },
                 leadingIcon = { Icon(Ic.Bell, null, Modifier.size(16.dp)) },
                 trailingIcon = { Icon(Ic.Close, "Don't remind", Modifier.size(16.dp)) },
@@ -363,8 +389,8 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextField(
-                text, { text = it; if (it.isEmpty()) ignoreWhen = false },
-                placeholder = { Text(if (shopping) "Add an item" else "Add a task") },
+                text, onText,
+                placeholder = { Text(placeholder) },
                 singleLine = true,
                 leadingIcon = { Icon(Ic.Add, null) },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
@@ -377,7 +403,7 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
                 modifier = Modifier.weight(1f).focusRequester(focus).testTag("newtask")
                     .onEnterKey { add() },
             )
-            if (text.isNotBlank()) IconButton(onClick = ::add, modifier = Modifier.testTag("addtask")) { Icon(Ic.Check, "Add", tint = MaterialTheme.colorScheme.primary) }
+            if (text.isNotBlank()) IconButton(onClick = add, modifier = Modifier.testTag("addtask")) { Icon(Ic.Check, "Add", tint = MaterialTheme.colorScheme.primary) }
         }
     }
 }
