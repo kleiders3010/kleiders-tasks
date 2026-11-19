@@ -1,5 +1,6 @@
 package com.jurisgames.tasks
 
+import com.jurisgames.tasks.ui.tr
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -51,7 +52,7 @@ object Reminders {
 
     fun show(ctx: Context, key: String, title: String, list: String) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, tr("Reminders"), NotificationManager.IMPORTANCE_HIGH))
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)

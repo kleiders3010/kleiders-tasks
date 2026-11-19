@@ -39,7 +39,7 @@ import kotlinx.coroutines.withContext
 const val CODE_WORDS = 8
 
 /** Playful lines while an invite is being found (UX-NOTES "Waiting and loading"). */
-val FINDING = listOf("Finding the list…", "Asking around…", "Knocking on doors…", "Following the trail…", "Almost there, probably…")
+val FINDING = listOf(tr("Finding the list…"), tr("Asking around…"), tr("Knocking on doors…"), tr("Following the trail…"), tr("Almost there, probably…"))
 
 /**
  * What a typed word box should become: the full word once it is certain (4 letters typed, or
@@ -79,12 +79,12 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
                 val r = withContext(Dispatchers.IO) { node.joinCode(code) }
                 env.changed()
                 when {
-                    r.stillLooking -> "Not found yet. You can close this: the app keeps looking and tells you when you're in."
-                    r.joined -> { onJoined(r.groupName); "You're in: ${r.groupName}" }
-                    else -> "Asked to join ${r.groupName} (from ${r.inviterName}). You're let in as soon as they're online."
+                    r.stillLooking -> tr("Not found yet. You can close this: the app keeps looking and tells you when you're in.")
+                    r.joined -> { onJoined(r.groupName); tr("You're in: {group}", "group" to r.groupName) }
+                    else -> tr("Asked to join {group} (from {who}). You're let in as soon as they're online.", "group" to r.groupName, "who" to r.inviterName)
                 }
             } catch (e: Exception) {
-                e.message ?: "That code didn't work. Check it with the person who sent it."
+                tr(e.message ?: tr("That code didn't work. Check it with the person who sent it."))
             }
             busy = false
         }
@@ -117,13 +117,13 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
-            TextButton(onClick = { join(link ?: words.joinToString(" ")) }, enabled = !busy && (link != null || words.all { it.isNotBlank() }), modifier = Modifier.testTag("joinGo")) { Text("Join") }
+            TextButton(onClick = { join(link ?: words.joinToString(" ")) }, enabled = !busy && (link != null || words.all { it.isNotBlank() }), modifier = Modifier.testTag("joinGo")) { Text(tr("Join")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
-        title = { Text("Join a shared list") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
+        title = { Text(tr("Join a shared list")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Enter the code", style = MaterialTheme.typography.bodyMedium)
+                Text(tr("Enter the code"), style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), maxItemsInEachRow = 4) {
                     for (i in 0 until CODE_WORDS) {
                         val typo = settleWord(words[i]) { node.completeWord(it) } == ""
@@ -150,15 +150,15 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { clip.getText()?.text?.let { takeWhole(it) } }, modifier = Modifier.testTag("pasteCode")) { Text("Paste") }
-                    env.onScan?.let { scan -> TextButton(onClick = { scan { takeWhole(it) } }, modifier = Modifier.testTag("scanJoin")) { Text("or scan a QR code") } }
+                    TextButton(onClick = { clip.getText()?.text?.let { takeWhole(it) } }, modifier = Modifier.testTag("pasteCode")) { Text(tr("Paste")) }
+                    env.onScan?.let { scan -> TextButton(onClick = { scan { takeWhole(it) } }, modifier = Modifier.testTag("scanJoin")) { Text(tr("or scan a QR code")) } }
                 }
                 if (busy) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
                         Column {
                             Text(FINDING[line], modifier = Modifier.testTag("joinFinding"))
-                            if (slow) Text("This can take a minute, keep the app open", style = MaterialTheme.typography.bodySmall)
+                            if (slow) Text(tr("This can take a minute, keep the app open"), style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }

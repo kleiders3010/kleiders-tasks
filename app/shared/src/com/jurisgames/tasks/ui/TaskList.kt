@@ -147,7 +147,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
         if (next != null) {
             // a repeating task stays in the list, due again on its next date
             env.changed()
-            scope.launch { snackbar.showSnackbar("“${t.title}” again ${whenLabel(next)}", duration = SnackbarDuration.Short) }
+            scope.launch { snackbar.showSnackbar(tr("“{title}” again {when}", "title" to t.title, "when" to whenLabel(next)), duration = SnackbarDuration.Short) }
             return
         }
         if (done && t.parentId == null) settling.add(t.id)
@@ -161,7 +161,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
         hidden.add(t.id)
         if (openTask == t.id) openTask = null
         scope.launch {
-            val r = snackbar.showSnackbar("Deleted “${t.title}”", actionLabel = "Undo", duration = SnackbarDuration.Short)
+            val r = snackbar.showSnackbar(tr("Deleted “{title}”", "title" to t.title), actionLabel = tr("Undo"), duration = SnackbarDuration.Short)
             if (r != SnackbarResult.ActionPerformed) runCatching { node.deleteTask(list.id, t.id) }
             hidden.remove(t.id)
             env.changed()
@@ -194,7 +194,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                 if (display.isEmpty() && sec.completed.isEmpty()) {
                     item(key = "empty") {
                         Text(
-                            if (lists.size == 1 && tasks.isEmpty()) "Add your first task below" else "Nothing here yet",
+                            if (lists.size == 1 && tasks.isEmpty()) tr("Add your first task below") else tr("Nothing here yet"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"),
                         )
@@ -216,7 +216,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                         ) {
                             Icon(if (showDone) Ic.Down else Ic.Right, null, Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Completed (${sec.completed.count { it.parentId == null }})", style = MaterialTheme.typography.titleSmall)
+                            Text(tr("Completed ({n})", "n" to sec.completed.count { it.parentId == null }), style = MaterialTheme.typography.titleSmall)
                         }
                     }
                     if (showDone) items(sec.completed, key = { "c" + it.id }) { t ->
@@ -235,7 +235,7 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
             Column(Modifier.width(360.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = { openTask = null }, modifier = Modifier.testTag("detailsClose")) { Icon(Ic.Close, "Close") }
+                    IconButton(onClick = { openTask = null }, modifier = Modifier.testTag("detailsClose")) { Icon(Ic.Close, tr("Close")) }
                 }
                 Details(env, list, lists, tasks, selected, onDelete = { delete(selected) }, onMoved = { openTask = null }, onOpen = { openTask = it })
             }
@@ -256,7 +256,7 @@ private fun DetailsSheet(env: Env, list: ListItem, lists: List<ListItem>, tasks:
         dragHandle = {
             Box(Modifier.fillMaxWidth()) {
                 androidx.compose.material3.BottomSheetDefaults.DragHandle(Modifier.align(Alignment.Center))
-                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).testTag("detailsClose")) { Icon(Ic.Close, "Close") }
+                IconButton(onClick = onClose, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp).testTag("detailsClose")) { Icon(Ic.Close, tr("Close")) }
             }
         },
     ) {
@@ -275,9 +275,9 @@ private fun SwipeRow(onDelete: () -> Unit, content: @Composable () -> Unit) {
     })
     SwipeToDismissBox(state, backgroundContent = {
         Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Ic.Delete, "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+            Icon(Ic.Delete, tr("Delete"), tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(Modifier.weight(1f))
-            Icon(Ic.Delete, "Delete", tint = MaterialTheme.colorScheme.onErrorContainer)
+            Icon(Ic.Delete, tr("Delete"), tint = MaterialTheme.colorScheme.onErrorContainer)
         }
     }) { content() }
 }
@@ -292,7 +292,7 @@ fun Tick(done: Boolean, tag: String, onClick: () -> Unit) {
                 .background(if (done) c.primary else Color.Transparent)
                 .border(2.dp, if (done) c.primary else c.outline, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { if (done) Icon(Ic.Check, "Done", tint = c.onPrimary, modifier = Modifier.size(16.dp)) }
+        ) { if (done) Icon(Ic.Check, tr("Done"), tint = c.onPrimary, modifier = Modifier.size(16.dp)) }
     }
 }
 
@@ -326,14 +326,14 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
                     Icon(Ic.Bell, null, tint = if (late) c.error else marks, modifier = Modifier.padding(end = 4.dp).size(14.dp))
                     Text((if (t.repeat != null) "↻ " else "") + whenLabel(at), style = MaterialTheme.typography.labelMedium, color = if (late) c.error else marks, modifier = Modifier.testTag("when-" + t.title))
                 }
-                val text = note ?: if (t.hasAttachment) "Notes" else null
+                val text = note ?: if (t.hasAttachment) tr("Notes") else null
                 if (text != null) Text(
                     (if (t.remindMs != null) "  ·  " else "") + text, style = MaterialTheme.typography.bodySmall, color = marks,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("notePeek-" + t.title),
                 )
             }
         }
-        if (t.images.isNotEmpty()) Icon(Ic.Image, "Has pictures", tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+        if (t.images.isNotEmpty()) Icon(Ic.Image, tr("Has pictures"), tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
         if (star) StarButton(t.starredMs != null, "star-" + t.title) { setStar(env.node, listId, t, t.starredMs == null); env.changed() }
     }
 }
@@ -373,7 +373,7 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
                 for (s in suggested) SuggestionChip({ bringBack(s) }, label = { Text("${s.title}  ↺") }, modifier = Modifier.testTag("again-" + s.title))
             }
         }
-        AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, if (shopping) "Add an item" else "Add a task", focus, ::add)
+        AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, if (shopping) tr("Add an item") else tr("Add a task"), focus, ::add)
     }
 }
 
@@ -384,9 +384,9 @@ internal fun AddField(text: String, onText: (String) -> Unit, parsed: When?, onI
         if (parsed != null) {
             InputChip(
                 true, onIgnore,
-                label = { Text("Remind " + whenLabel(parsed.at) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "")) },
+                label = { Text(tr("Remind {when}", "when" to whenLabel(parsed.at)) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "")) },
                 leadingIcon = { Icon(Ic.Bell, null, Modifier.size(16.dp)) },
-                trailingIcon = { Icon(Ic.Close, "Don't remind", Modifier.size(16.dp)) },
+                trailingIcon = { Icon(Ic.Close, tr("Don't remind"), Modifier.size(16.dp)) },
                 modifier = Modifier.testTag("whenChip"),
             )
         }
@@ -406,7 +406,7 @@ internal fun AddField(text: String, onText: (String) -> Unit, parsed: When?, onI
                 modifier = Modifier.weight(1f).focusRequester(focus).testTag("newtask")
                     .onEnterKey { add() },
             )
-            if (text.isNotBlank()) IconButton(onClick = add, modifier = Modifier.testTag("addtask")) { Icon(Ic.Check, "Add", tint = MaterialTheme.colorScheme.primary) }
+            if (text.isNotBlank()) IconButton(onClick = add, modifier = Modifier.testTag("addtask")) { Icon(Ic.Check, tr("Add"), tint = MaterialTheme.colorScheme.primary) }
         }
     }
 }

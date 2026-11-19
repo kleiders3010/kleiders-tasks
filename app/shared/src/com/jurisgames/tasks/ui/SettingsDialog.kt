@@ -51,48 +51,48 @@ fun SettingsDialog(node: KtNode, onSaved: (Settings) -> Unit, onClose: () -> Uni
                     onSaved(s)
                     onClose()
                 } catch (e: Exception) {
-                    error = e.message ?: "Couldn't save"
+                    error = e.message ?: tr("Couldn't save")
                 }
-            }, modifier = Modifier.testTag("settingsSave")) { Text("Save") }
+            }, modifier = Modifier.testTag("settingsSave")) { Text(tr("Save")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        title = { Text("Settings") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
+        title = { Text(tr("Settings")) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                SwitchRow("Sync in the background", s.syncInBackground, "set-background") { s = s.copy(syncInBackground = it) }
-                SwitchRow("Notify me when others change a list", s.notifyChanges, "set-notify") { s = s.copy(notifyChanges = it) }
-                Text("Help others sync", style = MaterialTheme.typography.titleSmall)
+                SwitchRow(tr("Sync in the background"), s.syncInBackground, "set-background") { s = s.copy(syncInBackground = it) }
+                SwitchRow(tr("Notify me when others change a list"), s.notifyChanges, "set-notify") { s = s.copy(notifyChanges = it) }
+                Text(tr("Help others sync"), style = MaterialTheme.typography.titleSmall)
                 for (opt in s.helpOptions) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         RadioButton(s.helpOthers == opt, { s = s.copy(helpOthers = opt) }, modifier = Modifier.testTag("help-$opt"))
-                        Text(helpLabels[opt] ?: opt)
+                        Text(tr(helpLabels[opt] ?: opt))
                     }
                 }
-                s.relayForOthers?.let { v -> SwitchRow("Relay connections for others", v, "set-relay") { s = s.copy(relayForOthers = it) } }
-                s.startWithComputer?.let { v -> SwitchRow("Start with computer", v, "set-autostart") { s = s.copy(startWithComputer = it) } }
-                Text("Appearance", style = MaterialTheme.typography.titleSmall)
+                s.relayForOthers?.let { v -> SwitchRow(tr("Relay connections for others"), v, "set-relay") { s = s.copy(relayForOthers = it) } }
+                s.startWithComputer?.let { v -> SwitchRow(tr("Start with computer"), v, "set-autostart") { s = s.copy(startWithComputer = it) } }
+                Text(tr("Appearance"), style = MaterialTheme.typography.titleSmall)
                 // Material You: offered where the platform has it (Android 12+).
                 val dynamic = s.dynamicColor
-                if (dynamic != null && LocalDynamicAvailable.current) SwitchRow("Use wallpaper colors", dynamic, "set-dynamic") { s = s.copy(dynamicColor = it) }
+                if (dynamic != null && LocalDynamicAvailable.current) SwitchRow(tr("Use wallpaper colors"), dynamic, "set-dynamic") { s = s.copy(dynamicColor = it) }
                 if (dynamic != true || !LocalDynamicAvailable.current) {
                     for (t in com.jurisgames.tasks.core.themes()) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             RadioButton(s.theme == t.id, { s = s.copy(theme = t.id) }, modifier = Modifier.testTag("theme-" + t.id))
-                            Text(t.name)
+                            Text(tr(t.name))
                         }
                     }
                 }
                 if (error.isNotEmpty()) Text(error, modifier = Modifier.testTag("settingsError"))
-                if (thanked) Text("Thanks! Your message was sent.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("feedbackThanks"))
+                if (thanked) Text(tr("Thanks! Your message was sent."), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("feedbackThanks"))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     // Hidden diagnostics (DESIGN §2): tap the version seven times.
                     Text(
-                        "Version $version",
+                        tr("Version {v}", "v" to version),
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.weight(1f).testTag("version").clickable { if (++taps >= 7) { taps = 0; diagnostics = true } },
                     )
                     // a problem or an idea: to the person who makes the app (with the diagnostics, if the tick stays on)
-                    TextButton(onClick = { feedback = true }, modifier = Modifier.testTag("feedbackOpen")) { Text("Send feedback") }
+                    TextButton(onClick = { feedback = true }, modifier = Modifier.testTag("feedbackOpen")) { Text(tr("Send feedback")) }
                 }
             }
         },

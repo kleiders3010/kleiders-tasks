@@ -124,7 +124,7 @@ fun Avatar(p: PersonItem) {
 
 /** A person's name, with the short tag when someone else in the list has the same name. */
 fun personLabel(p: PersonItem, all: List<PersonItem>): String {
-    val base = if (p.isMe) "${p.name} (you)" else p.name
+    val base = if (p.isMe) tr("{name} (you)", "name" to p.name) else p.name
     return if (all.count { it.name == p.name } > 1) "$base · ${p.tag}" else base
 }
 
@@ -140,10 +140,10 @@ fun StyleDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () ->
     AlertDialog(
         onDismissRequest = onClose,
         confirmButton = {
-            TextButton(onClick = { node.setListStyle(list.id, hue, vivid, icon); onDone(); onClose() }, modifier = Modifier.testTag("styleSave")) { Text("Save") }
+            TextButton(onClick = { node.setListStyle(list.id, hue, vivid, icon); onDone(); onClose() }, modifier = Modifier.testTag("styleSave")) { Text(tr("Save")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        title = { Text("Color and icon") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
+        title = { Text(tr("Color and icon")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -159,15 +159,15 @@ fun StyleDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () ->
                         )
                     }
                 }
-                TextButton(onClick = { more = !more }, modifier = Modifier.testTag("moreColors")) { Text("More colors…") }
+                TextButton(onClick = { more = !more }, modifier = Modifier.testTag("moreColors")) { Text(tr("More colors…")) }
                 if (more) Slider((hue ?: 0.0).toFloat(), { hue = it.toDouble() }, valueRange = 0f..359f, modifier = Modifier.testTag("hueWheel"))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Soft", "Normal", "Vivid").forEachIndexed { i, name ->
+                    listOf(tr("Soft"), tr("Normal"), tr("Vivid")).forEachIndexed { i, name ->
                         FilterChip(vivid.toInt() == i, { vivid = i.toUByte() }, label = { Text(name) }, modifier = Modifier.testTag("vivid-$i"))
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(icon == null, { icon = null }, label = { Text("None") }, modifier = Modifier.testTag("icon-none"))
+                    FilterChip(icon == null, { icon = null }, label = { Text(tr("None")) }, modifier = Modifier.testTag("icon-none"))
                     for (i in listIcons()) {
                         FilterChip(icon == i.id, { icon = i.id }, label = { Text(i.symbol) }, modifier = Modifier.testTag("pick-" + i.id))
                     }

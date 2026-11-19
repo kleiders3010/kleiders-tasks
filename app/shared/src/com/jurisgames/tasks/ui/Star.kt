@@ -45,7 +45,7 @@ val StarColor = Color(0xFFF2A600)
 fun StarButton(starred: Boolean, tag: String, onClick: () -> Unit) {
     Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick).testTag(tag), contentAlignment = Alignment.Center) {
         Icon(
-            if (starred) Ic.Star else Ic.StarBorder, if (starred) "Starred" else "Star",
+            if (starred) Ic.Star else Ic.StarBorder, if (starred) tr("Starred") else tr("Star"),
             tint = if (starred) StarColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.size(22.dp),
         )
@@ -103,13 +103,13 @@ fun StarredPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen: 
     val c = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, "Menu") } else Spacer(Modifier.width(16.dp))
-            Text("Starred", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("title"))
+            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, tr("Menu")) } else Spacer(Modifier.width(16.dp))
+            Text(tr("Starred"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("title"))
         }
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
         LazyColumn(Modifier.weight(1f).testTag("starredTasks")) {
             if (starred.isEmpty()) item(key = "empty") {
-                Text("Nothing starred", color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
+                Text(tr("Nothing starred"), color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
             }
             items(starred, key = { it.list.id + "/" + it.task.id }) { (l, t) ->
                 Row(

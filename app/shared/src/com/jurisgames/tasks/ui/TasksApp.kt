@@ -199,14 +199,14 @@ private fun Home(env: Env, openedCode: String?) {
             open(shared)
             env.changed()
             invite = shared.name to node.invite(shared.groupId, 30u)
-        }.onFailure { e -> scope.launch { snackbar.showSnackbar(e.message ?: "Couldn't share") } }
+        }.onFailure { e -> scope.launch { snackbar.showSnackbar(e.message ?: tr("Couldn't share")) } }
     }
 
     fun deleteList(l: ListItem) {
         runCatching { node.deleteList(l.id) }
         env.changed()
         scope.launch {
-            val r = snackbar.showSnackbar("Deleted ${l.name}", actionLabel = "Undo", duration = SnackbarDuration.Long)
+            val r = snackbar.showSnackbar(tr("Deleted {name}", "name" to l.name), actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
             if (r == SnackbarResult.ActionPerformed) {
                 runCatching { node.restoreList(l.groupId, l.id) }
                 open(l)
@@ -249,11 +249,11 @@ private fun Home(env: Env, openedCode: String?) {
                 Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                     Column(Modifier.width(280.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
-                            Text("Lists", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
-                            if (anyDated || upcomingView) ViewRow(Ic.Event, "Upcoming", "upcomingView", upcomingView, null) { showUpcoming() }
-                            if (anyStarred || starredView) ViewRow(Ic.Star, "Starred", "starredView", starredView, StarColor) { showStarred() }
+                            Text(tr("Lists"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                            if (anyDated || upcomingView) ViewRow(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() }
+                            if (anyStarred || starredView) ViewRow(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() }
                             for (l in lists) SidebarRow(l, !starredView && !upcomingView && l.id == current?.id) { open(l) }
-                            SidebarRow(null, false, "New list") { dialog = Dialog.NewList }
+                            SidebarRow(null, false, tr("New list")) { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
                         MenuPanel(env, menu, compact = true)
@@ -284,8 +284,8 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                         Banners(env)
                         val viewChips = listOfNotNull(
-                            if (anyDated || upcomingView) ViewChip(Ic.Event, "Upcoming", "upcomingView", upcomingView, null) { showUpcoming() } else null,
-                            if (anyStarred || starredView) ViewChip(Ic.Star, "Starred", "starredView", starredView, StarColor) { showStarred() } else null,
+                            if (anyDated || upcomingView) ViewChip(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() } else null,
+                            if (anyStarred || starredView) ViewChip(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() } else null,
                         )
                         if (upcomingView) {
                             UpcomingPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
@@ -315,7 +315,7 @@ private fun Home(env: Env, openedCode: String?) {
         }, onClose = { dialog = null })
         Dialog.LinkThis -> LinkThisDialog(env, opened?.takeIf { it.contains("/link") }, scope) { dialog = null }
         Dialog.LinkCode -> runCatching { node.linkCode() }.getOrNull()?.let { info ->
-            CodeDialog("Link a device", "On your other device, open ☰ › Link this device, then enter this code or scan it.", info, env.onShare) { dialog = null }
+            CodeDialog(tr("Link a device"), tr("On your other device, open ☰ › Link this device, then enter this code or scan it."), info, env.onShare) { dialog = null }
         }
         Dialog.NewList -> NewListDialog(env, onCreated = { open(it); dialog = null }, onClose = { dialog = null })
         Dialog.Rename -> current?.let { l -> RenameDialog(l.name, onDone = { n -> runCatching { node.renameList(l.id, n) }; env.changed(); dialog = null }, onClose = { dialog = null }) }
@@ -323,7 +323,7 @@ private fun Home(env: Env, openedCode: String?) {
         Dialog.Undo -> current?.let { l -> UndoDialog(node, l, onDone = env.changed, onClose = { dialog = null }) }
         null -> {}
     }
-    invite?.let { (name, info) -> CodeDialog("Invite to $name", "Anyone with this link or code can join.", info, env.onShare) { invite = null } }
+    invite?.let { (name, info) -> CodeDialog(tr("Invite to {name}", "name" to name), tr("Anyone with this link or code can join."), info, env.onShare) { invite = null } }
 }
 
 class MenuActions(val join: () -> Unit, val linkThis: () -> Unit, val linkCode: () -> Unit, val settings: () -> Unit)
@@ -367,7 +367,7 @@ private fun ListChips(lists: List<ListItem>, current: ListItem?, open: (ListItem
         for (l in lists) {
             FilterChip(l.id == current?.id,{ open(l) }, label = { Text(l.name, maxLines = 1) }, leadingIcon = { ListBadge(l) }, modifier = Modifier.testTag("list-" + l.name))
         }
-        FilterChip(false, newList, label = { Text("New list") }, leadingIcon = { Icon(Ic.Add, null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("newList"))
+        FilterChip(false, newList, label = { Text(tr("New list")) }, leadingIcon = { Icon(Ic.Add, null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("newList"))
     }
 }
 
@@ -382,19 +382,19 @@ private fun MenuPanel(env: Env, a: MenuActions, compact: Boolean) {
         if (!compact) Text("Tasks", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp))
         OutlinedTextField(
             name, { name = it; runCatching { node.setDisplayName(it.trim()) } },
-            label = { Text("Your name") }, singleLine = true,
+            label = { Text(tr("Your name")) }, singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("name"),
         )
-        MenuRow("Join a shared list", "join", a.join)
+        MenuRow(tr("Join a shared list"), "join", a.join)
         if (isLinking) {
-            Text("Linking: this device joins your other one as soon as it's online", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp).testTag("linkingStatus"))
+            Text(tr("Linking: this device joins your other one as soon as it's online"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp).testTag("linkingStatus"))
         } else {
-            MenuRow(if (devices.size > 1) "Your devices (${devices.size}) · Add a device" else "Add a device", "linkDevice", a.linkCode)
-            if (devices.size <= 1) MenuRow("Join your other device", "linkThis", a.linkThis)
+            MenuRow(if (devices.size > 1) tr("Your devices ({n}) · Add a device", "n" to devices.size) else tr("Add a device"), "linkDevice", a.linkCode)
+            if (devices.size <= 1) MenuRow(tr("Join your other device"), "linkThis", a.linkThis)
         }
-        env.onImport?.let { MenuRow("Import a list file", "importList", it) }
-        if (env.onRestore != null && remember(node, env.version) { node.isPristine() }) MenuRow("Restore from a backup", "restore", env.onRestore)
-        MenuRow("Settings", "settingsOpen", a.settings)
+        env.onImport?.let { MenuRow(tr("Import a list file"), "importList", it) }
+        if (env.onRestore != null && remember(node, env.version) { node.isPristine() }) MenuRow(tr("Restore from a backup"), "restore", env.onRestore)
+        MenuRow(tr("Settings"), "settingsOpen", a.settings)
     }
 }
 
@@ -416,25 +416,25 @@ private fun Banners(env: Env) {
     }
     val update = env.update
     if (env.required != null) {
-        Banner("Please update to keep using shared lists: ${env.required}", "required", *listOfNotNull(env.onUpdate?.let { u -> "Update" to { u(update?.link ?: "https://apps.jurisgames.com/") } }).toTypedArray())
+        Banner(tr("Please update to keep using shared lists: {v}", "v" to env.required), "required", *listOfNotNull(env.onUpdate?.let { u -> tr("Update") to { u(update?.link ?: "https://apps.jurisgames.com/") } }).toTypedArray())
     } else if (update != null && env.onUpdate != null) {
-        val why = if (node.newerVersionSeen()) "A newer version is available to use certain features" else "Version ${update.versionName} is available"
-        Banner(why, "update", "Update" to { env.onUpdate.invoke(update.link) })
+        val why = if (node.newerVersionSeen()) tr("A newer version is available to use certain features") else tr("Version {v} is available", "v" to update.versionName)
+        Banner(why, "update", tr("Update") to { env.onUpdate.invoke(update.link) })
     }
     for (l in remember(node, env.version) { node.recentLinks() }) {
-        Banner("New device linked: ${l.name.ifEmpty { "a device" }}", "recentLink", "Undo" to { node.unlinkDevice(l.deviceId); env.changed() })
+        Banner(tr("New device linked: {name}", "name" to l.name.ifEmpty { tr("a device") }), "recentLink", tr("Undo") to { node.unlinkDevice(l.deviceId); env.changed() })
     }
     node.restored()?.let { r ->
         Banner(
-            "Restored from a backup: ${r.rehomedLists} of your lists are back" + if (r.rejoiningGroups > 0u) "; shared lists open for editing once someone in them is online" else "",
+            tr("Restored from a backup: {n} of your lists are back", "n" to r.rehomedLists) + if (r.rejoiningGroups > 0u) tr("; shared lists open for editing once someone in them is online") else "",
             "restoredInfo",
         )
     }
     val old = remember(node, env.version) { node.replacedDeviceGroups() }
     if (old > 0u) {
         Banner(
-            "Your previous device can still see $old shared ${if (old == 1u) "list" else "lists"}. Lost or stolen?", "oldDevice",
-            "Remove it" to { node.removeReplacedDevice(); env.changed() }, "Keep it" to { node.keepReplacedDevice(); env.changed() },
+            (if (old == 1u) tr("Your previous device can still see {n} shared list. Lost or stolen?", "n" to old) else tr("Your previous device can still see {n} shared lists. Lost or stolen?", "n" to old)), "oldDevice",
+            tr("Remove it") to { node.removeReplacedDevice(); env.changed() }, tr("Keep it") to { node.keepReplacedDevice(); env.changed() },
         )
     }
 }
@@ -464,47 +464,47 @@ private fun ListPane(
     var sort by remember(list.id) { mutableStateOf(sortOf(node, list.id)) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, "Menu") } else Spacer(Modifier.width(16.dp))
+            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, tr("Menu")) } else Spacer(Modifier.width(16.dp))
             Text(
                 list.name, style = MaterialTheme.typography.headlineSmall, color = accent, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).testTag("title"),
             )
             Row(horizontalArrangement = Arrangement.spacedBy((-6).dp)) { for (p in people.filter { !it.isMe }.take(4)) Avatar(p) }
-            IconButton(onClick = listMenu.share, modifier = Modifier.testTag("share")) { Icon(Ic.PersonAdd, if (shared) "Invite" else "Share") }
+            IconButton(onClick = listMenu.share, modifier = Modifier.testTag("share")) { Icon(Ic.PersonAdd, if (shared) tr("Invite") else tr("Share")) }
             Box {
-                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("listMenu")) { Icon(Ic.More, "More") }
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("listMenu")) { Icon(Ic.More, tr("More")) }
                 DropdownMenu(menuOpen, { menuOpen = false }) {
                     @Composable
                     fun item(label: String, tag: String, act: () -> Unit) {
                         DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; act() }, modifier = Modifier.testTag(tag))
                     }
-                    item(if (shared) "Invite someone" else "Share…", "menuShare", listMenu.share)
-                    item("Rename", "menuRename", listMenu.rename)
-                    item("Color and icon", "styleOpen", listMenu.style)
-                    item(if (shopping) "Make it a to-do list" else "Make it a shopping list", "shoppingSwitch") {
+                    item(if (shared) tr("Invite someone") else tr("Share…"), "menuShare", listMenu.share)
+                    item(tr("Rename"), "menuRename", listMenu.rename)
+                    item(tr("Color and icon"), "styleOpen", listMenu.style)
+                    item(if (shopping) tr("Make it a to-do list") else tr("Make it a shopping list"), "shoppingSwitch") {
                         node.setListType(list.id, if (shopping) "tasks" else "shopping"); env.changed()
                     }
                     if (!shopping) {
                         HorizontalDivider()
-                        Text("Sort by", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text(tr("Sort by"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                         for (s in Sort.entries) DropdownMenuItem(
-                            text = { Text(s.label) },
+                            text = { Text(tr(s.label)) },
                             leadingIcon = { if (s == sort) Icon(Ic.Check, null, Modifier.size(18.dp)) else Spacer(Modifier.size(18.dp)) },
                             onClick = { menuOpen = false; sort = s; setSortOf(node, list.id, s) },
                             modifier = Modifier.testTag("sort-" + s.key),
                         )
                         HorizontalDivider()
                     }
-                    item("Delete completed", "clearDone") {
+                    item(tr("Delete completed"), "clearDone") {
                         val done = runCatching { node.tasks(list.id) }.getOrDefault(emptyList()).filter { it.done && it.parentId == null }
                         for (t in done) runCatching { node.deleteTask(list.id, t.id) }
                         env.changed()
                     }
-                    env.onExport?.let { ex -> item("Export", "export") { ex(list) } }
-                    item("Undo changes…", "undoOpen", listMenu.undo)
+                    env.onExport?.let { ex -> item(tr("Export"), "export") { ex(list) } }
+                    item(tr("Undo changes…"), "undoOpen", listMenu.undo)
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text("Delete list", color = MaterialTheme.colorScheme.error) },
+                        text = { Text(tr("Delete list"), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Ic.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; listMenu.delete() }, modifier = Modifier.testTag("deleteList"),
                     )
@@ -513,7 +513,7 @@ private fun ListPane(
         }
         if (shared && people.size > 1) {
             Text(
-                "Shared with " + people.filter { !it.isMe }.joinToString { personLabel(it, people) },
+                tr("Shared with ") + people.filter { !it.isMe }.joinToString { personLabel(it, people) },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = if (onMenu != null) 52.dp else 16.dp, end = 16.dp).testTag("sharedWith"),
@@ -536,7 +536,7 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
     fun add() {
         val t = text.trim()
         if (t.isEmpty()) return
-        val l = runCatching { env.node.createList(null, "My tasks") }.getOrNull() ?: return
+        val l = runCatching { env.node.createList(null, tr("My tasks")) }.getOrNull() ?: return
         val w = parsed
         val id = runCatching { env.node.addTask(l.id, w?.title?.ifBlank { t } ?: t, null) }.getOrNull()
         if (id != null && w != null) runCatching { env.node.setReminder(l.id, id, w.at.millis().toULong()) }
@@ -547,18 +547,18 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
     }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, "Menu") } else Spacer(Modifier.width(16.dp))
-            Text("My tasks", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("title"))
+            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, tr("Menu")) } else Spacer(Modifier.width(16.dp))
+            Text(tr("My tasks"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("title"))
         }
         Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                "Using it on another device? Link this one", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
+                tr("Using it on another device? Link this one"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.clickable(onClick = onLinkThis).testTag("firstLink"),
             )
         }
         HorizontalDivider()
         Box(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
-            AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, "Add a task", addFocus, ::add)
+            AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, tr("Add a task"), addFocus, ::add)
         }
     }
 }
@@ -568,9 +568,9 @@ private fun RenameDialog(name: String, onDone: (String) -> Unit, onClose: () -> 
     var text by remember { mutableStateOf(name) }
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onDone(text.trim()) }, modifier = Modifier.testTag("renameGo")) { Text("Rename") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        title = { Text("Rename list") },
+        confirmButton = { TextButton(onClick = { if (text.isNotBlank()) onDone(text.trim()) }, modifier = Modifier.testTag("renameGo")) { Text(tr("Rename")) } },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
+        title = { Text(tr("Rename list")) },
         text = { OutlinedTextField(text, { text = it }, singleLine = true, modifier = Modifier.testTag("renameText")) },
     )
 }
@@ -588,20 +588,20 @@ private fun NewListDialog(env: Env, onCreated: (ListItem) -> Unit, onClose: () -
     }
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = ::create, modifier = Modifier.testTag("newListGo")) { Text("Create") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        title = { Text("New list") },
+        confirmButton = { TextButton(onClick = ::create, modifier = Modifier.testTag("newListGo")) { Text(tr("Create")) } },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
+        title = { Text(tr("New list")) },
         text = {
             Column {
                 OutlinedTextField(
-                    name, { name = it }, singleLine = true, placeholder = { Text("Name") },
+                    name, { name = it }, singleLine = true, placeholder = { Text(tr("Name")) },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { create() }),
                     modifier = Modifier.testTag("newListName"),
                 )
                 Row(Modifier.clickable { shopping = !shopping }, verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(shopping, { shopping = it }, modifier = Modifier.testTag("newListShopping"))
-                    Text("Shopping list (ticked items can be added back with a tap)")
+                    Text(tr("Shopping list (ticked items can be added back with a tap)"))
                 }
             }
         },
@@ -614,26 +614,26 @@ private fun CodeDialog(title: String, hint: String, info: InviteInfo, onShare: (
     val clip = androidx.compose.ui.platform.LocalClipboardManager.current
     var qr by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf("") }
-    val until = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH).format(fromMillis(info.expiresMs.toLong()))
+    val until = java.time.format.DateTimeFormatter.ofPattern("d MMM", Lang.locale).format(fromMillis(info.expiresMs.toLong())).let(::shortName)
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose, modifier = Modifier.testTag("codeDone")) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onClose, modifier = Modifier.testTag("codeDone")) { Text(tr("Done")) } },
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(hint, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    androidx.compose.material3.Button(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(info.link)); copied = "Link copied" }, modifier = Modifier.testTag("copyLink")) { Text("Copy link") }
-                    if (onShare != null) androidx.compose.material3.OutlinedButton(onClick = { onShare(info.link) }, modifier = Modifier.testTag("shareInvite")) { Text("Share") }
+                    androidx.compose.material3.Button(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(info.link)); copied = tr("Link copied") }, modifier = Modifier.testTag("copyLink")) { Text(tr("Copy link")) }
+                    if (onShare != null) androidx.compose.material3.OutlinedButton(onClick = { onShare(info.link) }, modifier = Modifier.testTag("shareInvite")) { Text(tr("Share")) }
                 }
-                Text("Or send them this code", style = MaterialTheme.typography.labelLarge)
+                Text(tr("Or send them this code"), style = MaterialTheme.typography.labelLarge)
                 Text(info.words.joinToString(" - "), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("words"))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(info.words.joinToString(" "))); copied = "Code copied" }, modifier = Modifier.testTag("copyCode")) { Text("Copy code") }
-                    TextButton(onClick = { qr = !qr }, modifier = Modifier.testTag("showQr")) { Text(if (qr) "Hide QR code" else "Show QR code") }
+                    TextButton(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(info.words.joinToString(" "))); copied = tr("Code copied") }, modifier = Modifier.testTag("copyCode")) { Text(tr("Copy code")) }
+                    TextButton(onClick = { qr = !qr }, modifier = Modifier.testTag("showQr")) { Text(if (qr) tr("Hide QR code") else tr("Show QR code")) }
                 }
                 if (qr) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { QrView(info.link) }
-                Text((if (copied.isNotEmpty()) "$copied · " else "") + "Works until $until", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text((if (copied.isNotEmpty()) "$copied · " else "") + tr("Works until {date}", "date" to until), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
     )
@@ -651,41 +651,41 @@ private fun LinkThisDialog(env: Env, prefilled: String?, scope: CoroutineScope, 
         confirmButton = {
             if (preview == null) {
                 TextButton(onClick = {
-                    result = "Looking…"
+                    result = tr("Looking…")
                     scope.launch {
                         try {
                             val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { node.linkPreview(words) }
-                            preview = "This joins ${p.accountName}'s lists: ${p.summary}" + when (ownLists) {
+                            preview = tr("This joins {name}'s lists: {summary}", "name" to p.accountName, "summary" to trSummary(p.summary)) + when (ownLists) {
                                 0 -> "."
-                                1 -> ". The list on this device is added to them."
-                                else -> ". The $ownLists lists on this device are added to them."
+                                1 -> tr(". The list on this device is added to them.")
+                                else -> tr(". The {n} lists on this device are added to them.", "n" to ownLists)
                             }
                             result = ""
                         } catch (e: Exception) {
-                            result = e.message ?: "That code didn't work. Check it on your other device."
+                            result = tr(e.message ?: tr("That code didn't work. Check it on your other device."))
                         }
                     }
-                }, modifier = Modifier.testTag("linkFind")) { Text("Next") }
+                }, modifier = Modifier.testTag("linkFind")) { Text(tr("Next")) }
             } else {
                 TextButton(onClick = {
                     scope.launch {
                         result = try {
                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { node.linkConfirm(words) }
                             env.changed()
-                            "Linking: this device joins as soon as your other one is online"
+                            tr("Linking: this device joins as soon as your other one is online")
                         } catch (e: Exception) {
-                            e.message ?: "Couldn't link. Try again."
+                            tr(e.message ?: tr("Couldn't link. Try again."))
                         }
                     }
-                }, modifier = Modifier.testTag("linkGo")) { Text("Link") }
+                }, modifier = Modifier.testTag("linkGo")) { Text(tr("Link")) }
             }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
-        title = { Text("Link this device") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
+        title = { Text(tr("Link this device")) },
         text = {
             Column {
-                OutlinedTextField(words, { words = it; preview = null }, label = { Text("Code or link from your other device") }, modifier = Modifier.testTag("linkThisWords"))
-                env.onScan?.let { scan -> TextButton(onClick = { scan { words = it; preview = null } }, modifier = Modifier.testTag("scanLink")) { Text("Scan QR code") } }
+                OutlinedTextField(words, { words = it; preview = null }, label = { Text(tr("Code or link from your other device")) }, modifier = Modifier.testTag("linkThisWords"))
+                env.onScan?.let { scan -> TextButton(onClick = { scan { words = it; preview = null } }, modifier = Modifier.testTag("scanLink")) { Text(tr("Scan QR code")) } }
                 preview?.let { Text(it, modifier = Modifier.testTag("linkPreview")) }
                 if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("linkResult"))
             }

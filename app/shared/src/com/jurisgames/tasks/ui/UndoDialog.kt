@@ -35,17 +35,17 @@ fun UndoDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () -> 
                 result = try {
                     val n = node.undoChangesBy(list.id, p, (System.currentTimeMillis() - since.second).toULong())
                     onDone()
-                    if (n == 0u) "Nothing to undo" else "Put back $n ${if (n == 1u) "change" else "changes"}"
+                    if (n == 0u) tr("Nothing to undo") else (if (n == 1u) tr("Put back {n} change", "n" to n) else tr("Put back {n} changes", "n" to n))
                 } catch (e: Exception) {
-                    e.message ?: "Couldn't undo"
+                    tr(e.message ?: tr("Couldn't undo"))
                 }
-            }, enabled = who != null, modifier = Modifier.testTag("undoGo")) { Text("Undo") }
+            }, enabled = who != null, modifier = Modifier.testTag("undoGo")) { Text(tr("Undo")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
-        title = { Text("Undo someone's changes") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
+        title = { Text(tr("Undo someone's changes")) },
         text = {
             Column {
-                Text("Whose changes?", style = MaterialTheme.typography.titleSmall)
+                Text(tr("Whose changes?"), style = MaterialTheme.typography.titleSmall)
                 for (p in people) {
                     FilterChip(
                         selected = who == p,
@@ -55,10 +55,10 @@ fun UndoDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () -> 
                         modifier = Modifier.testTag("undoWho-" + p.name),
                     )
                 }
-                Text("Made in…", style = MaterialTheme.typography.titleSmall)
+                Text(tr("Made in…"), style = MaterialTheme.typography.titleSmall)
                 Row {
                     for (period in periods) {
-                        FilterChip(selected = since == period, onClick = { since = period }, label = { Text(period.first.removePrefix("the last ")) }, modifier = Modifier.testTag("undoSince-" + period.second))
+                        FilterChip(selected = since == period, onClick = { since = period }, label = { Text(tr(period.first.removePrefix("the last "))) }, modifier = Modifier.testTag("undoSince-" + period.second))
                     }
                 }
                 if (result.isNotEmpty()) Text(result, modifier = Modifier.testTag("undoResult"))

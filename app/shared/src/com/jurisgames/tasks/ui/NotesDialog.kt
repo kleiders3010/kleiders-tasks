@@ -37,18 +37,18 @@ fun NotesDialog(node: KtNode, listId: String, taskId: String, version: Int, onSa
                     onSaved()
                     onClose()
                 } catch (e: Exception) {
-                    error = e.message ?: "Couldn't save"
+                    error = e.message ?: tr("Couldn't save")
                 }
-            }, enabled = complete, modifier = Modifier.testTag("notesSave")) { Text("Save") }
+            }, enabled = complete, modifier = Modifier.testTag("notesSave")) { Text(tr("Save")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
-        title = { Text("Notes") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
+        title = { Text(tr("Notes")) },
         text = {
             Column {
                 OutlinedTextField(text, { text = it }, enabled = complete, modifier = Modifier.heightIn(min = 120.dp, max = 360.dp).testTag("notesText"))
                 if (!complete) {
                     val kb = ((notes?.size ?: 0u).toLong() + 1023) / 1024
-                    Text("The rest of this note ($kb KB) is still on its way.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("notesPending"))
+                    Text(tr("The rest of this note ({kb} KB) is still on its way.", "kb" to kb), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("notesPending"))
                 }
                 if (error.isNotEmpty()) Text(error, modifier = Modifier.testTag("notesError"))
             }

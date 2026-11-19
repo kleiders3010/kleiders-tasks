@@ -64,11 +64,11 @@ fun DiagnosticsDialog(node: KtNode, onClose: () -> Unit) {
         onDismissRequest = onClose,
         confirmButton = {
             TextButton(onClick = { clipboard.setText(AnnotatedString(text)); copied = true }, modifier = Modifier.testTag("exportLog")) {
-                Text(if (copied) "Copied" else "Export log")
+                Text(if (copied) tr("Copied") else tr("Export log"))
             }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Close") } },
-        title = { Text("Diagnostics") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
+        title = { Text(tr("Diagnostics")) },
         text = {
             Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
                 Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("diagnostics"))

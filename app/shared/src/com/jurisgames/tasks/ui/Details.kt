@@ -102,23 +102,23 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
         }
 
         // Reminder
-        Section(Ic.Bell, "Remind me") {
+        Section(Ic.Bell, tr("Remind me")) {
             var picking by remember(t.id) { mutableStateOf(false) }
             fun set(at: LocalDateTime?) {
                 runCatching { node.setReminder(list.id, t.id, at?.millis()?.toULong()) }; env.changed()
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 t.remindMs?.let { ms ->
-                    InputChip(true, { set(null) }, label = { Text(whenLabel(fromMillis(ms.toLong()))) }, trailingIcon = { Icon(Ic.Close, "No reminder", Modifier.size(16.dp)) }, modifier = Modifier.testTag("remindClear"))
+                    InputChip(true, { set(null) }, label = { Text(whenLabel(fromMillis(ms.toLong()))) }, trailingIcon = { Icon(Ic.Close, tr("No reminder"), Modifier.size(16.dp)) }, modifier = Modifier.testTag("remindClear"))
                 }
-                for ((label, at) in reminderChoices()) AssistChip({ set(at) }, label = { Text(label) }, modifier = Modifier.testTag("remind-$label"))
-                AssistChip({ picking = true }, label = { Text("Pick…") }, modifier = Modifier.testTag("remindPick"))
+                for ((label, at) in reminderChoices()) AssistChip({ set(at) }, label = { Text(tr(label)) }, modifier = Modifier.testTag("remind-$label"))
+                AssistChip({ picking = true }, label = { Text(tr("Pick…")) }, modifier = Modifier.testTag("remindPick"))
             }
             if (picking) PickMoment(t.remindMs?.let { fromMillis(it.toLong()) }, onPicked = { set(it); picking = false }, onClose = { picking = false })
         }
 
         // Repeat (like Todoist's "every"): ticked off, it comes back on its next date
-        Section(Ic.Repeat, "Repeat") {
+        Section(Ic.Repeat, tr("Repeat")) {
             fun pick(rule: String?) {
                 runCatching {
                     if (rule != null && t.remindMs == null) node.setReminder(list.id, t.id, firstDate(rule).millis().toULong())
@@ -135,7 +135,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
         }
 
         // Notes (long notes are an attachment: read-only until all of it is here)
-        Section(Ic.Notes, "Notes") {
+        Section(Ic.Notes, tr("Notes")) {
             val notes = remember(list.id, t.id, env.version) { runCatching { node.notes(list.id, t.id) }.getOrNull() }
             val complete = notes?.complete ?: true
             var text by remember(t.id, complete) { mutableStateOf(notes?.text ?: "") }
@@ -145,27 +145,27 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                     runCatching { node.setNotes(list.id, t.id, text) }; env.changed()
                 }
             }
-            OutlinedTextField(text, { text = it }, enabled = complete, placeholder = { Text("Add notes") }, minLines = 2, modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("notesText"))
+            OutlinedTextField(text, { text = it }, enabled = complete, placeholder = { Text(tr("Add notes")) }, minLines = 2, modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("notesText"))
             if (!complete) {
                 val kb = ((notes?.size ?: 0u).toLong() + 1023) / 1024
-                Text("The rest of this note ($kb KB) is still on its way.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("notesPending"))
+                Text(tr("The rest of this note ({kb} KB) is still on its way.", "kb" to kb), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("notesPending"))
             }
         }
 
         // Pictures
-        if (env.onPickImage != null || t.images.isNotEmpty()) Section(Ic.Image, "Pictures") {
+        if (env.onPickImage != null || t.images.isNotEmpty()) Section(Ic.Image, tr("Pictures")) {
             var viewing by remember(t.id) { mutableStateOf<String?>(null) }
             viewing?.let { img -> ImageViewer(node, list.id, t.id, img, env.version, env.changed) { viewing = null } }
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 for (img in t.images) Thumbnail(node, list.id, img, env.version, Modifier.clickable { viewing = img }.testTag("thumb-" + t.title))
                 env.onPickImage?.let { pick ->
-                    TextButton(onClick = { pick { bytes -> runCatching { node.addImage(list.id, t.id, bytes) }; env.changed() } }, modifier = Modifier.testTag("image-" + t.title)) { Text("Add picture") }
+                    TextButton(onClick = { pick { bytes -> runCatching { node.addImage(list.id, t.id, bytes) }; env.changed() } }, modifier = Modifier.testTag("image-" + t.title)) { Text(tr("Add picture")) }
                 }
             }
         }
 
         // Subtasks
-        Section(Ic.Subtask, "Steps") {
+        Section(Ic.Subtask, tr("Steps")) {
             val children = tasks.filter { it.parentId == t.id }
             for (c in children) {
                 Row(Modifier.fillMaxWidth().clickable { onOpen(c.id) }, verticalAlignment = Alignment.CenterVertically) {
@@ -179,7 +179,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 runCatching { node.addTask(list.id, step.trim(), t.id) }; step = ""; env.changed()
             }
             OutlinedTextField(
-                step, { step = it }, placeholder = { Text("Add a step") }, singleLine = true,
+                step, { step = it }, placeholder = { Text(tr("Add a step")) }, singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { addStep() }),
                 modifier = Modifier.fillMaxWidth().testTag("newStep"),
@@ -191,7 +191,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             if (others.isNotEmpty() && t.parentId == null) {
                 Box {
                     var open by remember { mutableStateOf(false) }
-                    TextButton(onClick = { open = true }, modifier = Modifier.testTag("moveTo")) { Text("Move to list") }
+                    TextButton(onClick = { open = true }, modifier = Modifier.testTag("moveTo")) { Text(tr("Move to list")) }
                     DropdownMenu(open, { open = false }) {
                         for (o in others) DropdownMenuItem(text = { Text(o.name) }, onClick = {
                             open = false
@@ -203,7 +203,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onDelete, modifier = Modifier.testTag("delete-" + t.title), colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                Icon(Ic.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text("Delete")
+                Icon(Ic.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.size(6.dp)); Text(tr("Delete"))
             }
         }
     }
@@ -251,16 +251,16 @@ private fun PickMoment(initial: LocalDateTime?, onPicked: (LocalDateTime) -> Uni
             confirmButton = {
                 TextButton(onClick = {
                     ds.selectedDateMillis?.let { day = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
-                }, modifier = Modifier.testTag("pickDay")) { Text("Next") }
+                }, modifier = Modifier.testTag("pickDay")) { Text(tr("Next")) }
             },
-            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
         ) { DatePicker(ds) }
     } else {
         val ts = rememberTimePickerState(initialHour = start.hour, initialMinute = start.minute)
         AlertDialog(
             onDismissRequest = onClose,
-            confirmButton = { TextButton(onClick = { onPicked(day!!.atTime(LocalTime.of(ts.hour, ts.minute))) }, modifier = Modifier.testTag("pickTime")) { Text("Set") } },
-            dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
+            confirmButton = { TextButton(onClick = { onPicked(day!!.atTime(LocalTime.of(ts.hour, ts.minute))) }, modifier = Modifier.testTag("pickTime")) { Text(tr("Set")) } },
+            dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
             text = { TimePicker(ts) },
         )
     }
@@ -280,7 +280,7 @@ private fun Thumbnail(node: KtNode, listId: String, imageId: String, version: In
     val bitmap = image(node, listId, imageId, version)
     val shape = RoundedCornerShape(8.dp)
     if (bitmap != null) {
-        Image(bitmap, contentDescription = "Picture", contentScale = ContentScale.Crop, modifier = modifier.size(64.dp).clip(shape))
+        Image(bitmap, contentDescription = tr("Picture"), contentScale = ContentScale.Crop, modifier = modifier.size(64.dp).clip(shape))
     } else {
         // Still on its way to this device (or not decodable here).
         Box(modifier.size(64.dp).clip(shape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text("…") }
@@ -292,13 +292,13 @@ private fun ImageViewer(node: KtNode, listId: String, taskId: String, imageId: S
     val bitmap = image(node, listId, imageId, version)
     AlertDialog(
         onDismissRequest = onClose,
-        confirmButton = { TextButton(onClick = onClose) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
         dismissButton = {
-            TextButton(onClick = { node.removeImage(listId, taskId, imageId); onChanged(); onClose() }, modifier = Modifier.testTag("imageRemove")) { Text("Remove") }
+            TextButton(onClick = { node.removeImage(listId, taskId, imageId); onChanged(); onClose() }, modifier = Modifier.testTag("imageRemove")) { Text(tr("Remove")) }
         },
         text = {
-            if (bitmap != null) Image(bitmap, contentDescription = "Picture", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp).testTag("imageFull"))
-            else Text("This picture is still on its way to this device.")
+            if (bitmap != null) Image(bitmap, contentDescription = tr("Picture"), contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp).testTag("imageFull"))
+            else Text(tr("This picture is still on its way to this device."))
         },
     )
 }

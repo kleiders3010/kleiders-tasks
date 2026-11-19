@@ -1,5 +1,6 @@
 package com.jurisgames.tasks
 
+import com.jurisgames.tasks.ui.tr
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
@@ -61,7 +62,7 @@ class TasksWidget : GlanceAppWidget() {
             val chosen = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("list", null)
             val list = lists.firstOrNull { it.id == chosen } ?: lists.firstOrNull()
             val tasks = list?.let { l -> runCatching { node.tasks(l.id) }.getOrDefault(emptyList()) }.orEmpty()
-            return WidgetState(list?.id, list?.name ?: "No lists yet", tasks.map { WidgetTask(it.id, it.title, it.done, it.depth.toInt()) }, System.currentTimeMillis())
+            return WidgetState(list?.id, list?.name ?: tr("No lists yet"), tasks.map { WidgetTask(it.id, it.title, it.done, it.depth.toInt()) }, System.currentTimeMillis())
         }
 
         fun choose(context: Context, listId: String) {
@@ -83,7 +84,7 @@ fun WidgetContent(state: WidgetState) {
                 style = TextStyle(fontWeight = FontWeight.Bold, color = GlanceTheme.colors.onSurface),
                 modifier = GlanceModifier.defaultWeight().clickable(actionRunCallback<NextList>()).semantics { testTag = "widgetTitle" },
             )
-            Text("Updated " + DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(state.updatedMs)), style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
+            Text(tr("Updated {time}", "time" to DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(state.updatedMs))), style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant))
         }
         LazyColumn {
             items(state.tasks, itemId = { it.id.hashCode().toLong() }) { t ->

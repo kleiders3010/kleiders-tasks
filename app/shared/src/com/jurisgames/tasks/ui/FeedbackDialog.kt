@@ -86,13 +86,13 @@ object Feedback {
         val answer = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: ""
         when {
             code == 200 && answer.contains("\"ok\":true") -> null
-            code == 429 -> "Too many reports from this network today. Please try again tomorrow, or write to hello@jurisgames.com."
-            answer.contains("\"email\"") -> "That email doesn't look right."
-            answer.contains("\"details\"") -> "The technical details are too big. Untick them and send again."
-            else -> "It couldn't be sent. Check your connection and try again, or write to hello@jurisgames.com."
+            code == 429 -> tr("Too many reports from this network today. Please try again tomorrow, or write to hello@jurisgames.com.")
+            answer.contains("\"email\"") -> tr("That email doesn't look right.")
+            answer.contains("\"details\"") -> tr("The technical details are too big. Untick them and send again.")
+            else -> tr("It couldn't be sent. Check your connection and try again, or write to hello@jurisgames.com.")
         }
     } catch (e: Exception) {
-        "It couldn't be sent. Check your connection and try again, or write to hello@jurisgames.com."
+        tr("It couldn't be sent. Check your connection and try again, or write to hello@jurisgames.com.")
     }
 }
 
@@ -114,7 +114,7 @@ fun FeedbackDialog(node: KtNode, onSent: () -> Unit, onClose: () -> Unit) {
         confirmButton = {
             TextButton(enabled = !sending, modifier = Modifier.testTag("feedbackSend"), onClick = {
                 if (message.isBlank()) {
-                    error = "Write a few words first."
+                    error = tr("Write a few words first.")
                     return@TextButton
                 }
                 sending = true
@@ -124,29 +124,29 @@ fun FeedbackDialog(node: KtNode, onSent: () -> Unit, onClose: () -> Unit) {
                     sending = false
                     if (problem == null) onSent() else error = problem
                 }
-            }) { Text(if (sending) "Sending…" else "Send") }
+            }) { Text(if (sending) tr("Sending…") else tr("Send")) }
         },
-        dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } },
-        title = { Text("Send feedback") },
+        dismissButton = { TextButton(onClick = onClose) { Text(tr("Cancel")) } },
+        title = { Text(tr("Send feedback")) },
         text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("It goes to the person who makes this app. Thanks for helping!", style = MaterialTheme.typography.bodySmall)
+                Text(tr("It goes to the person who makes this app. Thanks for helping!"), style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for ((k, label) in Feedback.kinds) {
-                        FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(label) }, modifier = Modifier.testTag("feedbackKind-$k"))
+                        FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(tr(label)) }, modifier = Modifier.testTag("feedbackKind-$k"))
                     }
                 }
-                OutlinedTextField(message, { message = it.take(4000) }, placeholder = { Text("What happened, or what would make it better?") },
+                OutlinedTextField(message, { message = it.take(4000) }, placeholder = { Text(tr("What happened, or what would make it better?")) },
                     minLines = 4, modifier = Modifier.fillMaxWidth().testTag("feedbackMessage"))
-                OutlinedTextField(email, { email = it.take(254) }, placeholder = { Text("Your email, if you'd like an answer (optional)") },
+                OutlinedTextField(email, { email = it.take(254) }, placeholder = { Text(tr("Your email, if you'd like an answer (optional)")) },
                     singleLine = true, modifier = Modifier.fillMaxWidth().testTag("feedbackEmail"))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(include, { include = it }, modifier = Modifier.testTag("feedbackDetails"))
-                    Text("Include technical details")
+                    Text(tr("Include technical details"))
                 }
-                Text("Sync state, relays, storage sizes, app version and system. Never your lists, tasks or names.", style = MaterialTheme.typography.bodySmall)
+                Text(tr("Sync state, relays, storage sizes, app version and system. Never your lists, tasks or names."), style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = { preview = !preview }, modifier = Modifier.testTag("feedbackSee")) {
-                    Text(if (preview) "Hide what's sent" else "See what's sent")
+                    Text(if (preview) tr("Hide what's sent") else tr("See what's sent"))
                 }
                 if (preview) Text(body, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("feedbackPreview"))
                 if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("feedbackError"))

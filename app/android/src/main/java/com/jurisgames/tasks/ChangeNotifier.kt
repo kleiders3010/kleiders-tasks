@@ -1,5 +1,6 @@
 package com.jurisgames.tasks
 
+import com.jurisgames.tasks.ui.tr
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -23,7 +24,7 @@ object ChangeNotifier {
         if (changes.isEmpty()) return
         if (Build.VERSION.SDK_INT >= 33 && ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(CHANNEL, "Changes by others", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(CHANNEL, tr("Changes by others"), NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         // One per list; joins one per group.
         for ((key, cs) in changes.groupBy { it.listId.ifEmpty { "group:" + it.groupName } }) {
@@ -51,14 +52,14 @@ object ChangeNotifier {
         if (groups.isEmpty() && gaveUp == 0) return
         if (Build.VERSION.SDK_INT >= 33 && ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(NotificationChannel(JOINS, "Joining", NotificationManager.IMPORTANCE_DEFAULT))
+        nm.createNotificationChannel(NotificationChannel(JOINS, tr("Joining"), NotificationManager.IMPORTANCE_DEFAULT))
         val open = PendingIntent.getActivity(ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         fun post(id: Int, title: String, text: String) = nm.notify(id, Notification.Builder(ctx, JOINS)
             .setSmallIcon(android.R.drawable.checkbox_on_background)
             .setContentTitle(title).setContentText(text)
             .setContentIntent(open).setAutoCancel(true).build())
-        for (g in groups) post(("joined:" + g).hashCode(), "You're in $g", "Its lists are on this phone now.")
-        if (gaveUp > 0) post("gave-up".hashCode(), "Couldn't find that invite", "Check the code with the person who sent it, or ask for a new one.")
+        for (g in groups) post(("joined:" + g).hashCode(), tr("You're in {group}", "group" to g), tr("Its lists are on this phone now."))
+        if (gaveUp > 0) post("gave-up".hashCode(), tr("Couldn't find that invite"), tr("Check the code with the person who sent it, or ask for a new one."))
     }
 
     private const val JOINS = "joins"
@@ -66,8 +67,8 @@ object ChangeNotifier {
     /** "Sam added milk, eggs and completed bread; Alex added apples", "Kim joined". */
     fun describe(cs: List<ChangeItem>): String =
         cs.groupBy { it.who }.entries.joinToString("; ") { (who, xs) ->
-            who + " " + xs.groupBy { it.kind }.entries.joinToString(" and ") { (kind, ys) ->
-                if (kind == "joined") "joined" else kind + " " + ys.joinToString(", ") { it.title }
+            who + " " + xs.groupBy { it.kind }.entries.joinToString(tr(" and ")) { (kind, ys) ->
+                if (kind == "joined") tr("joined") else tr(kind) + " " + ys.joinToString(", ") { it.title }
             }
         }
 }

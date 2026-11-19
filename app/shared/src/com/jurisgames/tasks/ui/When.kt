@@ -164,12 +164,11 @@ fun whenLabel(at: LocalDateTime, now: LocalDateTime = LocalDateTime.now()): Stri
     val time = at.toLocalTime().format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
     val days = java.time.temporal.ChronoUnit.DAYS.between(now.toLocalDate(), at.toLocalDate())
     val dayText = when {
-        days == 0L -> "Today"
-        days == 1L -> "Tomorrow"
-        days == -1L -> "Yesterday"
-        // English like the rest of the app until it is translated.
-        days in 2..6 -> at.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)
-        else -> at.format(DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH))
+        days == 0L -> tr("Today")
+        days == 1L -> tr("Tomorrow")
+        days == -1L -> tr("Yesterday")
+        days in 2..6 -> shortName(at.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, Lang.locale))
+        else -> shortName(at.format(DateTimeFormatter.ofPattern("d MMM", Lang.locale)))
     }
     return "$dayText $time"
 }

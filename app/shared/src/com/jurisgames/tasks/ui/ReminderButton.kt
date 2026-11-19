@@ -31,12 +31,12 @@ fun ReminderButton(node: KtNode, listId: String, taskId: String, remindMs: ULong
                 open = false
                 onChanged()
             }
-            DropdownMenuItem(text = { Text("In 1 hour") }, onClick = { set(System.currentTimeMillis() + 3_600_000) }, modifier = Modifier.testTag("remindHour"))
-            DropdownMenuItem(text = { Text("Tomorrow 9:00") }, onClick = {
+            DropdownMenuItem(text = { Text(tr("In 1 hour")) }, onClick = { set(System.currentTimeMillis() + 3_600_000) }, modifier = Modifier.testTag("remindHour"))
+            DropdownMenuItem(text = { Text(tr("Tomorrow 9:00")) }, onClick = {
                 val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1); set(Calendar.HOUR_OF_DAY, 9); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0) }
                 set(c.timeInMillis)
             }, modifier = Modifier.testTag("remindTomorrow"))
-            if (remindMs != null) DropdownMenuItem(text = { Text("No reminder") }, onClick = { set(null) }, modifier = Modifier.testTag("remindClear"))
+            if (remindMs != null) DropdownMenuItem(text = { Text(tr("No reminder")) }, onClick = { set(null) }, modifier = Modifier.testTag("remindClear"))
         }
     }
 }

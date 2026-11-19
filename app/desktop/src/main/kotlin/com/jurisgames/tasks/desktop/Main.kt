@@ -1,5 +1,6 @@
 package com.jurisgames.tasks.desktop
 
+import com.jurisgames.tasks.ui.tr
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,10 +127,10 @@ fun main(args: Array<String>) {
             tooltip = "Tasks",
             onAction = { visible = true },
             menu = {
-                Item("Open Tasks", onClick = { visible = true })
-                Item("Sync now", onClick = { Thread { node.syncNow() }.start() })
+                Item(tr("Open Tasks"), onClick = { visible = true })
+                Item(tr("Sync now"), onClick = { Thread { node.syncNow() }.start() })
                 Separator()
-                Item("Quit", onClick = { quit() })
+                Item(tr("Quit"), onClick = { quit() })
             },
         )
         // Closing the window: stay in the tray and keep syncing, unless background sync is off.
@@ -141,13 +142,13 @@ fun main(args: Array<String>) {
                 runCatching { node.requiredUpdate(VERSION_CODE, channel) }.getOrNull()
             }
             TasksApp(node, required = required, decodeImage = Images::decode, onPickImage = { done ->
-                val dialog = FileDialog(null as Frame?, "Add an image", FileDialog.LOAD).apply {
+                val dialog = FileDialog(null as Frame?, tr("Add an image"), FileDialog.LOAD).apply {
                     setFilenameFilter { _, name -> name.lowercase().substringAfterLast('.') in setOf("jpg", "jpeg", "png", "gif", "bmp", "webp") }
                     isVisible = true
                 }
                 dialog.file?.let { Images.compress(File(dialog.directory, it)) }?.let(done)
             }, onImport = {
-                val dialog = FileDialog(null as Frame?, "Import a list file", FileDialog.LOAD).apply { file = "*.tasklist"; isVisible = true }
+                val dialog = FileDialog(null as Frame?, tr("Import a list file"), FileDialog.LOAD).apply { file = "*.tasklist"; isVisible = true }
                 dialog.file?.let { f ->
                     runCatching { node.importListFile(null, File(dialog.directory, f).readBytes()) }
                         .onFailure { System.err.println("import failed: ${it.message}") } // prototype: no error UI yet
@@ -158,7 +159,7 @@ fun main(args: Array<String>) {
                 // Desktop: onto the clipboard, ready to paste into any chat.
                 java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(link), null)
             }, onRestore = {
-                val dialog = FileDialog(null as Frame?, "Restore from a backup file", FileDialog.LOAD).apply { isVisible = true }
+                val dialog = FileDialog(null as Frame?, tr("Restore from a backup file"), FileDialog.LOAD).apply { isVisible = true }
                 val file = dialog.file?.let { File(dialog.directory, it) }
                 if (file != null) {
                     node = restoreNode(node, file.readBytes()).getOrElse { e ->
@@ -169,7 +170,7 @@ fun main(args: Array<String>) {
                 }
             }, onExport = { l ->
                 // Both formats side by side: readable Markdown and the re-importable file.
-                val dialog = FileDialog(null as Frame?, "Export ${l.name}", FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }
+                val dialog = FileDialog(null as Frame?, tr("Export {name}", "name" to l.name), FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }
                 val md = dialog.file?.let { File(dialog.directory, it) }
                 if (md != null) {
                     md.writeText(node.exportMarkdown(l.id))

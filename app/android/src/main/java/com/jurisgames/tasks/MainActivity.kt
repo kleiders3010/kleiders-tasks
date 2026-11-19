@@ -1,5 +1,6 @@
 package com.jurisgames.tasks
 
+import com.jurisgames.tasks.ui.tr
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -41,16 +42,16 @@ class MainActivity : ComponentActivity() {
                 onPicked = null
                 if (uri != null && done != null) scope.launch {
                     val bytes = withContext(Dispatchers.IO) { Images.compress(this@MainActivity, uri) }
-                    if (bytes != null) done(bytes) else Toast.makeText(this@MainActivity, "Couldn't read that image", Toast.LENGTH_LONG).show()
+                    if (bytes != null) done(bytes) else Toast.makeText(this@MainActivity, tr("Couldn't read that image"), Toast.LENGTH_LONG).show()
                 }
             }
             val importList = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) scope.launch {
                     val msg = try {
                         val l = withContext(Dispatchers.IO) { node.importListFile(null, contentResolver.openInputStream(uri)!!.use { it.readBytes() }) }
-                        "Imported ${l.name}"
+                        tr("Imported {name}", "name" to l.name)
                     } catch (e: Exception) {
-                        e.message ?: "Not a list file"
+                        tr(e.message ?: tr("Not a list file"))
                     }
                     Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                 }
@@ -65,7 +66,7 @@ class MainActivity : ComponentActivity() {
                         node.startLive()
                     } catch (e: Exception) {
                         node = app.node
-                        Toast.makeText(this@MainActivity, e.message ?: "Restore failed", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, tr(e.message ?: tr("Restore failed")), Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -73,7 +74,7 @@ class MainActivity : ComponentActivity() {
                 onPicked = done
                 pickImage.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }, decodeImage = Images::decode, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
-                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), "Share invite"))
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), tr("Share invite")))
             }, update = update.value, required = required.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
             }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
@@ -88,19 +89,19 @@ class MainActivity : ComponentActivity() {
                     .putExtra(Intent.EXTRA_TEXT, node.exportMarkdown(l.id))
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                startActivity(Intent.createChooser(send, "Export ${l.name}"))
+                startActivity(Intent.createChooser(send, tr("Export {name}", "name" to l.name)))
             }, onImport = { importList.launch(arrayOf("*/*")) })
             var blocked by remember { mutableStateOf(BackgroundCheck.shouldExplain(this@MainActivity)) }
             if (blocked) androidx.compose.material3.AlertDialog(
                 onDismissRequest = { blocked = false },
-                title = { androidx.compose.material3.Text("Updates only while the app is open") },
-                text = { androidx.compose.material3.Text("This phone is stopping Tasks from syncing in the background, so shared lists only update while the app is open. To fix it, allow background activity for Tasks in its battery settings.") },
+                title = { androidx.compose.material3.Text(tr("Updates only while the app is open")) },
+                text = { androidx.compose.material3.Text(tr("This phone is stopping Tasks from syncing in the background, so shared lists only update while the app is open. To fix it, allow background activity for Tasks in its battery settings.")) },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = { blocked = false; BackgroundCheck.openSettings(this@MainActivity) }, modifier = androidx.compose.ui.Modifier.testTag("bgSettings")) {
-                        androidx.compose.material3.Text("Battery settings")
+                        androidx.compose.material3.Text(tr("Battery settings"))
                     }
                 },
-                dismissButton = { androidx.compose.material3.TextButton(onClick = { blocked = false }) { androidx.compose.material3.Text("Not now") } },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { blocked = false }) { androidx.compose.material3.Text(tr("Not now")) } },
             )
         }
         holdSplash()
@@ -226,12 +227,12 @@ class MainActivity : ComponentActivity() {
         prefs.edit().putBoolean("asked", true).apply()
         // Our own words first (UX principle: permissions are explained before they're asked).
         android.app.AlertDialog.Builder(this)
-            .setTitle("Reminders on time")
-            .setMessage("Allow Tasks to set alarms so reminders ring exactly when you asked. Without it they still come, maybe a few minutes late.")
-            .setPositiveButton("Allow") { _, _ ->
+            .setTitle(tr("Reminders on time"))
+            .setMessage(tr("Allow Tasks to set alarms so reminders ring exactly when you asked. Without it they still come, maybe a few minutes late."))
+            .setPositiveButton(tr("Allow")) { _, _ ->
                 runCatching { startActivity(Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, android.net.Uri.parse("package:$packageName"))) }
             }
-            .setNegativeButton("Not now", null)
+            .setNegativeButton(tr("Not now"), null)
             .show()
     }
 

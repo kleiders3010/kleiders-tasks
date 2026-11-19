@@ -52,16 +52,16 @@ fun dayGroups(tasks: List<StarredTask>, now: LocalDateTime = LocalDateTime.now()
     val sorted = tasks.sortedBy { it.task.remindMs!!.toLong() }
     val (late, rest) = sorted.partition { fromMillis(it.task.remindMs!!.toLong()).toLocalDate() < today }
     val out = mutableListOf<DayGroup>()
-    if (late.isNotEmpty()) out += DayGroup("Overdue", true, late)
+    if (late.isNotEmpty()) out += DayGroup(tr("Overdue"), true, late)
     rest.groupBy { fromMillis(it.task.remindMs!!.toLong()).toLocalDate() }.forEach { (day, ts) -> out += DayGroup(dayTitle(day, today), false, ts) }
     return out
 }
 
 /** "Today", "Tomorrow", then "Fri 21 Nov" (with the year when it isn't this year). */
 fun dayTitle(day: LocalDate, today: LocalDate): String = when (day) {
-    today -> "Today"
-    today.plusDays(1) -> "Tomorrow"
-    else -> day.format(DateTimeFormatter.ofPattern(if (day.year == today.year) "EEE d MMM" else "EEE d MMM yyyy", Locale.ENGLISH))
+    today -> tr("Today")
+    today.plusDays(1) -> tr("Tomorrow")
+    else -> day.format(DateTimeFormatter.ofPattern(if (day.year == today.year) "EEE d MMM" else "EEE d MMM yyyy", Lang.locale)).let(::shortName)
 }
 
 /** Every overdue task to today, each keeping its time of day (Todoist's Reschedule, set to today). */
@@ -80,13 +80,13 @@ fun UpcomingPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen:
     val c = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, "Menu") } else Spacer(Modifier.width(16.dp))
-            Text("Upcoming", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("title"))
+            if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, tr("Menu")) } else Spacer(Modifier.width(16.dp))
+            Text(tr("Upcoming"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).testTag("title"))
         }
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
         LazyColumn(Modifier.weight(1f).testTag("upcomingTasks")) {
             if (groups.isEmpty()) item(key = "empty") {
-                Text("Nothing with a date", color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
+                Text(tr("Nothing with a date"), color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
             }
             for (g in groups) {
                 item(key = "day-" + g.title) {
@@ -95,7 +95,7 @@ fun UpcomingPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen:
                             g.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                             color = if (g.overdue) c.error else c.onSurface, modifier = Modifier.weight(1f),
                         )
-                        if (g.overdue) TextButton(onClick = { moveToToday(node, g.tasks); env.changed() }, modifier = Modifier.testTag("moveToToday")) { Text("Move to today") }
+                        if (g.overdue) TextButton(onClick = { moveToToday(node, g.tasks); env.changed() }, modifier = Modifier.testTag("moveToToday")) { Text(tr("Move to today")) }
                     }
                 }
                 items(g.tasks, key = { it.list.id + "/" + it.task.id }) { (l, t) ->

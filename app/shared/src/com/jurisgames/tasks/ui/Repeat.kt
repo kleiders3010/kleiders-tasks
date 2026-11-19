@@ -43,10 +43,10 @@ object Repeat {
 
     /** "Every day", "Weekdays", "Every 2 weeks"... */
     fun label(rule: String): String {
-        if (rule == "wd") return "Weekdays"
+        if (rule == "wd") return tr("Weekdays")
         val n = rule.dropLast(1).toInt()
         val unit = when (rule.last()) { 'd' -> "day"; 'w' -> "week"; 'm' -> "month"; else -> "year" }
-        return if (n == 1) "Every $unit" else "Every $n ${unit}s"
+        return if (n == 1) tr("Every $unit") else tr("Every {n} ${unit}s", "n" to n)
     }
 }
 
