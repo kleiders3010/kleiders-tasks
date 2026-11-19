@@ -121,4 +121,6 @@ class ReviewShotsTest {
     @Test fun c15() = shot("15-pc-list-more", true) { onNodeWithTag("listMenu").performClick() }
     @Test fun p16() = shot("16-phone-upcoming", false) { onNodeWithTag("upcomingView").performClick() }
     @Test fun c17() = shot("17-pc-upcoming", true) { onNodeWithTag("upcomingView").performClick() }
+    @Test fun p18() = shot("18-phone-search-notes", false) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("bus") }
+    @Test fun c19() = shot("19-pc-search", true) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("re") }
 }

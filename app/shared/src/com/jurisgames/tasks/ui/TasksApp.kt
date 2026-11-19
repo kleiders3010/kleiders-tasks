@@ -164,12 +164,16 @@ private fun Home(env: Env, openedCode: String?) {
     // Todoist's Today/Upcoming: every dated task by day (shown once any open task has a date)
     var upcomingView by remember { mutableStateOf(false) }
     val anyDated = remember(node, env.version, lists) { datedTasks(node, lists).isNotEmpty() }
-    fun showStarred() { starredView = true; upcomingView = false }
-    fun showUpcoming() { upcomingView = true; starredView = false }
+    // Microsoft To Do's search: one field over every list (always there)
+    var searchView by remember { mutableStateOf(false) }
+    fun showStarred() { starredView = true; upcomingView = false; searchView = false }
+    fun showUpcoming() { upcomingView = true; starredView = false; searchView = false }
+    fun showSearch() { searchView = true; starredView = false; upcomingView = false }
     fun open(l: ListItem) {
         currentId = l.id
         starredView = false
         upcomingView = false
+        searchView = false
         openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
     }
@@ -233,6 +237,7 @@ private fun Home(env: Env, openedCode: String?) {
         if (e.type != KeyEventType.KeyDown || !e.isCtrlPressed) return@onPreviewKeyEvent false
         when (e.key) {
             Key.N -> { runCatching { addFocus.requestFocus() }; true }
+            Key.F -> { showSearch(); true }
             Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine -> {
                 val i = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine).indexOf(e.key)
                 lists.getOrNull(i)?.let(::open)
@@ -250,9 +255,10 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.width(280.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainer)) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                             Text(tr("Lists"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                            ViewRow(Ic.Search, tr("Search"), "searchView", searchView, null) { showSearch() }
                             if (anyDated || upcomingView) ViewRow(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() }
                             if (anyStarred || starredView) ViewRow(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() }
-                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && l.id == current?.id) { open(l) }
+                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && l.id == current?.id) { open(l) }
                             SidebarRow(null, false, tr("New list")) { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
@@ -261,7 +267,8 @@ private fun Home(env: Env, openedCode: String?) {
                     VerticalDivider()
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Banners(env)
-                        if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        if (searchView) SearchPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        else if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
                         else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
@@ -284,10 +291,15 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
                         Banners(env)
                         val viewChips = listOfNotNull(
+                            ViewChip(Ic.Search, tr("Search"), "searchView", searchView, null) { showSearch() },
                             if (anyDated || upcomingView) ViewChip(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() } else null,
                             if (anyStarred || starredView) ViewChip(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() } else null,
                         )
-                        if (upcomingView) {
+                        if (searchView) {
+                            SearchPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
+                                ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
+                            }
+                        } else if (upcomingView) {
                             UpcomingPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
                                 ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
                             }
