@@ -263,6 +263,8 @@ pub struct TaskItem {
     pub repeat: Option<String>,
     /// When it was starred (ms since the epoch); none if it isn't.
     pub starred_ms: Option<u64>,
+    /// The day ("YYYY-MM-DD") this person put it in their My Day; none if they didn't.
+    pub my_day: Option<String>,
 }
 
 /// A task's full notes, as far as this device has them.
@@ -699,7 +701,7 @@ fn gid(s: &str) -> Result<GroupId, KtError> {
     GroupId::from_hex(s).ok_or_else(|| fail("bad group id"))
 }
 
-fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
+fn flatten(ts: &[kt_tasks::TaskView], me: &str, parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
     for t in ts {
         out.push(TaskItem {
             images: t.images.iter().map(|r| hex::encode(r.id)).collect(),
@@ -713,8 +715,9 @@ fn flatten(ts: &[kt_tasks::TaskView], parent: Option<&str>, depth: u32, out: &mu
             remind_ms: t.remind_ms,
             repeat: t.repeat.clone(),
             starred_ms: t.starred_ms,
+            my_day: t.my_day.iter().find(|(who, _)| who == me).map(|(_, d)| d.clone()),
         });
-        flatten(&t.children, Some(&t.id), depth + 1, out);
+        flatten(&t.children, me, Some(&t.id), depth + 1, out);
     }
 }
 
@@ -1197,7 +1200,7 @@ impl KtNode {
         let l = self.list(&list_id)?;
         let ts = self.app.read(&l, kt_tasks::tasks).map_err(fail)?;
         let mut out = Vec::new();
-        flatten(&ts, None, 0, &mut out);
+        flatten(&ts, &self.app.personal_group().to_hex(), None, 0, &mut out);
         Ok(out)
     }
 
@@ -1236,6 +1239,16 @@ impl KtNode {
     pub fn set_star(&self, list_id: String, task_id: String, on: bool) -> Result<(), KtError> {
         let l = self.list(&list_id)?;
         self.app.edit(&l, |d| kt_tasks::set_star(d, &task_id, on)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Put a task in My Day for `day` ("YYYY-MM-DD", the device's today), or take it out. It's this
+    /// person's (all their linked devices'), not the other members' of a shared list.
+    pub fn set_my_day(&self, list_id: String, task_id: String, day: Option<String>) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        let me = self.app.personal_group().to_hex();
+        self.app.edit(&l, |d| kt_tasks::set_my_day(d, &task_id, &me, day.as_deref())).map_err(fail)?;
         self.notify();
         Ok(())
     }

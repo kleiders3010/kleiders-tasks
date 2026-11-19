@@ -78,6 +78,9 @@ class ReviewShotsTest {
         n.setStar(work.id, report, true)
         n.setReminder(work.id, report, LocalDateTime.now().withHour(17).withMinute(0).millis().toULong())
         n.setStar(todo.id, bank, true)
+        n.setMyDay(todo.id, bank, com.jurisgames.tasks.ui.dayKey())
+        n.setMyDay(work.id, report, com.jurisgames.tasks.ui.dayKey())
+        n.setMyDay(todo.id, plants, com.jurisgames.tasks.ui.dayKey(java.time.LocalDate.now().minusDays(1)))
         File(n.dataDir(), "ui-last-list").writeText(todo.id)
         return n
     }
@@ -122,5 +125,9 @@ class ReviewShotsTest {
     @Test fun p16() = shot("16-phone-upcoming", false) { onNodeWithTag("upcomingView").performClick() }
     @Test fun c17() = shot("17-pc-upcoming", true) { onNodeWithTag("upcomingView").performClick() }
     @Test fun p18() = shot("18-phone-search-notes", false) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("bus") }
+    @Test fun p20() = shot("20-phone-my-day", false) { onNodeWithTag("dayView").performClick() }
+    @Test fun p21() = shot("21-phone-my-day-suggestions", false) { onNodeWithTag("dayView").performClick(); waitForIdle(); onNodeWithTag("dayIdeas").performClick() }
+    @Test fun c22() = shot("22-pc-my-day", true) { onNodeWithTag("dayView").performClick() }
+    @Test fun c23() = shot("23-pc-task-details-my-day", true) { onNodeWithTag("task-Call the bank").performClick() }
     @Test fun c19() = shot("19-pc-search", true) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("re") }
 }

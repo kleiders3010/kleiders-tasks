@@ -855,6 +855,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_listener(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_my_day(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_notes(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_reminder(
@@ -1046,6 +1048,8 @@ internal object UniffiLib {
     external fun uniffi_kt_ffi_fn_method_ktnode_set_list_type(`ptr`: Long,`listId`: RustBuffer.ByValue,`listType`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_listener(`ptr`: Long,`listener`: Long,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_my_day(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`day`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_notes(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
@@ -1423,6 +1427,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_listener() and 0xFFFF) != 63218) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_my_day() and 0xFFFF) != 18954) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_notes() and 0xFFFF) != 43201) {
@@ -2941,6 +2948,12 @@ public interface KtNodeInterface {
     fun `setListener`(`listener`: KtListener)
     
     /**
+     * Put a task in My Day for `day` ("YYYY-MM-DD", the device's today), or take it out. It's this
+     * person's (all their linked devices'), not the other members' of a shared list.
+     */
+    fun `setMyDay`(`listId`: kotlin.String, `taskId`: kotlin.String, `day`: kotlin.String?)
+    
+    /**
      * Set a task's notes; long ones become a text attachment (D4).
      */
     fun `setNotes`(`listId`: kotlin.String, `taskId`: kotlin.String, `text`: kotlin.String)
@@ -4059,6 +4072,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
         it,
         
         FfiConverterTypeKtListener.lower(`listener`),_status)
+}
+    }
+    
+    
+
+    
+    /**
+     * Put a task in My Day for `day` ("YYYY-MM-DD", the device's today), or take it out. It's this
+     * person's (all their linked devices'), not the other members' of a shared list.
+     */
+    @Throws(KtException::class)override fun `setMyDay`(`listId`: kotlin.String, `taskId`: kotlin.String, `day`: kotlin.String?)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_my_day(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterOptionalString.lower(`day`),_status)
 }
     }
     
@@ -5816,6 +5849,11 @@ data class TaskItem (
      * When it was starred (ms since the epoch); none if it isn't.
      */
     var `starredMs`: kotlin.ULong?
+    , 
+    /**
+     * The day ("YYYY-MM-DD") this person put it in their My Day; none if they didn't.
+     */
+    var `myDay`: kotlin.String?
     
 ){
     
@@ -5843,6 +5881,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalString.read(buf),
         )
     }
 
@@ -5857,7 +5896,8 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterSequenceString.allocationSize(value.`images`) +
             FfiConverterOptionalULong.allocationSize(value.`remindMs`) +
             FfiConverterOptionalString.allocationSize(value.`repeat`) +
-            FfiConverterOptionalULong.allocationSize(value.`starredMs`)
+            FfiConverterOptionalULong.allocationSize(value.`starredMs`) +
+            FfiConverterOptionalString.allocationSize(value.`myDay`)
     )
 
     override fun write(value: TaskItem, buf: ByteBuffer) {
@@ -5872,6 +5912,7 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterOptionalULong.write(value.`remindMs`, buf)
             FfiConverterOptionalString.write(value.`repeat`, buf)
             FfiConverterOptionalULong.write(value.`starredMs`, buf)
+            FfiConverterOptionalString.write(value.`myDay`, buf)
     }
 }
 

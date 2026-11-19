@@ -100,6 +100,16 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             )
             if (list.listType != "shopping") StarButton(t.starredMs != null, "detailStar") { setStar(node, list.id, t, t.starredMs == null); env.changed() }
         }
+        if (list.listType != "shopping" && !t.done) {
+            val inDay = inMyDay(t)
+            androidx.compose.material3.FilterChip(
+                inDay, { setMyDay(node, list.id, t, !inDay); env.changed() },
+                label = { Text(if (inDay) tr("Added to My Day") else tr("Add to My Day")) },
+                leadingIcon = { Icon(Ic.Sun, null, Modifier.size(18.dp), tint = if (inDay) SunColor else MaterialTheme.colorScheme.onSurfaceVariant) },
+                trailingIcon = if (inDay) ({ Icon(Ic.Close, tr("Remove from My Day"), Modifier.size(16.dp)) }) else null,
+                modifier = Modifier.testTag("detailMyDay"),
+            )
+        }
 
         // Reminder
         Section(Ic.Bell, tr("Remind me")) {

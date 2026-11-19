@@ -166,14 +166,20 @@ private fun Home(env: Env, openedCode: String?) {
     val anyDated = remember(node, env.version, lists) { datedTasks(node, lists).isNotEmpty() }
     // Microsoft To Do's search: one field over every list (always there)
     var searchView by remember { mutableStateOf(false) }
-    fun showStarred() { starredView = true; upcomingView = false; searchView = false }
-    fun showUpcoming() { upcomingView = true; starredView = false; searchView = false }
-    fun showSearch() { searchView = true; starredView = false; upcomingView = false }
+    // Microsoft To Do's My Day: what you pick for today, from any list (always there)
+    var dayView by remember { mutableStateOf(false) }
+    fun showStarred() { starredView = true; upcomingView = false; searchView = false; dayView = false }
+    fun showUpcoming() { upcomingView = true; starredView = false; searchView = false; dayView = false }
+    fun showSearch() { searchView = true; starredView = false; upcomingView = false; dayView = false }
+    fun showDay() { dayView = true; searchView = false; starredView = false; upcomingView = false }
+    // My Day adds to the list you were in (not a shopping list: those keep their own items)
+    val dayList = current?.takeIf { it.listType != "shopping" } ?: lists.firstOrNull { it.listType != "shopping" }
     fun open(l: ListItem) {
         currentId = l.id
         starredView = false
         upcomingView = false
         searchView = false
+        dayView = false
         openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
     }
@@ -256,9 +262,10 @@ private fun Home(env: Env, openedCode: String?) {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 12.dp)) {
                             Text(tr("Lists"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                             ViewRow(Ic.Search, tr("Search"), "searchView", searchView, null) { showSearch() }
+                            ViewRow(Ic.Sun, tr("My Day"), "dayView", dayView, SunColor) { showDay() }
                             if (anyDated || upcomingView) ViewRow(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() }
                             if (anyStarred || starredView) ViewRow(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() }
-                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && l.id == current?.id) { open(l) }
+                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && !dayView && l.id == current?.id) { open(l) }
                             SidebarRow(null, false, tr("New list")) { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
@@ -268,6 +275,7 @@ private fun Home(env: Env, openedCode: String?) {
                     Column(Modifier.weight(1f).fillMaxHeight()) {
                         Banners(env)
                         if (searchView) SearchPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        else if (dayView) MyDayPane(env, lists, dayList, onMenu = null, onOpen = ::openStarred)
                         else if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
@@ -292,11 +300,16 @@ private fun Home(env: Env, openedCode: String?) {
                         Banners(env)
                         val viewChips = listOfNotNull(
                             ViewChip(Ic.Search, tr("Search"), "searchView", searchView, null) { showSearch() },
+                            ViewChip(Ic.Sun, tr("My Day"), "dayView", dayView, SunColor) { showDay() },
                             if (anyDated || upcomingView) ViewChip(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() } else null,
                             if (anyStarred || starredView) ViewChip(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() } else null,
                         )
                         if (searchView) {
                             SearchPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
+                                ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
+                            }
+                        } else if (dayView) {
+                            MyDayPane(env, lists, dayList, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
                                 ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
                             }
                         } else if (upcomingView) {

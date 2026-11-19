@@ -55,6 +55,9 @@ pub struct TaskView {
     pub repeat: Option<String>,
     /// Starred (Google Tasks' star), and when: the Starred view and "Starred recently" sort by it.
     pub starred_ms: Option<u64>,
+    /// My Day (Microsoft To Do's): (whose, day "YYYY-MM-DD") per person who put it in their day.
+    /// Each person's own (the account's personal group), so a shared list's members each have theirs.
+    pub my_day: Vec<(String, String)>,
     /// Attached images (sealed blobs; the bytes travel like text attachments).
     pub images: Vec<kt_engine::blobs::BlobRef>,
     pub children: Vec<TaskView>,
@@ -353,6 +356,31 @@ pub fn set_repeat(doc: &LoroDoc, task: &str, rule: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// A calendar day, "YYYY-MM-DD".
+pub fn valid_day(d: &str) -> bool {
+    let b = d.as_bytes();
+    b.len() == 10 && b[4] == b'-' && b[7] == b'-' && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+}
+
+/// Put a task in someone's My Day for `day` ("YYYY-MM-DD"), or take it out. `who` is the person
+/// (their account's personal group): the mark is theirs only, the other members of a shared list
+/// don't see it in their day.
+pub fn set_my_day(doc: &LoroDoc, task: &str, who: &str, day: Option<&str>) -> Result<()> {
+    if who.is_empty() || who.len() > 64 || !who.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(Error::Invalid("who".into()));
+    }
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    let key = format!("day:{who}");
+    match day {
+        Some(d) if !valid_day(d) => return Err(Error::Invalid(format!("not a day: {d}"))),
+        Some(d) => meta.insert(&key, d).map_err(loro)?,
+        None => meta.delete(&key).map_err(loro)?,
+    }
+    doc.commit();
+    Ok(())
+}
+
 /// Star or unstar a task (shared like any field; the time it was starred orders the Starred view).
 pub fn set_star(doc: &LoroDoc, task: &str, on: bool) -> Result<()> {
     let n = find(doc, task)?;
@@ -436,6 +464,16 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
         starred_ms: match meta.get("star_ms") {
             Some(ValueOrContainer::Value(LoroValue::I64(v))) if v > 0 => Some(v as u64),
             _ => None,
+        },
+        my_day: match meta.get_deep_value() {
+            LoroValue::Map(m) => m
+                .iter()
+                .filter_map(|(k, v)| match (k.strip_prefix("day:"), v) {
+                    (Some(who), LoroValue::String(d)) if valid_day(d) => Some((who.to_string(), d.to_string())),
+                    _ => None,
+                })
+                .collect(),
+            _ => vec![],
         },
         id: get_str(&meta, "id").unwrap_or_default(),
         title: get_str(&meta, "title").unwrap_or_default(),
@@ -774,6 +812,27 @@ mod tests {
         assert!(!v[0].children[0].done);
         set_repeat(&d, &bins, None).unwrap();
         assert_eq!(tasks(&d)[0].repeat, None);
+    }
+
+    #[test]
+    fn my_day_is_each_persons_own_and_merges() {
+        let base = doc();
+        let a = add_task(&base, None, "call mum").unwrap();
+        let other = LoroDoc::new();
+        other.import(&base.export(ExportMode::Snapshot).unwrap()).unwrap();
+        other.set_peer_id(7).unwrap();
+        set_my_day(&base, &a, "aa11", Some("2026-11-19")).unwrap();
+        set_my_day(&other, &a, "bb22", Some("2026-11-20")).unwrap();
+        base.import(&other.export(ExportMode::Snapshot).unwrap()).unwrap();
+        let mut days = tasks(&base)[0].my_day.clone();
+        days.sort();
+        assert_eq!(days, vec![("aa11".into(), "2026-11-19".into()), ("bb22".into(), "2026-11-20".into())]);
+        assert!(set_my_day(&base, &a, "aa11", Some("tomorrow")).is_err());
+        assert!(set_my_day(&base, &a, "a:b", Some("2026-11-19")).is_err());
+        set_my_day(&base, &a, "aa11", None).unwrap();
+        assert_eq!(tasks(&base)[0].my_day, vec![("bb22".to_string(), "2026-11-20".to_string())]);
+        let copy = rebuild(&base, 9).unwrap();
+        assert_eq!(tasks(&copy)[0].my_day.len(), 1, "kept by a rebuild");
     }
 
     #[test]

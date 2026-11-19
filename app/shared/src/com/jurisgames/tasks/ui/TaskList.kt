@@ -319,7 +319,12 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
                 maxLines = 3, overflow = TextOverflow.Ellipsis,
             )
             val note = t.notes.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
-            if (t.remindMs != null || note != null || t.hasAttachment) Row(verticalAlignment = Alignment.CenterVertically) {
+            val inDay = !t.done && inMyDay(t)
+            if (inDay || t.remindMs != null || note != null || t.hasAttachment) Row(verticalAlignment = Alignment.CenterVertically) {
+                if (inDay) {
+                    Icon(Ic.Sun, null, tint = marks, modifier = Modifier.padding(end = 4.dp).size(14.dp))
+                    Text(tr("My Day") + if (t.remindMs != null || note != null || t.hasAttachment) "  ·  " else "", style = MaterialTheme.typography.labelMedium, color = marks, modifier = Modifier.testTag("inDay-" + t.title))
+                }
                 t.remindMs?.let { ms ->
                     val at = fromMillis(ms.toLong())
                     val late = !t.done && at.isBefore(LocalDateTime.now())
