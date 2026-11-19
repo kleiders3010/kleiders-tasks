@@ -23,7 +23,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi)
             packageName = "Tasks"
-            packageVersion = "1.0.5"
+            packageVersion = "1.0.6"
             vendor = "Juris Games"
             description = "Shared task lists, no accounts, no servers"
             // JNA needs sun.misc.Unsafe; the rest is Compose's default runtime.
