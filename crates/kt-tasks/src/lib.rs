@@ -58,6 +58,9 @@ pub struct TaskView {
     /// My Day (Microsoft To Do's): (whose, day "YYYY-MM-DD") per person who put it in their day.
     /// Each person's own (the account's personal group), so a shared list's members each have theirs.
     pub my_day: Vec<(String, String)>,
+    /// Who it's assigned to (Microsoft To Do's "Assign to" in shared lists): that person's devices
+    /// (hex) when it was assigned, and their name then. One person at most.
+    pub assignee: Option<(Vec<String>, String)>,
     /// Attached images (sealed blobs; the bytes travel like text attachments).
     pub images: Vec<kt_engine::blobs::BlobRef>,
     pub children: Vec<TaskView>,
@@ -394,6 +397,28 @@ pub fn set_star(doc: &LoroDoc, task: &str, on: bool) -> Result<()> {
     Ok(())
 }
 
+/// Assign a task to someone in the list (their devices, hex, and their name), or nobody. Shared
+/// like any field: the last assignment wins.
+pub fn set_assignee(doc: &LoroDoc, task: &str, who: Option<(&[String], &str)>) -> Result<()> {
+    let n = find(doc, task)?;
+    let meta = tree(doc).get_meta(n).map_err(loro)?;
+    match who {
+        Some((devices, name)) => {
+            if devices.is_empty() || devices.len() > 32 || !devices.iter().all(|d| d.len() == 64 && d.bytes().all(|b| b.is_ascii_hexdigit())) {
+                return Err(Error::Invalid("devices".into()));
+            }
+            meta.insert("assign", devices.join(",")).map_err(loro)?;
+            meta.insert("assign_name", name.chars().take(80).collect::<String>()).map_err(loro)?;
+        }
+        None => {
+            meta.delete("assign").map_err(loro)?;
+            meta.delete("assign_name").map_err(loro)?;
+        }
+    }
+    doc.commit();
+    Ok(())
+}
+
 /// A repeating task was ticked off: it stays, due again at `next_ms`, with its steps unticked
 /// (Todoist's recurring tasks: the same task moves to its next date). One commit, one undo.
 pub fn repeat_done(doc: &LoroDoc, task: &str, next_ms: u64) -> Result<()> {
@@ -475,6 +500,10 @@ fn view_of(t: &LoroTree, n: TreeID) -> Option<TaskView> {
                 .collect(),
             _ => vec![],
         },
+        assignee: get_str(&meta, "assign")
+            .map(|s| s.split(',').filter(|d| d.len() == 64 && d.bytes().all(|b| b.is_ascii_hexdigit())).map(str::to_string).collect::<Vec<_>>())
+            .filter(|d| !d.is_empty())
+            .map(|d| (d, get_str(&meta, "assign_name").unwrap_or_default())),
         id: get_str(&meta, "id").unwrap_or_default(),
         title: get_str(&meta, "title").unwrap_or_default(),
         done: get_bool(&meta, "done").unwrap_or(false),
@@ -833,6 +862,23 @@ mod tests {
         assert_eq!(tasks(&base)[0].my_day, vec![("bb22".to_string(), "2026-11-20".to_string())]);
         let copy = rebuild(&base, 9).unwrap();
         assert_eq!(tasks(&copy)[0].my_day.len(), 1, "kept by a rebuild");
+    }
+
+    #[test]
+    fn assignee_is_shared_one_person_and_survives_a_rebuild() {
+        let base = doc();
+        let a = add_task(&base, None, "call mum").unwrap();
+        let (ana, beto) = (vec!["a".repeat(64), "b".repeat(64)], vec!["c".repeat(64)]);
+        set_assignee(&base, &a, Some((&ana, "Ana"))).unwrap();
+        assert_eq!(tasks(&base)[0].assignee, Some((ana.clone(), "Ana".to_string())));
+        set_assignee(&base, &a, Some((&beto, "Beto"))).unwrap();
+        assert_eq!(tasks(&base)[0].assignee, Some((beto.clone(), "Beto".to_string())), "one person at a time");
+        assert!(set_assignee(&base, &a, Some((&[], "x"))).is_err());
+        assert!(set_assignee(&base, &a, Some((&["zz".to_string()], "x"))).is_err());
+        let copy = rebuild(&base, 9).unwrap();
+        assert_eq!(tasks(&copy)[0].assignee.as_ref().map(|x| x.1.as_str()), Some("Beto"), "kept by a rebuild");
+        set_assignee(&base, &a, None).unwrap();
+        assert_eq!(tasks(&base)[0].assignee, None);
     }
 
     #[test]

@@ -843,6 +843,8 @@ internal object IntegrityCheckingUniffiLib {
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_restored(
     ): Int
+    external fun uniffi_kt_ffi_checksum_method_ktnode_set_assignee(
+    ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_device_state(
     ): Int
     external fun uniffi_kt_ffi_checksum_method_ktnode_set_display_name(
@@ -1037,6 +1039,8 @@ internal object UniffiLib {
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_restored(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    external fun uniffi_kt_ffi_fn_method_ktnode_set_assignee(`ptr`: Long,`listId`: RustBuffer.ByValue,`taskId`: RustBuffer.ByValue,`person`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_device_state(`ptr`: Long,`onWifi`: Byte,`charging`: Byte,`constrained`: Byte,uniffi_out_err: UniffiRustCallStatus, 
     ): Unit
     external fun uniffi_kt_ffi_fn_method_ktnode_set_display_name(`ptr`: Long,`name`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1409,6 +1413,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_restored() and 0xFFFF) != 14747) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_assignee() and 0xFFFF) != 52062) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if ((lib.uniffi_kt_ffi_checksum_method_ktnode_set_device_state() and 0xFFFF) != 3199) {
@@ -2925,6 +2932,12 @@ public interface KtNodeInterface {
     fun `restored`(): RestoreInfo?
     
     /**
+     * Assign a task to someone in the list (Microsoft To Do's "Assign to": any member of a shared
+     * list, yourself too, one person), or to nobody.
+     */
+    fun `setAssignee`(`listId`: kotlin.String, `taskId`: kotlin.String, `person`: PersonItem?)
+    
+    /**
      * Phones report Wi-Fi, charging, and whether the phone is constrained (battery saver,
      * low battery, heat, data saver); the node knows when the app is open. Helping others
      * follows them (§7a).
@@ -3974,6 +3987,26 @@ open class KtNode: Disposable, AutoCloseable, KtNodeInterface
     }
     )
     }
+    
+
+    
+    /**
+     * Assign a task to someone in the list (Microsoft To Do's "Assign to": any member of a shared
+     * list, yourself too, one person), or to nobody.
+     */
+    @Throws(KtException::class)override fun `setAssignee`(`listId`: kotlin.String, `taskId`: kotlin.String, `person`: PersonItem?)
+        = 
+    callWithHandle {
+    uniffiRustCallWithError(KtException) { _status ->
+    UniffiLib.uniffi_kt_ffi_fn_method_ktnode_set_assignee(
+        it,
+        
+        FfiConverterString.lower(`listId`),
+        FfiConverterString.lower(`taskId`),
+        FfiConverterOptionalTypePersonItem.lower(`person`),_status)
+}
+    }
+    
     
 
     
@@ -5854,6 +5887,16 @@ data class TaskItem (
      * The day ("YYYY-MM-DD") this person put it in their My Day; none if they didn't.
      */
     var `myDay`: kotlin.String?
+    , 
+    /**
+     * Who it's assigned to (shared lists), by their current name when they're still in the list.
+     */
+    var `assigned`: PersonItem?
+    , 
+    /**
+     * Assigned to this account (any of its devices).
+     */
+    var `assignedToMe`: kotlin.Boolean
     
 ){
     
@@ -5882,6 +5925,8 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterOptionalString.read(buf),
             FfiConverterOptionalULong.read(buf),
             FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalTypePersonItem.read(buf),
+            FfiConverterBoolean.read(buf),
         )
     }
 
@@ -5897,7 +5942,9 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterOptionalULong.allocationSize(value.`remindMs`) +
             FfiConverterOptionalString.allocationSize(value.`repeat`) +
             FfiConverterOptionalULong.allocationSize(value.`starredMs`) +
-            FfiConverterOptionalString.allocationSize(value.`myDay`)
+            FfiConverterOptionalString.allocationSize(value.`myDay`) +
+            FfiConverterOptionalTypePersonItem.allocationSize(value.`assigned`) +
+            FfiConverterBoolean.allocationSize(value.`assignedToMe`)
     )
 
     override fun write(value: TaskItem, buf: ByteBuffer) {
@@ -5913,6 +5960,8 @@ public object FfiConverterTypeTaskItem: FfiConverterRustBuffer<TaskItem> {
             FfiConverterOptionalString.write(value.`repeat`, buf)
             FfiConverterOptionalULong.write(value.`starredMs`, buf)
             FfiConverterOptionalString.write(value.`myDay`, buf)
+            FfiConverterOptionalTypePersonItem.write(value.`assigned`, buf)
+            FfiConverterBoolean.write(value.`assignedToMe`, buf)
     }
 }
 
@@ -6406,6 +6455,38 @@ public object FfiConverterOptionalByteArray: FfiConverterRustBuffer<kotlin.ByteA
         } else {
             buf.put(1)
             FfiConverterByteArray.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypePersonItem: FfiConverterRustBuffer<PersonItem?> {
+    override fun read(buf: ByteBuffer): PersonItem? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypePersonItem.read(buf)
+    }
+
+    override fun allocationSize(value: PersonItem?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypePersonItem.allocationSize(value)
+        }
+    }
+
+    override fun write(value: PersonItem?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypePersonItem.write(value, buf)
         }
     }
 }

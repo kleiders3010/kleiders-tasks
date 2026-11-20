@@ -167,14 +167,18 @@ private fun Home(env: Env, openedCode: String?) {
     // Todoist's Today/Upcoming: every dated task by day (shown once any open task has a date)
     var upcomingView by remember { mutableStateOf(false) }
     val anyDated = remember(node, env.version, lists) { datedTasks(node, lists).isNotEmpty() }
+    // Microsoft To Do's "Assigned to me": tasks given to you in shared lists (shown once there are any)
+    var assignedView by remember { mutableStateOf(false) }
+    val anyAssigned = remember(node, env.version, lists) { assignedTasks(node, lists).isNotEmpty() }
     // Microsoft To Do's search: one field over every list (always there)
     var searchView by remember { mutableStateOf(false) }
     // Microsoft To Do's My Day: what you pick for today, from any list (always there)
     var dayView by remember { mutableStateOf(false) }
-    fun showStarred() { starredView = true; upcomingView = false; searchView = false; dayView = false }
-    fun showUpcoming() { upcomingView = true; starredView = false; searchView = false; dayView = false }
-    fun showSearch() { searchView = true; starredView = false; upcomingView = false; dayView = false }
-    fun showDay() { dayView = true; searchView = false; starredView = false; upcomingView = false }
+    fun showStarred() { starredView = true; upcomingView = false; searchView = false; dayView = false; assignedView = false }
+    fun showUpcoming() { upcomingView = true; starredView = false; searchView = false; dayView = false; assignedView = false }
+    fun showSearch() { searchView = true; starredView = false; upcomingView = false; dayView = false; assignedView = false }
+    fun showDay() { dayView = true; searchView = false; starredView = false; upcomingView = false; assignedView = false }
+    fun showAssigned() { assignedView = true; dayView = false; searchView = false; starredView = false; upcomingView = false }
     // My Day adds to the list you were in (not a shopping list: those keep their own items)
     val dayList = current?.takeIf { it.listType != "shopping" } ?: lists.firstOrNull { it.listType != "shopping" }
     fun open(l: ListItem) {
@@ -183,6 +187,7 @@ private fun Home(env: Env, openedCode: String?) {
         upcomingView = false
         searchView = false
         dayView = false
+        assignedView = false
         openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
     }
@@ -268,7 +273,8 @@ private fun Home(env: Env, openedCode: String?) {
                             ViewRow(Ic.Sun, tr("My Day"), "dayView", dayView, SunColor) { showDay() }
                             if (anyDated || upcomingView) ViewRow(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() }
                             if (anyStarred || starredView) ViewRow(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() }
-                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && !dayView && l.id == current?.id) { open(l) }
+                            if (anyAssigned || assignedView) ViewRow(Ic.Person, tr("Assigned to me"), "assignedView", assignedView, null) { showAssigned() }
+                            for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && !dayView && !assignedView && l.id == current?.id) { open(l) }
                             SidebarRow(null, false, tr("New list")) { dialog = Dialog.NewList }
                         }
                         HorizontalDivider()
@@ -281,6 +287,7 @@ private fun Home(env: Env, openedCode: String?) {
                         else if (dayView) MyDayPane(env, lists, dayList, onMenu = null, onOpen = ::openStarred)
                         else if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
+                        else if (assignedView) AssignedPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
                         else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
                     }
@@ -306,6 +313,7 @@ private fun Home(env: Env, openedCode: String?) {
                             ViewChip(Ic.Sun, tr("My Day"), "dayView", dayView, SunColor) { showDay() },
                             if (anyDated || upcomingView) ViewChip(Ic.Event, tr("Upcoming"), "upcomingView", upcomingView, null) { showUpcoming() } else null,
                             if (anyStarred || starredView) ViewChip(Ic.Star, tr("Starred"), "starredView", starredView, StarColor) { showStarred() } else null,
+                            if (anyAssigned || assignedView) ViewChip(Ic.Person, tr("Assigned to me"), "assignedView", assignedView, null) { showAssigned() } else null,
                         )
                         if (searchView) {
                             SearchPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
@@ -321,6 +329,10 @@ private fun Home(env: Env, openedCode: String?) {
                             }
                         } else if (starredView) {
                             StarredPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
+                                ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
+                            }
+                        } else if (assignedView) {
+                            AssignedPane(env, lists, onMenu = { scope.launch { drawer.open() } }, onOpen = ::openStarred) {
                                 ListChips(lists, null, ::open, viewChips) { dialog = Dialog.NewList }
                             }
                         } else if (current != null) {

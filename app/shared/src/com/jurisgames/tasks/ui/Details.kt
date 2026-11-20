@@ -111,6 +111,10 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             )
         }
 
+        // Assign to (shared lists only, like Microsoft To Do)
+        val shared = remember(node, env.version, list.id) { isShared(node, list) }
+        if (shared && list.listType != "shopping") Section(Ic.Person, tr("Assign to")) { AssignTo(env, list, t) }
+
         // Reminder
         Section(Ic.Bell, tr("Remind me")) {
             var picking by remember(t.id) { mutableStateOf(false) }

@@ -339,6 +339,7 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
             }
         }
         if (t.images.isNotEmpty()) Icon(Ic.Image, tr("Has pictures"), tint = marks, modifier = Modifier.padding(start = 6.dp).size(16.dp))
+        t.assigned?.let { p -> SmallAvatar(p, modifier = Modifier.padding(start = 8.dp).testTag("assignee-" + t.title)) }
         if (star) StarButton(t.starredMs != null, "star-" + t.title) { setStar(env.node, listId, t, t.starredMs == null); env.changed() }
     }
 }

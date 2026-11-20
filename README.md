@@ -15,6 +15,9 @@ account and no company server holding your data.
   do, in the list's order, with a box to tick on paper; long names wrap instead of being cut off. Android's print
   service (a printer or Save as PDF) or the Windows print dialog.
 - **Shared:** any list can be shared; everyone edits at once and edits merge (CRDTs, [Loro](https://loro.dev)).
+  In a shared list a task can be assigned to one of its people, yourself too (like Microsoft To Do's Assign to):
+  the row shows who, and "Assigned to me" gathers what's yours from every list. Moving a task to another list
+  drops its assignment.
 - **No servers you depend on:** devices reach each other directly ([iroh](https://iroh.computer)), over the same
   Wi-Fi, through public Nostr relays, the Mainline DHT, other users' apps that help carry changes, and a small mailbox.
   Every layer only ever sees encrypted data. If one disappears, the others keep working.

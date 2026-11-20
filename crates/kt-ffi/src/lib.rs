@@ -265,6 +265,10 @@ pub struct TaskItem {
     pub starred_ms: Option<u64>,
     /// The day ("YYYY-MM-DD") this person put it in their My Day; none if they didn't.
     pub my_day: Option<String>,
+    /// Who it's assigned to (shared lists), by their current name when they're still in the list.
+    pub assigned: Option<PersonItem>,
+    /// Assigned to this account (any of its devices).
+    pub assigned_to_me: bool,
 }
 
 /// A task's full notes, as far as this device has them.
@@ -701,7 +705,35 @@ fn gid(s: &str) -> Result<GroupId, KtError> {
     GroupId::from_hex(s).ok_or_else(|| fail("bad group id"))
 }
 
-fn flatten(ts: &[kt_tasks::TaskView], me: &str, parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
+/// Who a task's assignee is now: the list's person with any of those devices (current name),
+/// else the name it was assigned under (someone who left).
+fn assignee_of(devices: &[String], name: &str, people: &[(Vec<String>, PersonItem)]) -> PersonItem {
+    if let Some((_, p)) = people.iter().find(|(ds, _)| ds.iter().any(|d| devices.contains(d))) {
+        return p.clone();
+    }
+    let key = devices.iter().min().and_then(|d| kt_engine::DeviceId::from_hex(d)).map(|d| d.0).unwrap_or_default();
+    let (hue, tag) = kt_tasks::appearance::avatar(&key);
+    PersonItem { initials: kt_tasks::appearance::initials(name), name: name.to_string(), is_me: false, hue, tag }
+}
+
+fn person_item(p: &kt_tasks::app::Person) -> PersonItem {
+    let key = p.devices.iter().min().map(|d| d.0).unwrap_or_default();
+    let (hue, tag) = kt_tasks::appearance::avatar(&key);
+    PersonItem { initials: kt_tasks::appearance::initials(&p.name), name: p.name.clone(), is_me: p.is_me, hue, tag }
+}
+
+fn ts_assigned(ts: &[kt_tasks::TaskView]) -> bool {
+    ts.iter().any(|t| t.assignee.is_some() || ts_assigned(&t.children))
+}
+
+struct Who<'a> {
+    me: &'a str,
+    my_devices: &'a [String],
+    people: &'a [(Vec<String>, PersonItem)],
+}
+
+fn flatten(ts: &[kt_tasks::TaskView], who: &Who, parent: Option<&str>, depth: u32, out: &mut Vec<TaskItem>) {
+    let me = who.me;
     for t in ts {
         out.push(TaskItem {
             images: t.images.iter().map(|r| hex::encode(r.id)).collect(),
@@ -716,8 +748,10 @@ fn flatten(ts: &[kt_tasks::TaskView], me: &str, parent: Option<&str>, depth: u32
             repeat: t.repeat.clone(),
             starred_ms: t.starred_ms,
             my_day: t.my_day.iter().find(|(who, _)| who == me).map(|(_, d)| d.clone()),
+            assigned: t.assignee.as_ref().map(|(ds, name)| assignee_of(ds, name, who.people)),
+            assigned_to_me: t.assignee.as_ref().is_some_and(|(ds, _)| ds.iter().any(|d| who.my_devices.contains(d))),
         });
-        flatten(&t.children, me, Some(&t.id), depth + 1, out);
+        flatten(&t.children, who, Some(&t.id), depth + 1, out);
     }
 }
 
@@ -1200,7 +1234,16 @@ impl KtNode {
         let l = self.list(&list_id)?;
         let ts = self.app.read(&l, kt_tasks::tasks).map_err(fail)?;
         let mut out = Vec::new();
-        flatten(&ts, &self.app.personal_group().to_hex(), None, 0, &mut out);
+        let me = self.app.personal_group().to_hex();
+        let assigned = ts_assigned(&ts);
+        let (people, mine) = if assigned {
+            let ps = self.app.people(&l);
+            let mine: Vec<String> = ps.iter().filter(|p| p.is_me).flat_map(|p| p.devices.iter().map(|d| d.to_hex())).collect();
+            (ps.iter().map(|p| (p.devices.iter().map(|d| d.to_hex()).collect(), person_item(p))).collect(), mine)
+        } else {
+            (vec![], vec![])
+        };
+        flatten(&ts, &Who { me: &me, my_devices: &mine, people: &people }, None, 0, &mut out);
         Ok(out)
     }
 
@@ -1239,6 +1282,27 @@ impl KtNode {
     pub fn set_star(&self, list_id: String, task_id: String, on: bool) -> Result<(), KtError> {
         let l = self.list(&list_id)?;
         self.app.edit(&l, |d| kt_tasks::set_star(d, &task_id, on)).map_err(fail)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Assign a task to someone in the list (Microsoft To Do's "Assign to": any member of a shared
+    /// list, yourself too, one person), or to nobody.
+    pub fn set_assignee(&self, list_id: String, task_id: String, person: Option<PersonItem>) -> Result<(), KtError> {
+        let l = self.list(&list_id)?;
+        let who = match person {
+            Some(person) => {
+                let p = self
+                    .app
+                    .people(&l)
+                    .into_iter()
+                    .find(|p| p.name == person.name && p.is_me == person.is_me && person_item(p).tag == person.tag)
+                    .ok_or_else(|| fail("nobody by that name in this list's group"))?;
+                Some((p.devices.iter().map(|d| d.to_hex()).collect::<Vec<_>>(), p.name))
+            }
+            None => None,
+        };
+        self.app.edit(&l, |d| kt_tasks::set_assignee(d, &task_id, who.as_ref().map(|(ds, n)| (ds.as_slice(), n.as_str())))).map_err(fail)?;
         self.notify();
         Ok(())
     }
@@ -1617,11 +1681,7 @@ impl KtNode {
             .app
             .people(&l)
             .into_iter()
-            .map(|p| {
-                let key = p.devices.iter().min().map(|d| d.0).unwrap_or_default();
-                let (hue, tag) = kt_tasks::appearance::avatar(&key);
-                PersonItem { initials: kt_tasks::appearance::initials(&p.name), name: p.name, is_me: p.is_me, hue, tag }
-            })
+            .map(|p| person_item(&p))
             .collect())
     }
 
