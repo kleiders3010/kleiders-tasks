@@ -103,6 +103,8 @@ fun TasksApp(
     required: String? = null,
     /** Android 12+: wallpaper colors (Material You), for light or dark. */
     dynamicScheme: ((Boolean) -> androidx.compose.material3.ColorScheme?)? = null,
+    /** Print a page (the list's name, the page as HTML): Android's print service, the desktop's print dialog. */
+    onPrint: ((String, String) -> Unit)? = null,
 ) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
@@ -118,7 +120,7 @@ fun TasksApp(
         CompositionLocalProvider(LocalImageDecoder provides decodeImage) {
             Surface(Modifier.fillMaxSize()) {
                 Home(
-                    Env(node, version, { version++ }, onRestore, onExport, onShare, onSettings, onScan, onImport, update, onUpdate, onPickImage, required),
+                    Env(node, version, { version++ }, onRestore, onExport, onShare, onSettings, onScan, onImport, update, onUpdate, onPickImage, required, onPrint),
                     openedCode,
                 )
             }
@@ -141,6 +143,7 @@ class Env(
     val onUpdate: ((String) -> Unit)?,
     val onPickImage: ((onPicked: (ByteArray) -> Unit) -> Unit)?,
     val required: String?,
+    val onPrint: ((String, String) -> Unit)? = null,
 )
 
 /** The list shown last, per device (a plain file next to the app's data). */
@@ -485,6 +488,7 @@ private fun ListPane(
     val shared = groups.find { it.id == list.groupId }?.personal == false
     val people = remember(node, env.version, list.id) { if (shared) runCatching { node.people(list.id) }.getOrDefault(emptyList()) else emptyList() }
     var menuOpen by remember { mutableStateOf(false) }
+    var printing by remember { mutableStateOf(false) }
     val shopping = list.listType == "shopping"
     var sort by remember(list.id) { mutableStateOf(sortOf(node, list.id)) }
     Column(Modifier.fillMaxSize()) {
@@ -526,6 +530,7 @@ private fun ListPane(
                         env.changed()
                     }
                     env.onExport?.let { ex -> item(tr("Export"), "export") { ex(list) } }
+                    if (env.onPrint != null) item(tr("Print list"), "printOpen") { printing = true }
                     item(tr("Undo changes…"), "undoOpen", listMenu.undo)
                     HorizontalDivider()
                     DropdownMenuItem(
@@ -543,6 +548,12 @@ private fun ListPane(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = if (onMenu != null) 52.dp else 16.dp, end = 16.dp).testTag("sharedWith"),
             )
+        }
+        if (printing) env.onPrint?.let { print ->
+            PrintDialog(node.dataDir(), onPrint = { choice ->
+                val tasks = runCatching { node.tasks(list.id) }.getOrDefault(emptyList())
+                print(list.name, printHtml(list.name, tasks, if (shopping) Sort.Order else sort, choice))
+            }, onDismiss = { printing = false })
         }
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
         ListBody(env, list, lists, shopping, snackbar, addFocus, wide, Modifier.weight(1f), sort, openFirst)

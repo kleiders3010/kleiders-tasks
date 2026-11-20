@@ -90,7 +90,7 @@ class MainActivity : ComponentActivity() {
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 startActivity(Intent.createChooser(send, tr("Export {name}", "name" to l.name)))
-            }, onImport = { importList.launch(arrayOf("*/*")) })
+            }, onImport = { importList.launch(arrayOf("*/*")) }, onPrint = { name, html -> Printing.print(this, name, html) })
             var blocked by remember { mutableStateOf(BackgroundCheck.shouldExplain(this@MainActivity)) }
             if (blocked) androidx.compose.material3.AlertDialog(
                 onDismissRequest = { blocked = false },

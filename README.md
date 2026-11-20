@@ -11,6 +11,9 @@ account and no company server holding your data.
   sorted by your order, by date, or starred first.
 - **Upcoming:** every task with a date, from every list, under its day (like Todoist's Today and Upcoming);
   overdue ones move to today in one tap.
+- **Print:** print a list (like Microsoft To Do's Print list), with or without its steps and notes: what's left to
+  do, in the list's order, with a box to tick on paper; long names wrap instead of being cut off. Android's print
+  service (a printer or Save as PDF) or the Windows print dialog.
 - **Shared:** any list can be shared; everyone edits at once and edits merge (CRDTs, [Loro](https://loro.dev)).
 - **No servers you depend on:** devices reach each other directly ([iroh](https://iroh.computer)), over the same
   Wi-Fi, through public Nostr relays, the Mainline DHT, other users' apps that help carry changes, and a small mailbox.

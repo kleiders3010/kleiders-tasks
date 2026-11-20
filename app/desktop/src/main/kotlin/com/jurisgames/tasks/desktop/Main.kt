@@ -176,7 +176,7 @@ fun main(args: Array<String>) {
                     md.writeText(node.exportMarkdown(l.id))
                     File(md.parentFile, md.nameWithoutExtension + ".tasklist").writeBytes(node.exportListFile(l.id))
                 }
-            })
+            }, onPrint = { name, html -> printPage(name, html) })
         }
     }
 }
