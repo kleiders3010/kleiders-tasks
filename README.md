@@ -36,3 +36,8 @@ account and no company server holding your data.
 
 ## License
 Apache-2.0. Icons from Google's Material Icons (Apache-2.0).
+
+## Problems or ideas
+
+In the app: menu > Send feedback. If the app won't open at all, open an issue at
+https://github.com/kleiders3010/kleiders-tasks/issues or write to hello@jurisgames.com.
