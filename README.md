@@ -2,7 +2,7 @@
 
 A free, open-source to-do and shopping list app for Android and Windows. Open it and type: it starts on your last
 list. Share a list with a link, QR code or 8 words; changes reach everyone's devices end-to-end encrypted, with no
-account and no company server holding your data.
+account. Our small mailbox server only ever holds encrypted copies (for 14 days), and the app works without it.
 
 - **Quick:** Enter adds and keeps the field open; "tomorrow at 5" becomes a reminder and "every monday" a repeating one
   (ticked off, it comes back on its next date, like Todoist's); shopping lists bring finished

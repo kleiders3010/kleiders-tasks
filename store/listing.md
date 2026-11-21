@@ -2,7 +2,7 @@
 
 **Title (30):** Tasks: Shared Lists
 
-**Short description (80):** Free to-do and shopping lists you can share. No account, no ads, open source.
+**Short description (80):** To-do and shopping lists you can share. No account, no ads, open source.
 
 **Full description:**
 
@@ -17,8 +17,8 @@ Tasks is a simple list app for to-dos and shopping, made to be quick: open it an
 • Swipe to delete, with Undo.
 
 No account, no sign-up, no ads, nothing to set up.
-Your lists stay on your devices. When you share, changes travel end-to-end encrypted between your devices directly or through public relays that can't read them. There's no company server holding your data, so nothing can be sold, leaked or shut down.
+Your lists live on your devices. When you share, changes travel end-to-end encrypted between your devices, directly or through public relays and our small mailbox, none of which can read them. Nothing readable is stored on any server, and the app keeps working without ours.
 
-Free and open source: github.com/kleiders3010/kleiders-tasks
+Open source: github.com/kleiders3010/kleiders-tasks
 
 **Category:** Productivity · **Contact:** GitHub issues · **Privacy policy:** https://apps.jurisgames.com/privacy/
