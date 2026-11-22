@@ -23,7 +23,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         if (inputData.getBoolean(PERIODIC, false)) BackgroundCheck.ran(applicationContext)
         ChangeNotifier.post(applicationContext, node.takeChanges())
         TasksWidget.refresh(applicationContext) // every change redraws the widget
-        Reminders.reschedule(applicationContext) // others' reminders arrive by sync too
+        runCatching { Reminders.reschedule(applicationContext) } // others' reminders arrive by sync too; a failure here must not fail the sync (T2-3)
         return Result.success()
     }
 

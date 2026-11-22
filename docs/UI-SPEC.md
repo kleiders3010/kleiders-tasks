@@ -73,12 +73,12 @@ Share… · Rename · Colour & icon · Shopping list on/off · Delete completed 
 - **Join** lives in the ☰ menu ("Join a shared list"), with the code boxes from UX-NOTES.
 
 ### ☰ menu (drawer on phone; bottom of the sidebar on wide screens)
-Your name · Join a shared list · Your devices (Link a device / Link this device) · Import a list file ·
+Your name · Join a shared list · Your devices (Link another device / Link to my other device: one verb, cold UX review U-T9) · Import a list file ·
 Settings · Restore from a backup (only on a fresh install).
 
 ### Empty states
 - First launch: one list "My tasks" exists, the add field is focused-ready, hint "Add your first task".
-  A quiet line "Using it on another device? Link this one" (UX-PRINCIPLES).
+  A quiet line "Using Tasks on another device? Link to it" (UX-PRINCIPLES).
 - An empty list: "Nothing here yet" above the add field.
 
 ### Keyboard (desktop)

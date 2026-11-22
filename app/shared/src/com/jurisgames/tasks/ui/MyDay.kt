@@ -140,6 +140,8 @@ fun MyDayPane(env: Env, lists: List<ListItem>, addTo: ListItem?, onMenu: (() -> 
                 if (tasks.isEmpty()) item(key = "empty") {
                     Column(Modifier.fillMaxWidth().padding(24.dp)) {
                         Text(tr("Nothing in your day yet"), color = c.onSurfaceVariant, modifier = Modifier.testTag("empty"))
+                        // What to do here, in one line (cold UX review U-T16).
+                        Text(tr("Add what you want to get done today. Tomorrow starts empty."), style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
                         if (ideas.isNotEmpty()) TextButton(onClick = { showIdeas = true }, modifier = Modifier.testTag("seeIdeas")) {
                             Text(tr("See suggestions ({n})", "n" to ideas.size))
                         }
@@ -158,24 +160,27 @@ fun MyDayPane(env: Env, lists: List<ListItem>, addTo: ListItem?, onMenu: (() -> 
                 }
             }
         }
-        if (addTo != null) {
+        // Always there, also on a fresh install: the first task makes "My tasks", as on the first screen (U-T16).
+        run {
             val focus = remember { FocusRequester() }
-            var text by remember { mutableStateOf("") }
+            var text by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
             var ignoreWhen by remember { mutableStateOf(false) }
             val parsed = if (ignoreWhen) null else parseWhen(text)
             fun add() {
                 val raw = text.trim()
                 if (raw.isEmpty()) return
-                val id = runCatching { node.addTask(addTo.id, parsed?.title?.ifBlank { raw } ?: raw, null) }.getOrNull() ?: return
-                if (parsed != null) runCatching { node.setReminder(addTo.id, id, parsed.at.millis().toULong()) }
-                if (parsed?.repeat != null) runCatching { node.setRepeat(addTo.id, id, parsed.repeat) }
-                runCatching { node.setMyDay(addTo.id, id, key) }
+                val to = addTo ?: runCatching { node.createList(null, tr("My tasks")) }.getOrNull() ?: return
+                val id = runCatching { node.addTask(to.id, parsed?.title?.ifBlank { raw } ?: raw, null) }.getOrNull() ?: return
+                if (parsed != null) runCatching { node.setReminder(to.id, id, parsed.at.millis().toULong()) }
+                if (parsed?.repeat != null) runCatching { node.setRepeat(to.id, id, parsed.repeat) }
+                if (parsed != null) env.reminders.onSet()
+                runCatching { node.setMyDay(to.id, id, key) }
                 text = ""; ignoreWhen = false
                 showIdeas = false
                 env.changed()
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, tr("Add a task to {list}", "list" to addTo.name), focus, ::add)
+                AddField(text, { text = it; if (it.isEmpty()) ignoreWhen = false }, parsed, { ignoreWhen = true }, tr("Add a task to {list}", "list" to (addTo?.name ?: tr("My tasks"))), focus, ::add)
             }
         }
         HorizontalDivider()
@@ -195,7 +200,7 @@ private fun DayRow(env: Env, st: StarredTask, onOpen: (ListItem, String) -> Unit
         Modifier.fillMaxWidth().clickable { onOpen(l, t.id) }.padding(start = 4.dp, end = 4.dp).heightIn(min = 52.dp).testTag("day-" + t.title),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Tick(t.done, "done-" + t.title) { tickTask(env.node, l.id, t, !t.done); env.changed() }
+        Tick(t.done, "done-" + t.title, t.title) { tickTask(env.node, l.id, t, !t.done); env.changed() }
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
                 t.title, maxLines = 2, overflow = TextOverflow.Ellipsis, color = if (t.done) c.onSurfaceVariant else c.onSurface,

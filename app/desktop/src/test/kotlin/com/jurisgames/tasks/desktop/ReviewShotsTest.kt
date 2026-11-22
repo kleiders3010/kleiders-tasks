@@ -110,7 +110,7 @@ class ReviewShotsTest {
     @Test fun p05() = shot("05-phone-task-details", false) { onNodeWithTag("task-Plan the trip").performClick() }
     @Test fun p06() = shot("06-phone-menu", false) { onNodeWithTag("menu").performClick() }
     @Test fun p07() = shot("07-phone-list-more", false) { onNodeWithTag("listMenu").performClick() }
-    @Test fun p08() = shot("08-phone-share-list", false) { onNodeWithTag("share").performClick() }
+    @Test fun p08() = shot("08-phone-share-list", false) { onNodeWithTag("share").performClick(); waitForIdle(); onNodeWithTag("shareCreate").performClick() }
     @Test fun p09() = shot("09-phone-shopping-list", false) {
         onAllNodes(hasTestTag("list-Groceries"))[0].performClick()
         waitForIdle()
@@ -118,7 +118,7 @@ class ReviewShotsTest {
     }
     @Test fun c10() = shot("10-pc-list", true) { }
     @Test fun c11() = shot("11-pc-task-details", true) { onNodeWithTag("task-Plan the trip").performClick() }
-    @Test fun c12() = shot("12-pc-share-list", true) { onNodeWithTag("share").performClick() }
+    @Test fun c12() = shot("12-pc-share-list", true) { onNodeWithTag("share").performClick(); waitForIdle(); onNodeWithTag("shareCreate").performClick() }
     @Test fun p13() = shot("13-phone-starred", false) { onNodeWithTag("starredView").performClick() }
     @Test fun c14() = shot("14-pc-starred", true) { onNodeWithTag("starredView").performClick() }
     @Test fun c15() = shot("15-pc-list-more", true) { onNodeWithTag("listMenu").performClick() }

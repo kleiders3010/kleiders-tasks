@@ -1,5 +1,6 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -38,8 +39,6 @@ import kotlinx.coroutines.withContext
 
 const val CODE_WORDS = 8
 
-/** Playful lines while an invite is being found (UX-NOTES "Waiting and loading"). */
-val FINDING = listOf(tr("Finding the list…"), tr("Asking around…"), tr("Knocking on doors…"), tr("Following the trail…"), tr("Almost there, probably…"))
 
 /**
  * What a typed word box should become: the full word once it is certain (4 letters typed, or
@@ -67,7 +66,6 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
     var link by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf("") }
-    var line by remember { mutableIntStateOf(0) }
     var slow by remember { mutableStateOf(false) }
     val clip = LocalClipboardManager.current
 
@@ -78,13 +76,14 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
             result = try {
                 val r = withContext(Dispatchers.IO) { node.joinCode(code) }
                 env.changed()
+                if (!r.stillLooking) env.onShared?.invoke() // in (or asked): the moment to ask for change notifications (U-T5)
                 when {
                     r.stillLooking -> tr("Not found yet. You can close this: the app keeps looking and tells you when you're in.")
                     r.joined -> { onJoined(r.groupName); tr("You're in: {group}", "group" to r.groupName) }
                     else -> tr("Asked to join {group} (from {who}). You're let in as soon as they're online.", "group" to r.groupName, "who" to r.inviterName)
                 }
             } catch (e: Exception) {
-                tr(e.message ?: tr("That code didn't work. Check it with the person who sent it."))
+                userError(e, tr("That code didn't work. Check it with the person who sent it."))
             }
             busy = false
         }
@@ -111,7 +110,7 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
         if (busy) {
             var n = 0
             while (busy) {
-                delay(1200); n++; line = n % FINDING.size
+                delay(1200); n++
                 if (n >= 2) slow = true
             }
         }
@@ -126,6 +125,7 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
         title = { Text(tr("Join a shared list")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                NameAsk(env.node)
                 Text(tr("Enter the code"), style = MaterialTheme.typography.bodyMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), maxItemsInEachRow = 4) {
                     for (i in 0 until CODE_WORDS) {
@@ -148,7 +148,7 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
                             },
                             singleLine = true, isError = typo,
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = if (i + 1 < CODE_WORDS) ImeAction.Next else ImeAction.Go),
-                            modifier = Modifier.width(118.dp).focusRequester(focus[i]).testTag("word-$i"),
+                            modifier = Modifier.widthIn(min = 118.dp).focusRequester(focus[i]).testTag("word-$i"), // grows with large text (U-T20)
                         )
                     }
                 }
@@ -160,7 +160,7 @@ fun JoinDialog(env: Env, prefilled: String?, onJoined: (String) -> Unit, onClose
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
                         Column {
-                            Text(FINDING[line], modifier = Modifier.testTag("joinFinding"))
+                            Text(tr("Finding the list…"), modifier = Modifier.testTag("joinFinding")) // one plain line, no jokes (cold UX review U-T21)
                             if (slow) Text(tr("This can take a minute, keep the app open"), style = MaterialTheme.typography.bodySmall)
                         }
                     }

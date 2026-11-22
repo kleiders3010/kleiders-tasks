@@ -58,9 +58,14 @@ const NAME_WAIT_MS: u64 = 86_400_000;
 
 pub(super) fn people(r: &kt_engine::replica::Replica, g: &GroupId) -> HashMap<String, String> {
     let Some(d) = group_doc(r, g).and_then(|gd| r.doc(g, &gd)) else { return HashMap::new() };
-    match d.get_map("people").get_deep_value() {
+    let people = d.get_map("people");
+    // Second-pass Sobres audit S3-4 (b): a name counts only when that device wrote it itself (each change is signed
+    // by its device, so the last writer of an entry can't be faked); another member's app can't rename anyone.
+    let own = |k: &str| kt_engine::ids::DeviceId::from_hex(k).is_some_and(|dev| people.get_last_editor(k) == Some(peer_id_for(&dev)));
+    match people.get_deep_value() {
         LoroValue::Map(m) => m
             .iter()
+            .filter(|(k, _)| own(k))
             .filter_map(|(k, v)| if let LoroValue::String(s) = v { Some((k.clone(), crate::clean_name(s))) } else { None })
             .filter(|(_, s)| !s.is_empty())
             .collect(),
@@ -96,7 +101,14 @@ impl App {
                 continue;
             }
             let Some(gd) = group_doc(&r, &g) else { continue };
-            r.doc(&g, &gd).unwrap().get_map("people").insert(&me.to_hex(), name.as_str()).map_err(eng)?;
+            let people = r.doc(&g, &gd).unwrap().get_map("people");
+            // After another member compacted the group, it is the last writer of every entry and ours no longer counts
+            // (S3-4). Writing the same text again is no change at all in Loro, so the name never came back: the entry
+            // is removed and written again, which makes this device its writer.
+            if people.get(&me.to_hex()).is_some() {
+                people.delete(&me.to_hex()).map_err(eng)?;
+            }
+            people.insert(&me.to_hex(), name.as_str()).map_err(eng)?;
             r.commit(&g, &gd).map_err(eng)?;
         }
         Ok(())

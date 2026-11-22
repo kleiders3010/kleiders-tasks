@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -53,6 +54,8 @@ class ClarityTest {
         rule.onAllNodes(hasTestTag("list-To do"))[0].performClick()
         val before = order()
         rule.onNodeWithTag("share").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("shareCreate").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("shareCreate").performClick() // a personal list asks first (U-T13)
         rule.waitForIdle()
         rule.waitUntil(5_000) { has("shareInvite") || has("showQr") }
         check(order() == before) { "tab order changed after Share: $before -> ${order()}" }

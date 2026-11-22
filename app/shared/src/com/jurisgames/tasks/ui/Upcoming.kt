@@ -105,7 +105,7 @@ fun UpcomingPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen:
                         Modifier.fillMaxWidth().clickable { onOpen(l, t.id) }.padding(start = 4.dp, end = 12.dp).heightIn(min = 52.dp).testTag("upcoming-" + t.title),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Tick(false, "done-" + t.title) { tickTask(node, l.id, t, true); env.changed() }
+                        Tick(false, "done-" + t.title, t.title) { tickTask(node, l.id, t, true); env.changed() }
                         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                             Text(t.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             Row(verticalAlignment = Alignment.CenterVertically) {

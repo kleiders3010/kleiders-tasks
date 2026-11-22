@@ -1,5 +1,7 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -80,19 +82,28 @@ fun reminderChoices(now: LocalDateTime = LocalDateTime.now()): List<Pair<String,
  */
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: () -> Unit, onMoved: () -> Unit, onOpen: (String) -> Unit) {
+fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: () -> Unit, onMoved: () -> Unit, onOpen: (String) -> Unit, canReorder: Boolean = false) {
     val node = env.node
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Title: saved after a short pause in typing.
-        var title by remember(t.id) { mutableStateOf(t.title) }
+        var title by androidx.compose.runtime.saveable.rememberSaveable(t.id) { mutableStateOf(t.title) }
         LaunchedEffect(t.id, title) {
             delay(500)
             if (title.isNotBlank() && title.trim() != t.title) {
                 runCatching { node.renameTask(list.id, t.id, title.trim()) }; env.changed()
             }
         }
+        // Closed (or another task opened) before the pause ran out: the last words are written anyway (cold UX review U-T6).
+        val savedTitle by rememberUpdatedState(t.title)
+        DisposableEffect(t.id) {
+            onDispose {
+                if (title.isNotBlank() && title.trim() != savedTitle && stillThere(node, list.id, t.id)) {
+                    runCatching { node.renameTask(list.id, t.id, title.trim()) }; env.changed()
+                }
+            }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Tick(t.done, "detailDone") { tickTask(node, list.id, t, !t.done); env.changed() }
+            Tick(t.done, "detailDone", t.title) { tickTask(node, list.id, t, !t.done); env.changed() }
             OutlinedTextField(
                 title, { title = it }, textStyle = MaterialTheme.typography.titleMedium,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -120,6 +131,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             var picking by remember(t.id) { mutableStateOf(false) }
             fun set(at: LocalDateTime?) {
                 runCatching { node.setReminder(list.id, t.id, at?.millis()?.toULong()) }; env.changed()
+                if (at != null) env.reminders.onSet()
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 t.remindMs?.let { ms ->
@@ -129,6 +141,11 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 AssistChip({ picking = true }, label = { Text(tr("Pick…")) }, modifier = Modifier.testTag("remindPick"))
             }
             if (picking) PickMoment(t.remindMs?.let { fromMillis(it.toLong()) }, onPicked = { set(it); picking = false }, onClose = { picking = false })
+            // A bell that can't ring says so (cold UX review U-T1). Read again when the app comes back.
+            if (t.remindMs != null && env.reminders.blocked()) Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Notifications are off for Tasks, so this won't ring."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f).testTag("remindBlocked"))
+                env.reminders.openSettings?.let { open -> androidx.compose.material3.TextButton(open, modifier = Modifier.testTag("remindTurnOn")) { Text(tr("Turn on")) } }
+            }
         }
 
         // Repeat (like Todoist's "every"): ticked off, it comes back on its next date
@@ -139,6 +156,7 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                     node.setRepeat(list.id, t.id, rule)
                 }
                 env.changed()
+                if (rule != null) env.reminders.onSet()
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (rule in Repeat.CHOICES) {
@@ -157,6 +175,14 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
                 delay(600)
                 if (complete && text != (notes?.text ?: "")) {
                     runCatching { node.setNotes(list.id, t.id, text) }; env.changed()
+                }
+            }
+            val savedNotes by rememberUpdatedState(notes?.text ?: "")
+            DisposableEffect(t.id, complete) {
+                onDispose {
+                    if (complete && text != savedNotes && stillThere(node, list.id, t.id)) {
+                        runCatching { node.setNotes(list.id, t.id, text) }; env.changed()
+                    }
                 }
             }
             OutlinedTextField(text, { text = it }, enabled = complete, placeholder = { Text(tr("Add notes")) }, minLines = 2, modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).testTag("notesText"))
@@ -183,11 +209,11 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             val children = tasks.filter { it.parentId == t.id }
             for (c in children) {
                 Row(Modifier.fillMaxWidth().clickable { onOpen(c.id) }, verticalAlignment = Alignment.CenterVertically) {
-                    Tick(c.done, "done-" + c.title) { runCatching { node.setDone(list.id, c.id, !c.done) }; env.changed() }
+                    Tick(c.done, "done-" + c.title, c.title) { runCatching { node.setDone(list.id, c.id, !c.done) }; env.changed() }
                     Text(c.title, Modifier.weight(1f))
                 }
             }
-            var step by remember(t.id) { mutableStateOf("") }
+            var step by androidx.compose.runtime.saveable.rememberSaveable(t.id) { mutableStateOf("") }
             fun addStep() {
                 if (step.isBlank()) return
                 runCatching { node.addTask(list.id, step.trim(), t.id) }; step = ""; env.changed()
@@ -200,6 +226,12 @@ fun Details(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskIte
             )
         }
 
+        // Moving without a long-press drag (cold UX review U-T15), only in "My order".
+        val siblings = tasks.filter { it.parentId == t.parentId && !it.done && it.id != t.id }
+        if (canReorder && !t.done && siblings.isNotEmpty()) Row {
+            TextButton(onClick = { runCatching { node.moveTaskNextTo(list.id, t.id, siblings.first().id, false) }; env.changed() }, modifier = Modifier.testTag("moveTop")) { Text(tr("Move to top")) }
+            TextButton(onClick = { runCatching { node.moveTaskNextTo(list.id, t.id, siblings.last().id, true) }; env.changed() }, modifier = Modifier.testTag("moveBottom")) { Text(tr("Move to bottom")) }
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             val others = lists.filter { it.id != list.id }
             if (others.isNotEmpty() && t.parentId == null) {
@@ -316,3 +348,7 @@ private fun ImageViewer(node: KtNode, listId: String, taskId: String, imageId: S
         },
     )
 }
+
+/** A task closed just after it was deleted gets no late write (that could bring it back). */
+private fun stillThere(node: com.jurisgames.tasks.core.KtNode, listId: String, id: String): Boolean =
+    runCatching { node.tasks(listId).any { it.id == id } }.getOrDefault(false)

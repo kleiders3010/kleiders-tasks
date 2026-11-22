@@ -30,8 +30,8 @@ These follow from the decisions above and from established usability research (N
   - **First launch asks nothing.** The app opens ready to use. Starting fresh and linking later loses nothing: linking merges this device's lists into the user's existing ones.
     - Opened from an invite link → it goes straight to "Join *Groceries*, shared by Uri".
     - Freshly installed from an invite link → the app picks up the invite on first launch (§5 of DESIGN.md) and shows the same join screen.
-    - The empty state offers a quiet "Using it on another device? Link this one".
-  - Sharing lives on the list ("Share this list"), and devices live under the user's name ("Your devices → Add a device").
+    - The empty state offers a quiet "Using Tasks on another device? Link to it".
+  - Sharing lives on the list ("Share this list"), and devices live under the user's name ("Your devices → Link another device").
   - Scanning or opening any code states what will happen: "Join *Groceries*, shared by Uri" vs "Link this phone to your lists".
   - **Linking works everywhere, and its single confirmation names what you're joining:** "This will join Mark's account: Pixel 7 · Mark's PC · 12 lists (Work, Groceries…) · your 3 lists will be combined". A link code opened from the invite path is refused with a plain explanation.
   - **"New device linked · Undo"** appears on every device for a while afterwards.

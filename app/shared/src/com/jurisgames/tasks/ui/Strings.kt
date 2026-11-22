@@ -24,6 +24,31 @@ fun tr(en: String, vararg args: Pair<String, Any?>): String {
     return s
 }
 
+/**
+ * What an error says to the person: the engine's own words only when they are a known, worded message (a key of
+ * [ES]), else [fallback], which says what to do next. Raw engine text never reaches the screen (cold UX review U-T10).
+ */
+fun userError(e: Throwable?, fallback: String): String {
+    // The engine's own text (the generated exception's `message` is "msg=…", which matched no key before).
+    val m = ((e as? com.jurisgames.tasks.core.KtException.Failed)?.msg ?: e?.message)?.trim()
+    // U-S10: an engine message is never shown as is (English showed the raw text).
+    CORE_WORDS[m]?.let { return tr(it) }
+    // U-C8 (Ciclo review, general): nothing else the engine says is shown; the fallback says what to do next.
+    // Not kept for Diagnostics: its export promises no task content, and a raw error may quote some.
+    return fallback
+}
+
+/** The engine's messages that reach people, in the app's own words (the keys are the engine's text). */
+val CORE_WORDS: Map<String?, String> = mapOf(
+    "not a backup file" to "This isn't a Tasks backup file.",
+    "wrong backup password" to "Wrong backup password.",
+    "password too short" to "The password is too short.",
+    "no link code found for these words: check them, or it may have expired" to "No link code has these words. Check them; a code also stops working after a while.",
+    "This is a device link code, not an invite. Open ☰ › Link to my other device." to "This is a device link code, not an invite. Open ☰ › Link to my other device.",
+    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación a una lista, no un vínculo de dispositivo. Abrí ☰ › Unirme a una lista compartida.",
+    "This isn't a Tasks backup file." to "This isn't a Tasks backup file.",
+)
+
 /** Day and month names without the trailing dot some languages put on short forms ("vie." -> "vie"). */
 fun shortName(s: String): String = s.replace(".", "")
 
@@ -35,6 +60,22 @@ fun trSummary(s: String): String = if (!Lang.spanish) s else s
     .replace("a device", "un dispositivo")
 
 val ES: Map<String, String> = mapOf(
+    "Save a backup file" to "Guardar un archivo de copia",
+    "Backup saved" to "Copia guardada",
+    "Couldn't save the backup" to "No se pudo guardar la copia",
+    "Open Tasks to see it" to "Abrí Tasks para verlo",
+    "Wrong backup password." to "La contraseña de la copia no es correcta.",
+    "The password is too short." to "La contraseña es muy corta.",
+    "No link code has these words. Check them; a code also stops working after a while." to "Ningún código de vínculo tiene esas palabras. Revisalas; un código también deja de funcionar después de un tiempo.",
+    "Invite made. Waiting for someone to join." to "Invitación creada. Esperando que alguien se una.",
+    "Show invite" to "Ver invitación",
+    "Delete {name} for everyone?" to "¿Borrar {name} para todos?",
+    "It is shared: it goes from every device that joined it." to "Está compartida: se borra de todos los dispositivos que se unieron.",
+    "It goes from {people}'s devices too." to "También se borra de los dispositivos de {people}.",
+    "Delete for everyone" to "Borrar para todos",
+    "Your name (so the others know who did what)" to "Tu nombre (para que los demás sepan quién hizo qué)",
+    "Someone" to "Alguien",
+    "This isn't a Tasks backup file." to "No es un archivo de copia de Tasks.",
     "Backup password" to "Contraseña de la copia",
     "Change backup password" to "Cambiar la contraseña de la copia",
     "Backups will need this password to open, also on a new phone. If you forget it, they can't be opened." to "Las copias van a pedir esta contraseña para abrirse, también en un teléfono nuevo. Si la olvidás, no se pueden abrir.",
@@ -58,7 +99,7 @@ val ES: Map<String, String> = mapOf(
     "Search" to "Buscar",
     "Search all your lists" to "Buscar en todas tus listas",
     "Nothing matches “{q}”" to "Nada coincide con “{q}”",
-    "Clear" to "Borrar",
+    "Clear" to "Limpiar", // not "Borrar": that is Delete (U-T24)
     "Starred" to "Destacadas",
     "Star" to "Destacar",
     "Nothing starred" to "Nada destacado",
@@ -102,6 +143,10 @@ val ES: Map<String, String> = mapOf(
     "Deleted “{title}”" to "Se borró “{title}”",
     "Deleted {name}" to "Se borró {name}",
     "Couldn't share" to "No se pudo compartir",
+    "Couldn't share. Check your connection and try again." to "No se pudo compartir. Revisá la conexión y probá de nuevo.",
+    "Couldn't save. Try again." to "No se pudo guardar. Probá de nuevo.",
+    "Couldn't undo. Try again." to "No se pudo deshacer. Probá de nuevo.",
+    "Couldn't restore. Check that it is a Tasks backup file." to "No se pudo restaurar. Revisá que sea una copia de Tasks.",
     "Couldn't save" to "No se pudo guardar",
     "Rename" to "Cambiar nombre",
     "Rename list" to "Cambiar el nombre de la lista",
@@ -113,7 +158,60 @@ val ES: Map<String, String> = mapOf(
     "My order" to "Mi orden",
     "Date" to "Fecha",
     "Starred recently" to "Destacadas hace poco",
-    "Delete completed" to "Borrar completadas",
+    "Delete completed ({n})" to "Borrar completadas ({n})",
+    "Deleted {n} completed" to "Se borraron {n} completadas",
+    "Not starred" to "Sin destacar",
+    "Has a star" to "Destacada",
+    "Notifications are off for Tasks, so this won't ring." to "Las notificaciones de Tasks están apagadas, así que esto no va a sonar.",
+    "Turn on" to "Activar",
+    "Not sent yet: your newest changes are only on this device." to "Sin enviar: tus últimos cambios solo están en este dispositivo.",
+    "the others last synced {when}" to "los demás sincronizaron por última vez {when}",
+    "the others haven't synced yet" to "los demás todavía no sincronizaron",
+    "Sent" to "Enviado",
+    "saves as \"{title}\"" to "se guarda como \"{title}\"",
+    "Grey" to "Gris",
+    "Red" to "Rojo",
+    "Orange" to "Naranja",
+    "Yellow" to "Amarillo",
+    "Green" to "Verde",
+    "Teal" to "Verde azulado",
+    "Blue" to "Azul",
+    "Purple" to "Violeta",
+    "Pink" to "Rosa",
+    "Got an invite code? Join a shared list" to "¿Te pasaron un código? Unite a una lista compartida",
+    "Move to top" to "Mover arriba de todo",
+    "Move to bottom" to "Mover abajo de todo",
+    "Add what you want to get done today. Tomorrow starts empty." to "Agregá lo que querés hacer hoy. Mañana empieza vacío.",
+    "Nothing starred. Tap ☆ on a task to see it here." to "Nada destacado. Tocá ☆ en una tarea para verla acá.",
+    "Nothing here yet. Type below to add a task." to "Todavía no hay nada. Escribí abajo para agregar una tarea.",
+    "Deleted {name} for everyone in it" to "Borraste {name} para todos los que la usan",
+    "Delete list for everyone" to "Borrar la lista para todos",
+    "Last hour" to "Última hora",
+    "Last day" to "Último día",
+    "Last 3 days" to "Últimos 3 días",
+    "Last 30 days" to "Últimos 30 días",
+    "Free and open source. No ads, no account." to "Gratis y de código abierto. Sin anuncios, sin cuenta.",
+    "Source code" to "Código fuente",
+    "Privacy" to "Privacidad",
+    "Undo recent changes" to "Deshacer cambios recientes",
+    "Undo recent changes…" to "Deshacer cambios recientes…",
+    "{who} joined {list}, let in by {by}'s invite" to "{who} se unió a {list}, con la invitación de {by}",
+    "{who} joined {list}" to "{who} se unió a {list}",
+    "A new device" to "Un dispositivo nuevo",
+    "OK" to "OK",
+    "Light or dark" to "Claro u oscuro",
+    "Share {name}" to "Compartir {name}",
+    "People you invite can see and change this list. You get a link and a code to send them." to
+        "Las personas que invites pueden ver y cambiar esta lista. Te damos un enlace y un código para mandarles.",
+    "Create invite" to "Crear invitación",
+    "Same as the system" to "Igual que el sistema",
+    "Light" to "Claro",
+    "Dark" to "Oscuro",
+    "Advanced" to "Avanzado",
+    "Lets this device pass along encrypted updates for other Tasks users. It can't read them. Uses some data and battery." to
+        "Deja que este dispositivo pase actualizaciones cifradas de otras personas que usan Tasks. No las puede leer. Usa algo de datos y batería.",
+    "When on, other Tasks users whose devices can't reach each other directly can connect through this computer. Everything stays encrypted." to
+        "Si está activado, otras personas que usan Tasks y cuyos dispositivos no se alcanzan directamente pueden conectarse a través de esta computadora. Todo sigue cifrado.",
     "Export" to "Exportar",
     "Print list" to "Imprimir lista",
     "Print steps" to "Imprimir pasos",
@@ -238,17 +336,16 @@ val ES: Map<String, String> = mapOf(
     "Asked to join {group} (from {who}). You're let in as soon as they're online." to
         "Pediste entrar a {group} (de {who}). Entrás apenas esa persona esté conectada.",
     "That code didn't work. Check it with the person who sent it." to "Ese código no funcionó. Revisalo con quien te lo mandó.",
-    "Link a device" to "Vincular un dispositivo",
-    "On your other device, open ☰ › Link this device, then enter this code or scan it." to
-        "En tu otro dispositivo abrí ☰ › Vincular este dispositivo y escribí este código o escanealo.",
+    "Link another device" to "Vincular otro dispositivo",
+    "On your other device, open ☰ › Link to my other device, then enter this code or scan it." to
+        "En tu otro dispositivo abrí ☰ › Vincular con mi otro dispositivo y escribí este código o escanealo.",
     "Invite to {name}" to "Invitar a {name}",
     "Anyone with this link or code can open this list and join, until it expires. Share it only with the people you invite." to
         "Cualquiera con este enlace o código puede abrir esta lista y unirse, hasta que venza. Compartilo solo con quienes invitás.",
     "Your name" to "Tu nombre",
     "Linking: this device joins your other one as soon as it's online" to "Vinculando: este dispositivo se une al otro apenas esté conectado",
-    "Your devices ({n}) · Add a device" to "Tus dispositivos ({n}) · Agregar uno",
-    "Add a device" to "Agregar un dispositivo",
-    "Join your other device" to "Unirme a mi otro dispositivo",
+    "Your devices ({n}) · Link another device" to "Tus dispositivos ({n}) · Vincular otro",
+    "Link to my other device" to "Vincular con mi otro dispositivo",
     "Import a list file" to "Importar un archivo de lista",
     "Restore from a backup" to "Restaurar desde una copia",
     "Please update to keep using shared lists: {v}" to "Actualizá para seguir usando las listas compartidas: {v}",
@@ -263,7 +360,7 @@ val ES: Map<String, String> = mapOf(
     "Your previous device can still see {n} shared lists. Lost or stolen?" to "Tu dispositivo anterior todavía puede ver {n} listas compartidas. ¿Se perdió o te lo robaron?",
     "Remove it" to "Quitarlo",
     "Keep it" to "Dejarlo",
-    "Using it on another device? Link this one" to "¿La usás en otro dispositivo? Vinculá este",
+    "Using Tasks on another device? Link to it" to "¿Usás Tasks en otro dispositivo? Vinculalo",
     "Link copied" to "Enlace copiado",
     "Copy link" to "Copiar enlace",
     "Or send them this code" to "O mandales este código",
@@ -285,15 +382,12 @@ val ES: Map<String, String> = mapOf(
     "Linking: this device joins as soon as your other one is online" to "Vinculando: este dispositivo se une apenas el otro esté conectado",
     "Couldn't link. Try again." to "No se pudo vincular. Probá de nuevo.",
     "Link" to "Vincular",
-    "Link this device" to "Vincular este dispositivo",
-    "Code or link from your other device" to "Código o enlace de tu otro dispositivo",
+        "Code or link from your other device" to "Código o enlace de tu otro dispositivo",
     "Scan QR code" to "Escanear código QR",
     // messages from the core
     "no link code found for these words: check them, or it may have expired" to "No hay un código de vínculo con esas palabras: revisalas, o puede haber vencido",
-    "this is an invite, not a device link: use \"Join with code\"" to "Esto es una invitación, no un vínculo de dispositivo: usá ☰ › Unirme a una lista compartida",
-    "this is an invite, not a device link code: use \"Join with code\"" to "Esto es una invitación, no un vínculo de dispositivo: usá ☰ › Unirme a una lista compartida",
-    "this is a device link, not an invite: use it to link this device to your account" to "Esto es un vínculo de dispositivo, no una invitación: usalo en ☰ › Vincular este dispositivo",
-    "this is a device link code, not an invite: use it to link this device to your account" to "Esto es un vínculo de dispositivo, no una invitación: usalo en ☰ › Vincular este dispositivo",
+    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación, no un vínculo de dispositivo: usá ☰ › Unirme a una lista compartida",
+    "This is a device link code, not an invite. Open ☰ › Link to my other device." to "Esto es un código para vincular un dispositivo, no una invitación. Abrí ☰ › Vincular con mi otro dispositivo.",
     "not a Tasks backup file" to "No es un archivo de copia de Tasks",
 
     // undo someone's changes

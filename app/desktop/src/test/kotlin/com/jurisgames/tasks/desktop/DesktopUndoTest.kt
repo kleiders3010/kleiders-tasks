@@ -35,7 +35,8 @@ class DesktopUndoTest {
         rule.onNodeWithTag("list-Errands").performClick()
         rule.onNodeWithTag("listMenu").performClick()
         rule.onNodeWithTag("undoOpen").performClick()
-        rule.onNodeWithTag("undoWho-Alex").performClick()
+        // A personal list: only Alex, picked already (U-T23), no "whose" chips.
+        check(rule.onAllNodes(hasTestTag("undoWho-Alex")).fetchSemanticsNodes().isEmpty())
         rule.onNodeWithTag("undoSince-3600000").performClick()
         rule.onNodeWithTag("undoGo").performClick()
         rule.waitUntil(10_000) { rule.onAllNodes(hasTestTag("undoResult") and hasText("Put back", substring = true)).fetchSemanticsNodes().isNotEmpty() }

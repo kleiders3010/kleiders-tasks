@@ -84,7 +84,7 @@ fun snippet(notes: String, word: String): String {
 @Composable
 fun SearchPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen: (ListItem, String) -> Unit, chips: (@Composable () -> Unit)? = null) {
     val node = env.node
-    var query by remember { mutableStateOf("") }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     val found = remember(node, env.version, query) { searchTasks(node, lists, query) }
     val c = MaterialTheme.colorScheme
     val focus = remember { FocusRequester() }
@@ -131,7 +131,7 @@ private fun FoundRow(env: Env, f: Found, onOpen: (ListItem, String) -> Unit) {
         Modifier.fillMaxWidth().clickable { onOpen(l, t.id) }.padding(start = 4.dp, end = 12.dp).heightIn(min = 52.dp).testTag("found-" + t.title),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Tick(t.done, "done-" + t.title) { tickTask(env.node, l.id, t, !t.done); env.changed() }
+        Tick(t.done, "done-" + t.title, t.title) { tickTask(env.node, l.id, t, !t.done); env.changed() }
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(t.title, maxLines = 2, overflow = TextOverflow.Ellipsis, color = if (t.done) c.onSurfaceVariant else c.onSurface)
             f.inNotes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag("inNotes")) }

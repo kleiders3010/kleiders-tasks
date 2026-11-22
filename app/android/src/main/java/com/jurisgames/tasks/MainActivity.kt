@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
         // A list shared earlier stays nowhere (safety round 6, APP-RULES 84; Sobres does the same since round 5).
         if (savedInstanceState == null) java.io.File(cacheDir, "exports").deleteRecursively()
         opened.value = ourLink(intent)
+        notifyChangesWas = runCatching { app.node.settings().notifyChanges }.getOrNull()
         QrScanner.prepare(this) // play: fetch Google's scanner module before anyone taps Scan
         setContent {
             var node by remember { mutableStateOf(app.node) }
@@ -53,7 +54,7 @@ class MainActivity : ComponentActivity() {
                         val l = withContext(Dispatchers.IO) { node.importListFile(null, contentResolver.openInputStream(uri)!!.use { it.readBytes() }) }
                         tr("Imported {name}", "name" to l.name)
                     } catch (e: Exception) {
-                        tr(e.message ?: tr("Not a list file"))
+                        com.jurisgames.tasks.ui.userError(e, tr("Not a list file"))
                     }
                     Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
                 }
@@ -74,20 +75,44 @@ class MainActivity : ComponentActivity() {
                     }
                 } catch (e: Exception) {
                     node = app.node
-                    Toast.makeText(this@MainActivity, tr(e.message ?: tr("Restore failed")), Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, com.jurisgames.tasks.ui.userError(e, tr("Couldn't restore. Check that it is a Tasks backup file.")), Toast.LENGTH_LONG).show()
                 }
             }
             val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
                 if (uri != null) restore({ contentResolver.openInputStream(uri)!!.use { it.readBytes() } }, null)
             }
-            TasksApp(node, onPickImage = { done ->
+            // every list in one file she keeps (Drive, Downloads), the format Restore reads (Ciclo review U-C12)
+            val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                if (uri != null) scope.launch {
+                    val ok = withContext(Dispatchers.IO) {
+                        runCatching {
+                            val tmp = java.io.File(cacheDir, "backup-out.ktbackup")
+                            try {
+                                node.writeBackup(tmp.path)
+                                contentResolver.openOutputStream(uri)!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
+                            } finally { tmp.delete() }
+                        }.isSuccess
+                    }
+                    Toast.makeText(this@MainActivity, if (ok) tr("Backup saved") else tr("Couldn't save the backup"), Toast.LENGTH_LONG).show()
+                }
+            }
+            TasksApp(node, onSaveBackup = { saveBackup.launch("Tasks-${java.time.LocalDate.now()}.ktbackup") }, onPickImage = { done ->
                 onPicked = done
                 pickImage.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }, decodeImage = Images::decode, dynamicScheme = if (Build.VERSION.SDK_INT >= 31) { dark -> if (dark) androidx.compose.material3.dynamicDarkColorScheme(this) else androidx.compose.material3.dynamicLightColorScheme(this) } else null, onShare = { link ->
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, link), tr("Share invite")))
             }, update = update.value, required = required.value, onUpdate = { link ->
                 startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)))
-            }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onRestoreWith = { bytes, pw -> restore({ bytes }, pw) }, onExport = { l ->
+            }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = {
+                app.applyBackgroundSync(it.syncInBackground)
+                val was = notifyChangesWas ?: true
+                notifyChangesWas = it.notifyChanges
+                if (it.notifyChanges && !was) askForNotificationsWhenShared(force = true) // just switched on: they want it
+            }, reminders = com.jurisgames.tasks.ui.ReminderHooks(
+                onSet = { askForExactAlarmsIfNeeded() },
+                blocked = { !notifyOn.value },
+                openSettings = { openNotificationSettings() },
+            ), onShared = { askForNotificationsWhenShared() }, backHandler = { enabled, back -> androidx.activity.compose.BackHandler(enabled, back) }, onRestore = { pick.launch(arrayOf("*/*")) }, onRestoreWith = { bytes, pw -> restore({ bytes }, pw) }, onExport = { l ->
                 // Both formats at once: readable Markdown as text (Obsidian, notes apps,
                 // email) and the re-importable .tasklist file attached.
                 // Only the export being shared stays: older copies go first.
@@ -102,7 +127,8 @@ class MainActivity : ComponentActivity() {
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 startActivity(Intent.createChooser(send, tr("Export {name}", "name" to l.name)))
             }, onImport = { importList.launch(arrayOf("*/*")) }, onPrint = { name, html -> Printing.print(this, name, html) })
-            var blocked by remember { mutableStateOf(BackgroundCheck.shouldExplain(this@MainActivity)) }
+            // Only someone with a shared list is told about shared lists (cold UX review U-T5).
+            var blocked by remember { mutableStateOf(app.node.groups().any { !it.personal } && BackgroundCheck.shouldExplain(this@MainActivity)) }
             if (blocked) androidx.compose.material3.AlertDialog(
                 onDismissRequest = { blocked = false },
                 title = { androidx.compose.material3.Text(tr("Updates only while the app is open")) },
@@ -207,19 +233,38 @@ class MainActivity : ComponentActivity() {
         app.reportDeviceState()
         multicast.acquire() // Android drops multicast (LAN beacons) without it
         app.node.startLive() // app open: live on every layer
-        askForNotificationsWhenShared()
-        askForExactAlarmsIfNeeded()
+        notifyOn.value = notificationsOn()
+        // Permissions are asked when a reminder is set or a list is shared or joined, not at start (UX U-T1/U-T5).
+        // A reminder that came another way (restore, a linked device) still gets its one ask here.
+        if (app.node.upcomingReminders().isNotEmpty()) askForExactAlarmsIfNeeded()
         checkForUpdate()
         val current = packageManager.getPackageInfo(packageName, 0).longVersionCode.toULong()
         required.value = runCatching { app.node.requiredUpdate(current, Store.UPDATE_CHANNEL) }.getOrNull()
     }
 
     /** Asked the first time it's relevant: once this device is in a shared group (§12). */
-    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val notifyPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { notifyOn.value = notificationsOn() }
 
-    private fun askForNotificationsWhenShared() {
+    /** The change-notices switch as it was before the last Save (null = not read yet). */
+    private var notifyChangesWas: Boolean? = null
+
+    /** Whether a notification posted now would show (read on every start: it can change in Settings). */
+    private val notifyOn = mutableStateOf(true)
+
+    private fun notificationsOn(): Boolean =
+        androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+
+    private fun openNotificationSettings() {
+        runCatching { startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)) }
+    }
+
+    /** Once, right after this device joins or shares a list ([force]: the person just switched change notices on). */
+    private fun askForNotificationsWhenShared(force: Boolean = false) {
         if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return
-        if (app.node.groups().any { !it.personal }) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        val prefs = getSharedPreferences("reminders", MODE_PRIVATE)
+        if (!force && prefs.getBoolean("askedNotifyShared", false)) return
+        prefs.edit().putBoolean("askedNotifyShared", true).apply()
+        notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     /** Held while the app is open, for the same-Wi-Fi beacons (§6). */

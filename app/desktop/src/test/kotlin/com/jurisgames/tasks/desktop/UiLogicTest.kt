@@ -32,10 +32,40 @@ class UiLogicTest {
         assertEquals(LocalDateTime.of(2026, 11, 19, 9, 0), parseWhen("comprar pan mañana", now)!!.at)
         assertEquals("comprar pan", parseWhen("comprar pan mañana", now)!!.title)
         assertEquals(LocalDateTime.of(2026, 11, 23, 9, 0), parseWhen("plan trip next week", now)!!.at)
+        // pinned: U-T8 decision (cold UX review 2026-11-22): "today" after 9:00 is the next full hour, not a reminder that is already late;
+        // "por la mañana" is in the morning, not tomorrow.
+        assertEquals(LocalDateTime.of(2026, 11, 18, 15, 0), parseWhen("pay rent today", now)!!.at)
+        assertEquals(LocalDateTime.of(2026, 11, 18, 20, 0), parseWhen("call dad tonight", now)!!.at)
+        assertNull(parseWhen("correr por la mañana", now))
+        assertNull(parseWhen("lo de esta mañana", now))
+        assertEquals(LocalDateTime.of(2026, 11, 19, 9, 0), parseWhen("correr mañana por la mañana", now)!!.at)
         // Plain numbers are not times.
         assertNull(parseWhen("buy 5 eggs", now))
         assertNull(parseWhen("read chapter 12", now))
         assertNull(parseWhen("milk", now))
+    }
+
+    // pinned: U-T10 + U-C8 decision (cold UX reviews 2026-11-22): the engine's text reaches the screen only as one of
+    // its known messages (CORE_WORDS), in the app's words; anything else, even text that happens to be an ES key, shows
+    // the fallback with a next step.
+    @Test
+    fun errorsShownToPeople() {
+        val was = com.jurisgames.tasks.ui.Lang.spanish
+        try {
+            val word = com.jurisgames.tasks.ui.CORE_WORDS.keys.filterNotNull().first() // any known message: wording may change
+            val known = com.jurisgames.tasks.core.KtException.Failed(word)
+            val ours = com.jurisgames.tasks.ui.CORE_WORDS.getValue(word)
+            com.jurisgames.tasks.ui.Lang.spanish = true
+            assertEquals(com.jurisgames.tasks.ui.ES.getValue(ours), com.jurisgames.tasks.ui.userError(known, "fallback"))
+            com.jurisgames.tasks.ui.Lang.spanish = false
+            assertEquals(ours, com.jurisgames.tasks.ui.userError(known, "fallback"))
+            val esOnly = com.jurisgames.tasks.ui.ES.keys.first { it !in com.jurisgames.tasks.ui.CORE_WORDS }
+            assertEquals("fallback", com.jurisgames.tasks.ui.userError(com.jurisgames.tasks.core.KtException.Failed(esOnly), "fallback"))
+            assertEquals("fallback", com.jurisgames.tasks.ui.userError(com.jurisgames.tasks.core.KtException.Failed("io: os error 2"), "fallback"))
+            assertEquals("fallback", com.jurisgames.tasks.ui.userError(null, "fallback"))
+        } finally {
+            com.jurisgames.tasks.ui.Lang.spanish = was
+        }
     }
 
     // pinned: Todoist's "every" words and rule meanings (Repeat.kt), English and Spanish

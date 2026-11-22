@@ -2,6 +2,7 @@ package com.jurisgames.tasks.desktop
 
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -45,6 +46,8 @@ class DesktopSmokeTest {
         check(node.tasks(node.lists().first { it.name == "Groceries" }.id).single().done) { "done state reached the engine" }
         // Sharing a personal list makes it a shared one (the person never sees "group").
         rule.onNodeWithTag("share").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodesWithTag("shareCreate").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("shareCreate").performClick() // a personal list asks first (U-T13)
         rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("words")).fetchSemanticsNodes().isNotEmpty() }
         check(node.groups().any { !it.personal && it.name == "Groceries" }) { node.groups().toString() }
         check(node.lists().count { it.name == "Groceries" } == 1)

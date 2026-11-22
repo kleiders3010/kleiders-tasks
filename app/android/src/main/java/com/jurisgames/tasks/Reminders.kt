@@ -72,9 +72,17 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 }
 
+private val RESCHEDULE_ACTIONS = setOf(
+    Intent.ACTION_BOOT_COMPLETED,
+    Intent.ACTION_MY_PACKAGE_REPLACED,
+    "android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED",
+)
+
 /** Boot, app update, or the exact-alarm permission granted: alarms need setting again. */
 class RescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(ctx: Context, intent: Intent) {
+        // Exported for the three system events only: any other app sending it is ignored (second-pass audit T2-14a).
+        if (intent.action !in RESCHEDULE_ACTIONS) return
         Measure.ensureAlarm(ctx) // the "more often" measurement alarm, if on
         val done = goAsync()
         Thread {

@@ -4,6 +4,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.jurisgames.tasks.core.KtNode
 import com.jurisgames.tasks.core.NodeOptions
 import com.jurisgames.tasks.core.Platform
@@ -32,11 +33,16 @@ class DesktopSettingsTest {
         rule.setContent { TasksApp(n) }
         rule.onNodeWithTag("settingsOpen").performClick()
         rule.waitUntil(5_000) { shown("set-notify") }
+        rule.onNodeWithTag("advancedOpen").performClick() // network help is folded away (U-T11)
+        rule.waitUntil(5_000) { shown("help-off") }
         check(shown("set-relay")) { "relay setting on desktop (D51)" }
         check(shown("set-autostart"))
         check(shown("help-on") && shown("help-off") && !shown("help-wifi_and_charging"))
-        rule.onNodeWithTag("set-notify").performClick()
-        rule.onNodeWithTag("help-off").performClick()
+        rule.onNodeWithTag("set-notify").performScrollTo().performClick()
+        rule.onNodeWithTag("help-off").performScrollTo().performClick()
+        rule.waitForIdle()
+        // pinned: U-T11 decision: a change applies the moment it is made, there is no Save to forget
+        check(!n.settings().notifyChanges && n.settings().helpOthers == "off") { "applied at once" }
         rule.onNodeWithTag("settingsSave").performClick()
         rule.waitUntil(5_000) { !shown("settingsSave") }
         n.close()
@@ -50,6 +56,8 @@ class DesktopSettingsTest {
         rule.setContent { TasksApp(n) }
         rule.onNodeWithTag("settingsOpen").performClick()
         rule.waitUntil(5_000) { shown("set-notify") }
+        rule.onNodeWithTag("advancedOpen").performClick()
+        rule.waitUntil(5_000) { shown("help-off") }
         check(!shown("set-relay")) { "not shown at all on phones (D51)" }
         check(!shown("set-autostart"))
         check(shown("help-wifi_and_charging") && shown("help-wifi_while_open") && shown("help-off") && !shown("help-on"))

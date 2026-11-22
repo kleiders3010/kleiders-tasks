@@ -48,6 +48,21 @@ class DesktopSpanishTest {
         }
     }
 
+    /** APP-RULES 137: what an exception says reaches the screen only through userError (the pattern is built, rule 130). */
+    @Test
+    fun errorsReachTheScreenOnlyThroughUserError() {
+        val raw = Regex("\\b(e|it|err)\\." + "mess" + "age\\b")
+        val roots = listOf("../shared/src", "../android/src/main/java").map(::File)
+        val found = mutableListOf<String>()
+        var files = 0
+        for (root in roots) root.walkTopDown().filter { it.extension == "kt" && it.name !in setOf("Strings.kt", "kt_ffi.kt", "Measure.kt") }.forEach { f ->
+            files++
+            f.readLines().forEachIndexed { i, line -> if (raw.containsMatchIn(line)) found += "${f.name}:${i + 1}: ${line.trim()}" }
+        }
+        check(files > 20) { "scanned only $files files: is the scan looking in the right folders?" }
+        check(found.isEmpty()) { "raw exception text on screen:\n" + found.joinToString("\n") }
+    }
+
     /** A text wrapped in tr("...") anywhere in the app without its Spanish would show in English. */
     @Test
     fun everyTextHasItsSpanish() {

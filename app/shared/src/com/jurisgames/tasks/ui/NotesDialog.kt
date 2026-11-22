@@ -37,7 +37,7 @@ fun NotesDialog(node: KtNode, listId: String, taskId: String, version: Int, onSa
                     onSaved()
                     onClose()
                 } catch (e: Exception) {
-                    error = e.message ?: tr("Couldn't save")
+                    error = userError(e, tr("Couldn't save. Try again."))
                 }
             }, enabled = complete, modifier = Modifier.testTag("notesSave")) { Text(tr("Save")) }
         },

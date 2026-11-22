@@ -27,7 +27,8 @@ private val WEEKDAYS = mapOf(
 val MORNING: LocalTime = LocalTime.of(9, 0)
 
 private val day = Regex(
-    "(?i)(?<![\\p{L}])(?:(?:on|el)\\s+)?(today|hoy|tonight|esta noche|tomorrow|mañana|manana|next week|la semana que viene|la próxima semana|la proxima semana|" +
+    // Not after "la"/"esta": "por la mañana" is "in the morning", not tomorrow (cold UX review U-T8).
+    "(?i)(?<![\\p{L}])(?<!\\b(?:la|esta)\\s)(?:(?:on|el)\\s+)?(today|hoy|tonight|esta noche|tomorrow|mañana|manana|next week|la semana que viene|la próxima semana|la proxima semana|" +
         WEEKDAYS.keys.joinToString("|") + ")(?![\\p{L}])",
 )
 private val clock = Regex(
@@ -138,7 +139,9 @@ private fun parseOnce(text: String, now: LocalDateTime): When? {
     }
     if (date == null && time == null) return null
     val at = if (date != null) {
-        LocalDateTime.of(date, time ?: defaultTime)
+        val a = LocalDateTime.of(date, time ?: defaultTime)
+        // "today" at 15:00 with no time: the next full hour, not a 9:00 that is already late (U-T8).
+        if (time == null && !a.isAfter(now)) now.withMinute(0).withSecond(0).withNano(0).plusHours(1) else a
     } else {
         val today = LocalDateTime.of(now.toLocalDate(), time!!)
         if (today.isAfter(now)) today else today.plusDays(1)

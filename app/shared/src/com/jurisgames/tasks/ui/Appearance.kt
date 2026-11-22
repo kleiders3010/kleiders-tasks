@@ -1,5 +1,10 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -90,7 +95,9 @@ private fun scheme(c: ThemeColors, dark: Boolean): ColorScheme {
  */
 @Composable
 fun AppTheme(node: KtNode, version: Int, dynamicScheme: ((Boolean) -> ColorScheme?)?, content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
+    val system = isSystemInDarkTheme()
+    val mode = remember(node, version) { darkMode(node.dataDir()) }
+    val dark = when (mode) { DarkMode.System -> system; DarkMode.Light -> false; DarkMode.Dark -> true }
     val settings = remember(node, version) { node.settings() }
     val colors = remember(node, version, dark) { node.themeColors(dark) }
     val cs = (if (settings.dynamicColor == true) dynamicScheme?.invoke(dark) else null) ?: scheme(colors, dark)
@@ -99,6 +106,34 @@ fun AppTheme(node: KtNode, version: Int, dynamicScheme: ((Boolean) -> ColorSchem
     CompositionLocalProvider(LocalLook provides Look(settings.theme, dark), LocalDynamicAvailable provides (dynamicScheme != null)) {
         MaterialTheme(colorScheme = cs, shapes = shapes, content = content)
     }
+}
+
+/** Light or dark: the system's by default, or the person's own pick (cold UX review U-T11). This device only. */
+enum class DarkMode(val key: String, val label: String) { System("system", "Same as the system"), Light("light", "Light"), Dark("dark", "Dark") }
+
+fun darkMode(dataDir: String): DarkMode {
+    val k = runCatching { java.io.File(dataDir, "dark_mode").readText().trim() }.getOrNull()
+    return DarkMode.entries.firstOrNull { it.key == k } ?: DarkMode.System
+}
+
+fun setDarkMode(dataDir: String, m: DarkMode) {
+    runCatching { java.io.File(dataDir, "dark_mode").writeText(m.key) }
+}
+
+/** A color's everyday name, for screen readers on the swatches (U-T14). */
+fun hueName(h: Double?): String {
+    if (h == null) return tr("Grey")
+    val x = ((h % 360) + 360) % 360
+    return tr(when {
+        x < 15 || x >= 345 -> "Red"
+        x < 45 -> "Orange"
+        x < 70 -> "Yellow"
+        x < 160 -> "Green"
+        x < 195 -> "Teal"
+        x < 250 -> "Blue"
+        x < 290 -> "Purple"
+        else -> "Pink"
+    })
 }
 
 /** A list's color dot and icon. Color is only an accent, never the only signal. */
@@ -117,14 +152,16 @@ fun ListBadge(l: ListItem, modifier: Modifier = Modifier) {
 @Composable
 fun Avatar(p: PersonItem) {
     val look = LocalLook.current
-    Box(Modifier.size(28.dp).background(argb(accentColor(look.themeId, p.hue, 1u.toUByte(), look.dark)), CircleShape), contentAlignment = Alignment.Center) {
+    Box(Modifier.sizeIn(minWidth = 28.dp, minHeight = 28.dp).background(argb(accentColor(look.themeId, p.hue, 1u.toUByte(), look.dark)), CircleShape).padding(4.dp), contentAlignment = Alignment.Center) { // grows with large text (U-T20)
         Text(p.initials, color = if (look.dark) Color.Black else Color.White, fontSize = 12.sp)
     }
 }
 
 /** A person's name, with the short tag when someone else in the list has the same name. */
 fun personLabel(p: PersonItem, all: List<PersonItem>): String {
-    val base = if (p.isMe) tr("{name} (you)", "name" to p.name) else p.name
+    // U-S11 (general): the engine's fallback name is English.
+    val name = if (p.name.isBlank() || p.name == "Someone") tr("Someone") else p.name
+    val base = if (p.isMe) tr("{name} (you)", "name" to name) else name
     return if (all.count { it.name == p.name } > 1) "$base · ${p.tag}" else base
 }
 
@@ -146,15 +183,16 @@ fun StyleDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () ->
         title = { Text(tr("Color and icon")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val choices: List<Double?> = listOf<Double?>(null) + listHues()
                     for (h in choices) {
                         val selected = hue == h
                         Box(
-                            Modifier.size(32.dp)
+                            Modifier.size(40.dp)
                                 .background(argb(accentColor(look.themeId, h, vivid, look.dark)), CircleShape)
                                 .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                .clickable { hue = h }
+                                .selectable(selected, role = androidx.compose.ui.semantics.Role.RadioButton) { hue = h }
+                                .semantics { contentDescription = hueName(h) }
                                 .testTag("hue-" + (h?.toInt()?.toString() ?: "grey")),
                         )
                     }

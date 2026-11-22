@@ -73,7 +73,7 @@ private object TrayIcon : Painter() {
  */
 /** This build's version code (the update manifest compares against it): the same number as the Android build
  * (app/android/build.gradle.kts versionCode), checked by VersionCodeTest. */
-const val VERSION_CODE = 12uL
+const val VERSION_CODE = 13uL
 
 fun main(args: Array<String>) {
     // Packaged app: the Rust library and the import worker ship in its resources folder.
@@ -174,6 +174,10 @@ fun main(args: Array<String>) {
                     if (com.jurisgames.tasks.core.backupNeedsPassword(bytes)) com.jurisgames.tasks.ui.PendingRestore.bytes = bytes
                     else restoreInto(bytes, null)
                 }
+            }, onSaveBackup = {
+                // every list in one file, the format Restore reads (locked with the backup password if one is set)
+                val dialog = FileDialog(null as Frame?, tr("Save a backup file"), FileDialog.SAVE).apply { file = "Tasks-${java.time.LocalDate.now()}.ktbackup"; isVisible = true }
+                dialog.file?.let { File(dialog.directory, it) }?.let { f -> runCatching { node.writeBackup(f.path) } }
             }, onRestoreWith = { bytes, pw -> restoreInto(bytes, pw) }, onExport = { l ->
                 // Both formats side by side: readable Markdown and the re-importable file.
                 val dialog = FileDialog(null as Frame?, tr("Export {name}", "name" to l.name), FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }

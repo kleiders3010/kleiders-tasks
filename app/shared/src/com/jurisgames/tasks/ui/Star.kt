@@ -1,5 +1,10 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,10 +48,17 @@ val StarColor = Color(0xFFF2A600)
 /** A star to tap; filled when the task is starred. */
 @Composable
 fun StarButton(starred: Boolean, tag: String, onClick: () -> Unit) {
-    Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick).testTag(tag), contentAlignment = Alignment.Center) {
+    // A switch with its state to a screen reader (cold UX review U-T2).
+    Box(
+        Modifier.size(48.dp).clip(CircleShape) // 48 dp: the smallest comfortable tap (U-T14)
+            .toggleable(value = starred, role = Role.Switch, onValueChange = { onClick() })
+            .semantics { contentDescription = tr("Star"); stateDescription = if (starred) tr("Has a star") else tr("Not starred") }
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
         Icon(
-            if (starred) Ic.Star else Ic.StarBorder, if (starred) tr("Starred") else tr("Star"),
-            tint = if (starred) StarColor else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            if (starred) Ic.Star else Ic.StarBorder, null,
+            tint = if (starred) StarColor else MaterialTheme.colorScheme.onSurfaceVariant /* full strength: a faded outline can drop under 3:1 (U-T26) */,
             modifier = Modifier.size(22.dp),
         )
     }
@@ -109,14 +121,14 @@ fun StarredPane(env: Env, lists: List<ListItem>, onMenu: (() -> Unit)?, onOpen: 
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
         LazyColumn(Modifier.weight(1f).testTag("starredTasks")) {
             if (starred.isEmpty()) item(key = "empty") {
-                Text(tr("Nothing starred"), color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
+                Text(tr("Nothing starred. Tap ☆ on a task to see it here."), color = c.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"))
             }
             items(starred, key = { it.list.id + "/" + it.task.id }) { (l, t) ->
                 Row(
                     Modifier.fillMaxWidth().clickable { onOpen(l, t.id) }.padding(start = 4.dp, end = 12.dp).heightIn(min = 52.dp).testTag("starred-" + t.title),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Tick(false, "done-" + t.title) { tickTask(node, l.id, t, true); env.changed() }
+                    Tick(false, "done-" + t.title, t.title) { tickTask(node, l.id, t, true); env.changed() }
                     Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
                         Text(t.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -51,10 +51,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.focus.FocusRequester
@@ -75,6 +77,10 @@ import com.jurisgames.tasks.core.KtNode
 import com.jurisgames.tasks.core.ListItem
 import com.jurisgames.tasks.core.accentColor
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -107,6 +113,14 @@ fun TasksApp(
     onPrint: ((String, String) -> Unit)? = null,
     /** Restore a password-locked backup (its bytes, the checked password). */
     onRestoreWith: ((ByteArray, String) -> Unit)? = null,
+    /** Reminders: asked for when one is set, and told when they can't ring (UX U-T1). */
+    reminders: ReminderHooks = ReminderHooks(),
+    /** This device just joined or shared a list: the moment to ask for change notifications (UX U-T5). */
+    onShared: (() -> Unit)? = null,
+    /** The platform's Back (Android), given whether it is taken and what it does (cold UX review U-T18). */
+    backHandler: (@Composable (Boolean, () -> Unit) -> Unit)? = null,
+    /** Write every list to a backup file she picks, the format Restore reads (Ciclo review U-C12, general). */
+    onSaveBackup: (() -> Unit)? = null,
 ) {
     // Bumped whenever the node reports a change (another device, membership, compaction).
     var version by remember { mutableIntStateOf(0) }
@@ -124,7 +138,7 @@ fun TasksApp(
             Surface(Modifier.fillMaxSize()) {
                 // While a locked backup is restored the old node gets closed: nothing on screen may still read it.
                 if (restoring == null) Home(
-                    Env(node, version, { version++ }, onRestore, onExport, onShare, onSettings, onScan, onImport, update, onUpdate, onPickImage, required, onPrint),
+                    Env(node, version, { version++ }, onRestore, onExport, onShare, onSettings, onScan, onImport, update, onUpdate, onPickImage, required, onPrint, reminders, onShared, backHandler, onSaveBackup),
                     openedCode,
                 )
                 // A locked backup waits for its password (picked, or restored by Android onto this phone).
@@ -144,6 +158,15 @@ fun TasksApp(
     }
 }
 
+/** The shared list's sync line and whether it is a warning; null before the first sync round has said anything. */
+internal fun syncLine(s: com.jurisgames.tasks.core.GroupSync, firstRoundDone: Boolean): Pair<String, Boolean>? {
+    if (s.onlyHere) return tr("Not sent yet: your newest changes are only on this device.") to true
+    if (!firstRoundDone) return null
+    val others = s.othersLastMs?.let { tr("the others last synced {when}", "when" to whenLabel(fromMillis(it.toLong())).replaceFirstChar { c -> c.lowercase() }) }
+        ?: tr("the others haven't synced yet")
+    return tr("Sent") + " · " + others to false
+}
+
 /** What every part of the screen needs. */
 class Env(
     val node: KtNode,
@@ -160,6 +183,21 @@ class Env(
     val onPickImage: ((onPicked: (ByteArray) -> Unit) -> Unit)?,
     val required: String?,
     val onPrint: ((String, String) -> Unit)? = null,
+    val reminders: ReminderHooks = ReminderHooks(),
+    val onShared: (() -> Unit)? = null,
+    val backHandler: (@Composable (Boolean, () -> Unit) -> Unit)? = null,
+    val onSaveBackup: (() -> Unit)? = null,
+)
+
+/**
+ * What the platform does around reminders. [onSet]: a reminder was just set (Android asks for
+ * notifications then, not at the next start). [blocked]: reminders can't ring right now (notifications
+ * off), so the details sheet says so. [openSettings]: the app's notification settings.
+ */
+class ReminderHooks(
+    val onSet: () -> Unit = {},
+    val blocked: () -> Boolean = { false },
+    val openSettings: (() -> Unit)? = null,
 )
 
 /** The list shown last, per device (a plain file next to the app's data). */
@@ -207,6 +245,10 @@ private fun Home(env: Env, openedCode: String?) {
         openFirst = null
         runCatching { lastListFile(node).writeText(l.id) }
     }
+    // Back from Search, My Day, Upcoming, Starred or Assigned goes to the list, not out of the app (U-T18).
+    env.backHandler?.invoke(searchView || dayView || upcomingView || starredView || assignedView) {
+        starredView = false; upcomingView = false; searchView = false; dayView = false; assignedView = false
+    }
     fun openStarred(l: ListItem, task: String) {
         open(l)
         openFirst = task
@@ -216,6 +258,8 @@ private fun Home(env: Env, openedCode: String?) {
         mutableStateOf(if (opened == null) null else if (opened.contains("/link")) Dialog.LinkThis else Dialog.Join)
     }
     var invite by remember { mutableStateOf<Pair<String, InviteInfo>?>(null) }
+    // A personal list asks first: only "Create invite" makes it shared (cold UX review U-T13).
+    var askShare by remember { mutableStateOf<ListItem?>(null) }
     val addFocus = remember { FocusRequester() }
     // After the very first task makes the list, the add field comes back focused: keep typing.
     var focusAdd by remember { mutableStateOf(false) }
@@ -233,14 +277,21 @@ private fun Home(env: Env, openedCode: String?) {
             open(shared)
             env.changed()
             invite = shared.name to node.invite(shared.groupId, 30u)
-        }.onFailure { e -> scope.launch { snackbar.showSnackbar(e.message ?: tr("Couldn't share")) } }
+        }.onFailure { e -> scope.launch { snackbar.showSnackbar(userError(e, tr("Couldn't share. Check your connection and try again."))) } }
     }
 
-    fun deleteList(l: ListItem) {
+    var confirmDelete by remember { mutableStateOf<ListItem?>(null) }
+
+    fun deleteList(l: ListItem, confirmed: Boolean = false) {
+        // A shared list goes for everyone in it: the message says so (cold UX review U-T19).
+        val shared = node.groups().find { it.id == l.groupId }?.personal == false
+        // U-S14 (general): it is the others' list too, so one confirm names who loses it.
+        if (shared && !confirmed) { confirmDelete = l; return }
         runCatching { node.deleteList(l.id) }
         env.changed()
         scope.launch {
-            val r = snackbar.showSnackbar(tr("Deleted {name}", "name" to l.name), actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
+            val msg = if (shared) tr("Deleted {name} for everyone in it", "name" to l.name) else tr("Deleted {name}", "name" to l.name)
+            val r = snackbar.showSnackbar(msg, actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
             if (r == SnackbarResult.ActionPerformed) {
                 runCatching { node.restoreList(l.groupId, l.id) }
                 open(l)
@@ -257,7 +308,7 @@ private fun Home(env: Env, openedCode: String?) {
         feedback = { dialog = Dialog.Feedback },
     )
     val listMenu = ListActions(
-        share = { current?.let(::share) },
+        share = { current?.let { l -> if (node.groups().find { it.id == l.groupId }?.personal == false) share(l) else askShare = l } },
         rename = { dialog = Dialog.Rename },
         style = { dialog = Dialog.Style },
         undo = { dialog = Dialog.Undo },
@@ -269,6 +320,9 @@ private fun Home(env: Env, openedCode: String?) {
         when (e.key) {
             Key.N -> { runCatching { addFocus.requestFocus() }; true }
             Key.F -> { showSearch(); true }
+            // Ctrl+, Settings; Ctrl+Z the Undo of the message on screen, if there is one (else text fields keep it) (U-T25).
+            Key.Comma -> { dialog = Dialog.Settings; true }
+            Key.Z -> snackbar.currentSnackbarData?.takeIf { it.visuals.actionLabel != null }?.let { it.performAction(); true } ?: false
             Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine -> {
                 val i = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine).indexOf(e.key)
                 lists.getOrNull(i)?.let(::open)
@@ -280,6 +334,7 @@ private fun Home(env: Env, openedCode: String?) {
 
     BoxWithConstraints(Modifier.fillMaxSize().then(keys)) {
         val wide = maxWidth >= 720.dp
+        val roomy = maxWidth >= 1000.dp // room for the details pane beside the list (U-T12)
         if (wide) {
             Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
                 Row(Modifier.fillMaxSize().padding(pad).consumeWindowInsets(pad).imePadding()) {
@@ -305,8 +360,10 @@ private fun Home(env: Env, openedCode: String?) {
                         else if (upcomingView) UpcomingPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (starredView) StarredPane(env, lists, onMenu = null, onOpen = ::openStarred)
                         else if (assignedView) AssignedPane(env, lists, onMenu = null, onOpen = ::openStarred)
-                        else if (current != null) ListPane(env, current, lists, wide = true, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
-                        else FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = null, open = { open(it); focusAdd = true })
+                        // Details beside the list only with room for both (sidebar 280 + list + details 360); narrower
+                        // windows open them as a sheet, so the list doesn't shrink to a sliver (cold UX review U-T12).
+                        else if (current != null) ListPane(env, current, lists, wide = roomy, onMenu = null, listMenu = listMenu, snackbar = snackbar, addFocus = addFocus, openFirst = openFirst)
+                        else FirstList(env, addFocus, onLinkThis = menu.linkThis, onJoin = menu.join, onMenu = null, open = { open(it); focusAdd = true })
                     }
                 }
             }
@@ -314,13 +371,26 @@ private fun Home(env: Env, openedCode: String?) {
             val drawer = rememberDrawerState(DrawerValue.Closed)
             ModalNavigationDrawer(drawerState = drawer, drawerContent = {
                 ModalDrawerSheet(Modifier.width(300.dp)) {
+                  // The lists and views first, as on wide screens: ☰ is where people look for their lists (U-T7).
+                  Column(Modifier.verticalScroll(rememberScrollState())) {
+                    fun go(f: () -> Unit) { scope.launch { drawer.close() }; f() }
+                    Text("Tasks", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 8.dp))
+                    for (l in lists) SidebarRow(l, !starredView && !upcomingView && !searchView && !dayView && !assignedView && l.id == current?.id, tagPrefix = "drawerList-") { go { open(l) } }
+                    SidebarRow(null, false, tr("New list"), tagPrefix = "drawer-") { go { dialog = Dialog.NewList } }
+                    ViewRow(Ic.Search, tr("Search"), "drawer-searchView", searchView, null) { go { showSearch() } }
+                    ViewRow(Ic.Sun, tr("My Day"), "drawer-dayView", dayView, SunColor) { go { showDay() } }
+                    if (anyDated || upcomingView) ViewRow(Ic.Event, tr("Upcoming"), "drawer-upcomingView", upcomingView, null) { go { showUpcoming() } }
+                    if (anyStarred || starredView) ViewRow(Ic.Star, tr("Starred"), "drawer-starredView", starredView, StarColor) { go { showStarred() } }
+                    if (anyAssigned || assignedView) ViewRow(Ic.Person, tr("Assigned to me"), "drawer-assignedView", assignedView, null) { go { showAssigned() } }
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
                     MenuPanel(env, MenuActions(
                         join = { scope.launch { drawer.close() }; menu.join() },
                         linkThis = { scope.launch { drawer.close() }; menu.linkThis() },
                         linkCode = { scope.launch { drawer.close() }; menu.linkCode() },
                         settings = { scope.launch { drawer.close() }; menu.settings() },
                         feedback = { scope.launch { drawer.close() }; menu.feedback() },
-                    ), compact = false)
+                    ), compact = true)
+                  }
                 }
             }) {
                 Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { pad ->
@@ -358,7 +428,7 @@ private fun Home(env: Env, openedCode: String?) {
                                 ListChips(lists, current, ::open, viewChips) { dialog = Dialog.NewList }
                             }
                         } else {
-                            FirstList(env, addFocus, onLinkThis = menu.linkThis, onMenu = { scope.launch { drawer.open() } }, open = { open(it); focusAdd = true })
+                            FirstList(env, addFocus, onLinkThis = menu.linkThis, onJoin = menu.join, onMenu = { scope.launch { drawer.open() } }, open = { open(it); focusAdd = true })
                         }
                     }
                 }
@@ -375,27 +445,46 @@ private fun Home(env: Env, openedCode: String?) {
         // scanned here, from the other device's own screen (safety audit round 4, T6).
         Dialog.LinkThis -> LinkThisDialog(env, opened?.contains("/link") == true, scope) { dialog = null }
         Dialog.LinkCode -> runCatching { node.linkCode() }.getOrNull()?.let { info ->
-            CodeDialog(tr("Link a device"), tr("On your other device, open ☰ › Link this device, then enter this code or scan it."), info, env.onShare) { dialog = null }
+            CodeDialog(tr("Link another device"), tr("On your other device, open ☰ › Link to my other device, then enter this code or scan it."), info, env.onShare) { dialog = null }
         }
         Dialog.NewList -> NewListDialog(env, onCreated = { open(it); dialog = null }, onClose = { dialog = null })
-        Dialog.Rename -> current?.let { l -> RenameDialog(l.name, onDone = { n -> runCatching { node.renameList(l.id, n) }; env.changed(); dialog = null }, onClose = { dialog = null }) }
+        Dialog.Rename -> current?.let { l -> RenameDialog(l.name, onDone = { n -> runCatching { node.renameList(l.id, n) }.onSuccess { dialog = null }.onFailure { e -> scope.launch { snackbar.showSnackbar(userError(e, tr("Couldn't save. Try again."))) } }; env.changed() }, onClose = { dialog = null }) }
         Dialog.Style -> current?.let { l -> StyleDialog(node, l, onDone = env.changed, onClose = { dialog = null }) }
         Dialog.Undo -> current?.let { l -> UndoDialog(node, l, onDone = env.changed, onClose = { dialog = null }) }
         Dialog.Feedback -> FeedbackDialog(node, onSent = { dialog = null; scope.launch { snackbar.showSnackbar(tr("Thanks! Your message was sent.")) } }, onClose = { dialog = null })
         null -> {}
     }
-    invite?.let { (name, info) -> CodeDialog(tr("Invite to {name}", "name" to name), tr("Anyone with this link or code can open this list and join, until it expires. Share it only with the people you invite."), info, env.onShare) { invite = null } }
+    askShare?.let { l ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { askShare = null },
+            title = { Text(tr("Share {name}", "name" to l.name)) },
+            text = { Text(tr("People you invite can see and change this list. You get a link and a code to send them.")) },
+            confirmButton = { TextButton(onClick = { askShare = null; share(l) }, modifier = Modifier.testTag("shareCreate")) { Text(tr("Create invite")) } },
+            dismissButton = { TextButton(onClick = { askShare = null }, modifier = Modifier.testTag("shareCancel")) { Text(tr("Cancel")) } },
+        )
+    }
+    confirmDelete?.let { l ->
+        val others = remember(l.id) { runCatching { node.people(l.id) }.getOrDefault(emptyList()).filter { !it.isMe }.map { personLabel(it, emptyList()) }.distinct() }
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(tr("Delete {name} for everyone?", "name" to l.name)) },
+            text = { Text(if (others.isEmpty()) tr("It is shared: it goes from every device that joined it.") else tr("It goes from {people}'s devices too.", "people" to others.joinToString(", "))) },
+            confirmButton = { TextButton(onClick = { confirmDelete = null; deleteList(l, confirmed = true) }, modifier = Modifier.testTag("deleteConfirm")) { Text(tr("Delete for everyone"), color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }, modifier = Modifier.testTag("deleteCancel")) { Text(tr("Cancel")) } },
+        )
+    }
+    invite?.let { (name, info) -> CodeDialog(tr("Invite to {name}", "name" to name), tr("Anyone with this link or code can open this list and join, until it expires. Share it only with the people you invite."), info, env.onShare, node) { invite = null; env.onShared?.invoke() } }
 }
 
 class MenuActions(val join: () -> Unit, val linkThis: () -> Unit, val linkCode: () -> Unit, val settings: () -> Unit, val feedback: () -> Unit)
 class ListActions(val share: () -> Unit, val rename: () -> Unit, val style: () -> Unit, val undo: () -> Unit, val delete: () -> Unit)
 
 @Composable
-private fun SidebarRow(l: ListItem?, selected: Boolean, label: String? = null, onClick: () -> Unit) {
+private fun SidebarRow(l: ListItem?, selected: Boolean, label: String? = null, tagPrefix: String = "", onClick: () -> Unit) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp).background(bg, RoundedCornerShape(24.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp).testTag(if (l != null) "list-" + l.name else "newList"),
+            .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp).testTag(if (l != null) (tagPrefix.ifEmpty { "list-" }) + l.name else tagPrefix + "newList"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (l != null) ListBadge(l, Modifier.padding(end = 10.dp)) else Icon(Ic.Add, null, Modifier.padding(end = 10.dp).size(18.dp))
@@ -411,7 +500,7 @@ private fun ViewRow(icon: ImageVector, label: String, tag: String, selected: Boo
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp).background(bg, RoundedCornerShape(24.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp).testTag(tag),
+            .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 10.dp).testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, null, Modifier.padding(end = 10.dp).size(18.dp), tint = tint ?: MaterialTheme.colorScheme.onSurfaceVariant)
@@ -422,11 +511,12 @@ private fun ViewRow(icon: ImageVector, label: String, tag: String, selected: Boo
 @Composable
 private fun ListChips(lists: List<ListItem>, current: ListItem?, open: (ListItem) -> Unit, views: List<ViewChip>, newList: () -> Unit) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (v in views) {
-            FilterChip(v.selected, v.onClick, label = { Text(v.label) }, leadingIcon = { Icon(v.icon, null, Modifier.size(18.dp), tint = v.tint ?: MaterialTheme.colorScheme.onSurfaceVariant) }, modifier = Modifier.testTag(v.tag))
-        }
+        // The person's own lists first, then the views (cold UX review U-T7: on a narrow phone the views hid every list).
         for (l in lists) {
             FilterChip(l.id == current?.id,{ open(l) }, label = { Text(l.name, maxLines = 1) }, leadingIcon = { ListBadge(l) }, modifier = Modifier.testTag("list-" + l.name))
+        }
+        for (v in views) {
+            FilterChip(v.selected, v.onClick, label = { Text(v.label) }, leadingIcon = { Icon(v.icon, null, Modifier.size(18.dp), tint = v.tint ?: MaterialTheme.colorScheme.onSurfaceVariant) }, modifier = Modifier.testTag(v.tag))
         }
         FilterChip(false, newList, label = { Text(tr("New list")) }, leadingIcon = { Icon(Ic.Add, null, Modifier.size(18.dp)) }, modifier = Modifier.testTag("newList"))
     }
@@ -450,11 +540,13 @@ private fun MenuPanel(env: Env, a: MenuActions, compact: Boolean) {
         if (isLinking) {
             Text(tr("Linking: this device joins your other one as soon as it's online"), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp).testTag("linkingStatus"))
         } else {
-            MenuRow(if (devices.size > 1) tr("Your devices ({n}) · Add a device", "n" to devices.size) else tr("Add a device"), "linkDevice", a.linkCode)
-            if (devices.size <= 1) MenuRow(tr("Join your other device"), "linkThis", a.linkThis)
+            MenuRow(if (devices.size > 1) tr("Your devices ({n}) · Link another device", "n" to devices.size) else tr("Link another device"), "linkDevice", a.linkCode)
+            if (devices.size <= 1) MenuRow(tr("Link to my other device"), "linkThis", a.linkThis)
         }
         env.onImport?.let { MenuRow(tr("Import a list file"), "importList", it) }
-        if (env.onRestore != null && remember(node, env.version) { node.isPristine() }) MenuRow(tr("Restore from a backup"), "restore", env.onRestore)
+        val pristine = remember(node, env.version) { node.isPristine() }
+        if (env.onSaveBackup != null && !pristine) MenuRow(tr("Save a backup file"), "saveBackup", env.onSaveBackup)
+        if (env.onRestore != null && pristine) MenuRow(tr("Restore from a backup"), "restore", env.onRestore)
         MenuRow(tr("Settings"), "settingsOpen", a.settings)
         // in the menu itself, not only inside Settings (Kleider, 2026-11-21: "Make sure users always have an easy way to give feedback or report bugs on ALL our apps")
         MenuRow(tr("Send feedback"), "feedbackMenu", a.feedback)
@@ -486,6 +578,16 @@ private fun Banners(env: Env) {
     }
     for (l in remember(node, env.version) { node.recentLinks() }) {
         Banner(tr("New device linked: {name}", "name" to l.name.ifEmpty { tr("a device") }), "recentLink", tr("Undo") to { node.unlinkDevice(l.deviceId); env.changed() })
+    }
+    // A device an invite let in, shown to every member with an undo (second-pass audit T2-13, rule 17).
+    for (j in remember(node, env.version) { runCatching { node.recentJoins() }.getOrDefault(emptyList()) }) {
+        val who = j.name.ifEmpty { tr("A new device") }
+        Banner(
+            if (j.by.isNotEmpty()) tr("{who} joined {list}, let in by {by}'s invite", "who" to who, "list" to j.listName, "by" to j.by) else tr("{who} joined {list}", "who" to who, "list" to j.listName),
+            "recentJoin",
+            tr("Remove") to { runCatching { node.removeJoined(j.groupId, j.deviceId) }; env.changed() },
+            tr("OK") to { runCatching { node.dismissJoin(j.groupId, j.deviceId) }; env.changed() },
+        )
     }
     node.restored()?.let { r ->
         Banner(
@@ -526,6 +628,8 @@ private fun ListPane(
     var printing by remember { mutableStateOf(false) }
     val shopping = list.listType == "shopping"
     var sort by remember(list.id) { mutableStateOf(sortOf(node, list.id)) }
+    val clearing = remember(list.id) { mutableStateListOf<String>() } // "Delete completed", Undo still possible
+    val paneScope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onMenu != null) IconButton(onClick = onMenu, modifier = Modifier.testTag("menu")) { Icon(Ic.Menu, tr("Menu")) } else Spacer(Modifier.width(16.dp))
@@ -559,21 +663,35 @@ private fun ListPane(
                         )
                         HorizontalDivider()
                     }
-                    item(tr("Delete completed"), "clearDone") {
-                        val done = runCatching { node.tasks(list.id) }.getOrDefault(emptyList()).filter { it.done && it.parentId == null }
-                        for (t in done) runCatching { node.deleteTask(list.id, t.id) }
-                        env.changed()
+                    // Hidden first, deleted when the Undo snackbar ends (cold UX review U-T3: one tap removed them for everyone).
+                    val doneNow = remember(node, env.version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()).filter { it.done && it.parentId == null && it.id !in clearing } }
+                    if (doneNow.isNotEmpty()) item(tr("Delete completed ({n})", "n" to doneNow.size.toString()), "clearDone") {
+                        val ids = doneNow.map { it.id }
+                        clearing.addAll(ids)
+                        paneScope.launch {
+                            val r = snackbar.showSnackbar(tr("Deleted {n} completed", "n" to ids.size.toString()), actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
+                            if (r != SnackbarResult.ActionPerformed) for (id in ids) runCatching { node.deleteTask(list.id, id) }
+                            clearing.removeAll(ids)
+                            env.changed()
+                        }
                     }
                     env.onExport?.let { ex -> item(tr("Export"), "export") { ex(list) } }
                     if (env.onPrint != null) item(tr("Print list"), "printOpen") { printing = true }
-                    item(tr("Undo changes…"), "undoOpen", listMenu.undo)
+                    item(if (shared) tr("Undo changes…") else tr("Undo recent changes…"), "undoOpen", listMenu.undo)
                     HorizontalDivider()
                     DropdownMenuItem(
-                        text = { Text(tr("Delete list"), color = MaterialTheme.colorScheme.error) },
+                        text = { Text(if (shared) tr("Delete list for everyone") else tr("Delete list"), color = MaterialTheme.colorScheme.error) },
                         leadingIcon = { Icon(Ic.Delete, null, tint = MaterialTheme.colorScheme.error) },
                         onClick = { menuOpen = false; listMenu.delete() }, modifier = Modifier.testTag("deleteList"),
                     )
                 }
+            }
+        }
+        if (shared && people.size <= 1) {
+            // Cold UX review U-S26 (general): shared, but nobody has joined yet.
+            Row(Modifier.padding(start = if (onMenu != null) 52.dp else 16.dp, end = 8.dp).testTag("waitingJoin"), verticalAlignment = Alignment.CenterVertically) {
+                Text(tr("Invite made. Waiting for someone to join."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f, fill = false))
+                TextButton(onClick = listMenu.share) { Text(tr("Show invite")) }
             }
         }
         if (shared && people.size > 1) {
@@ -583,6 +701,22 @@ private fun ListPane(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = if (onMenu != null) 52.dp else 16.dp, end = 16.dp).testTag("sharedWith"),
             )
+            // Whether the others can have it yet (cold UX review U-T4): read again every 15 s while the list is open.
+            val sync by androidx.compose.runtime.produceState<com.jurisgames.tasks.core.GroupSync?>(null, node, list.groupId, env.version) {
+                while (true) {
+                    value = runCatching { node.groupSync(list.groupId) }.getOrNull()
+                    kotlinx.coroutines.delay(15_000)
+                }
+            }
+            sync?.let { s -> syncLine(s, node.firstRoundDone())?.let { (text, warn) ->
+                Text(
+                    text, style = MaterialTheme.typography.bodySmall,
+                    color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = if (onMenu != null) 52.dp else 16.dp, end = 16.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite }.testTag("syncLine"),
+                )
+            } }
         }
         if (printing) env.onPrint?.let { print ->
             PrintDialog(node.dataDir(), onPrint = { choice ->
@@ -591,7 +725,7 @@ private fun ListPane(
             }, onDismiss = { printing = false })
         }
         chips?.let { Spacer(Modifier.size(4.dp)); it() }
-        ListBody(env, list, lists, shopping, snackbar, addFocus, wide, Modifier.weight(1f), sort, openFirst)
+        ListBody(env, list, lists, shopping, snackbar, addFocus, wide, Modifier.weight(1f), sort, openFirst, clearing)
     }
 }
 
@@ -600,8 +734,8 @@ private fun ListPane(
  * with the first task, so a fresh install can still restore a backup.
  */
 @Composable
-private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit, onMenu: (() -> Unit)?, open: (ListItem) -> Unit) {
-    var text by remember { mutableStateOf("") }
+private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit, onJoin: () -> Unit, onMenu: (() -> Unit)?, open: (ListItem) -> Unit) {
+    var text by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var ignoreWhen by remember { mutableStateOf(false) }
     val parsed = if (ignoreWhen) null else parseWhen(text)
     fun add() {
@@ -612,6 +746,7 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
         val id = runCatching { env.node.addTask(l.id, w?.title?.ifBlank { t } ?: t, null) }.getOrNull()
         if (id != null && w != null) runCatching { env.node.setReminder(l.id, id, w.at.millis().toULong()) }
         if (id != null && w?.repeat != null) runCatching { env.node.setRepeat(l.id, id, w.repeat) }
+        if (id != null && w != null) env.reminders.onSet()
         text = ""
         open(l)
         env.changed()
@@ -622,9 +757,14 @@ private fun FirstList(env: Env, addFocus: FocusRequester, onLinkThis: () -> Unit
             Text(tr("My tasks"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("title"))
         }
         Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Each a full 48 dp tap (U-T14); joining is offered here too, for a code given by voice or text (U-T17).
             Text(
-                tr("Using it on another device? Link this one"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.clickable(onClick = onLinkThis).testTag("firstLink"),
+                tr("Using Tasks on another device? Link to it"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.heightIn(min = 48.dp).clickable(onClick = onLinkThis).padding(vertical = 12.dp).testTag("firstLink"),
+            )
+            Text(
+                tr("Got an invite code? Join a shared list"), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.heightIn(min = 48.dp).clickable(onClick = onJoin).padding(vertical = 12.dp).testTag("firstJoin"),
             )
         }
         HorizontalDivider()
@@ -670,8 +810,8 @@ private fun NewListDialog(env: Env, onCreated: (ListItem) -> Unit, onClose: () -
                     keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { create() }),
                     modifier = Modifier.testTag("newListName"),
                 )
-                Row(Modifier.clickable { shopping = !shopping }, verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(shopping, { shopping = it }, modifier = Modifier.testTag("newListShopping"))
+                Row(Modifier.toggleable(shopping, role = androidx.compose.ui.semantics.Role.Checkbox) { shopping = it }.heightIn(min = 48.dp).testTag("newListShopping"), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(shopping, null)
                     Text(tr("Shopping list (ticked items can be added back with a tap)"))
                 }
             }
@@ -679,9 +819,19 @@ private fun NewListDialog(env: Env, onCreated: (ListItem) -> Unit, onClose: () -
     )
 }
 
+/** U-S11 (general): a shared list shows who did what, so a person without a name is asked where sharing happens. */
+@Composable
+internal fun NameAsk(node: KtNode) {
+    val had = remember(node) { node.displayName().isNotBlank() }
+    if (had) return
+    var name by remember { mutableStateOf("") }
+    OutlinedTextField(name, { name = it; runCatching { node.setDisplayName(it.trim()) } }, singleLine = true,
+        label = { Text(tr("Your name (so the others know who did what)")) }, modifier = Modifier.fillMaxWidth().testTag("askName"))
+}
+
 /** An invite or link code: copy / share the link, the words with Copy, the QR code on request. */
 @Composable
-private fun CodeDialog(title: String, hint: String, info: InviteInfo, onShare: ((String) -> Unit)?, onClose: () -> Unit) {
+private fun CodeDialog(title: String, hint: String, info: InviteInfo, onShare: ((String) -> Unit)?, nameNode: KtNode? = null, onClose: () -> Unit) {
     val clip = androidx.compose.ui.platform.LocalClipboardManager.current
     var qr by remember { mutableStateOf(false) }
     var copied by remember { mutableStateOf("") }
@@ -692,6 +842,7 @@ private fun CodeDialog(title: String, hint: String, info: InviteInfo, onShare: (
         title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                nameNode?.let { NameAsk(it) }
                 Text(hint, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     androidx.compose.material3.Button(onClick = { clip.setText(androidx.compose.ui.text.AnnotatedString(info.link)); copied = tr("Link copied") }, modifier = Modifier.testTag("copyLink")) { Text(tr("Copy link")) }
@@ -736,7 +887,7 @@ private fun LinkThisDialog(env: Env, fromLink: Boolean, scope: CoroutineScope, o
                             }
                             result = ""
                         } catch (e: Exception) {
-                            result = tr(e.message ?: tr("That code didn't work. Check it on your other device."))
+                            result = userError(e, tr("That code didn't work. Check it on your other device."))
                         }
                     }
                 }, modifier = Modifier.testTag("linkFind")) { Text(tr("Next")) }
@@ -748,14 +899,14 @@ private fun LinkThisDialog(env: Env, fromLink: Boolean, scope: CoroutineScope, o
                             env.changed()
                             tr("Linking: this device joins as soon as your other one is online")
                         } catch (e: Exception) {
-                            tr(e.message ?: tr("Couldn't link. Try again."))
+                            userError(e, tr("Couldn't link. Try again."))
                         }
                     }
                 }, modifier = Modifier.testTag("linkGo")) { Text(tr("Link")) }
             }
         },
         dismissButton = { TextButton(onClick = onClose) { Text(tr("Close")) } },
-        title = { Text(tr("Link this device")) },
+        title = { Text(tr("Link to my other device")) },
         text = {
             Column {
                 if (fromLink) Text(tr("For safety, a device is linked only with the code shown on your other device: type it or scan it here."), modifier = Modifier.testTag("linkFromLink"))

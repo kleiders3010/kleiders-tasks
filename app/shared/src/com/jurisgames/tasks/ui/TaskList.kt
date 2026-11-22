@@ -1,5 +1,9 @@
 package com.jurisgames.tasks.ui
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -127,7 +131,7 @@ fun suggestions(tasks: List<TaskItem>, typed: String, max: Int = 4): List<TaskIt
 
 /** A list's items, the add field, and (wide screens) the details pane. */
 @Composable
-fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean, snackbar: SnackbarHostState, addFocus: FocusRequester, wide: Boolean, modifier: Modifier, sort: Sort = Sort.Order, openFirst: String? = null) {
+fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean, snackbar: SnackbarHostState, addFocus: FocusRequester, wide: Boolean, modifier: Modifier, sort: Sort = Sort.Order, openFirst: String? = null, alsoHidden: List<String> = emptyList()) {
     val node = env.node
     val scope = rememberCoroutineScope()
     val tasks = remember(node, env.version, list.id) { runCatching { node.tasks(list.id) }.getOrDefault(emptyList()) }
@@ -135,9 +139,9 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
     val hidden = remember(list.id) { mutableStateListOf<String>() } // deleted, Undo still possible
     var openTask by remember(list.id, openFirst) { mutableStateOf(openFirst) }
     var showDone by remember { mutableStateOf(false) }
-    val sec = sections(tasks, settling.toSet(), hidden.toSet(), if (shopping) Sort.Order else sort)
+    val sec = sections(tasks, settling.toSet(), hidden.toSet() + alsoHidden, if (shopping) Sort.Order else sort)
     var display by remember(list.id) { mutableStateOf(sec.active) }
-    LaunchedEffect(tasks, settling.toList(), hidden.toList(), sort) { display = sec.active }
+    LaunchedEffect(tasks, settling.toList(), hidden.toList(), alsoHidden.toList(), sort) { display = sec.active }
     // like Google Tasks: tasks are dragged into place only in "My order"
     val canDrag = shopping || sort == Sort.Order
 
@@ -194,14 +198,14 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                 if (display.isEmpty() && sec.completed.isEmpty()) {
                     item(key = "empty") {
                         Text(
-                            if (lists.size == 1 && tasks.isEmpty()) tr("Add your first task below") else tr("Nothing here yet"),
+                            if (lists.size == 1 && tasks.isEmpty()) tr("Add your first task below") else tr("Nothing here yet. Type below to add a task."),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().padding(24.dp).testTag("empty"),
                         )
                     }
                 }
-                items(display, key = { it.id }) { t ->
-                    ReorderableItem(reorder, key = t.id) { dragging ->
+                items(display, key = { "t" + it.id }) { t -> // a prefix: no task id can equal "empty" or "completedHeader" (rule 68)
+                    ReorderableItem(reorder, key = "t" + t.id) { dragging ->
                         val handle = if (canDrag) Modifier.longPressDraggableHandle(onDragStopped = { drop(t.id) }) else Modifier
                         SwipeRow(onDelete = { delete(t) }) {
                             TaskRow(env, list.id, t, dragging, selected = wide && openTask == t.id, handle, star = !shopping, onToggle = { toggle(t) }, onOpen = { openTask = t.id })
@@ -237,12 +241,12 @@ fun ListBody(env: Env, list: ListItem, lists: List<ListItem>, shopping: Boolean,
                     Spacer(Modifier.weight(1f))
                     IconButton(onClick = { openTask = null }, modifier = Modifier.testTag("detailsClose")) { Icon(Ic.Close, tr("Close")) }
                 }
-                Details(env, list, lists, tasks, selected, onDelete = { delete(selected) }, onMoved = { openTask = null }, onOpen = { openTask = it })
+                Details(env, list, lists, tasks, selected, onDelete = { delete(selected) }, onMoved = { openTask = null }, onOpen = { openTask = it }, canReorder = canDrag)
             }
         }
     }
     if (!wide && selected(tasks, openTask, hidden) != null) {
-        DetailsSheet(env, list, lists, tasks, selected(tasks, openTask, hidden)!!, onDelete = { t -> delete(t) }, onClose = { openTask = null }, onOpen = { openTask = it })
+        DetailsSheet(env, list, lists, tasks, selected(tasks, openTask, hidden)!!, onDelete = { t -> delete(t) }, onClose = { openTask = null }, onOpen = { openTask = it }, canReorder = canDrag)
     }
 }
 
@@ -250,7 +254,7 @@ private fun selected(tasks: List<TaskItem>, id: String?, hidden: List<String>) =
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DetailsSheet(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: (TaskItem) -> Unit, onClose: () -> Unit, onOpen: (String) -> Unit) {
+private fun DetailsSheet(env: Env, list: ListItem, lists: List<ListItem>, tasks: List<TaskItem>, t: TaskItem, onDelete: (TaskItem) -> Unit, onClose: () -> Unit, onOpen: (String) -> Unit, canReorder: Boolean) {
     ModalBottomSheet(
         onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         dragHandle = {
@@ -261,7 +265,7 @@ private fun DetailsSheet(env: Env, list: ListItem, lists: List<ListItem>, tasks:
         },
     ) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-            Details(env, list, lists, tasks, t, onDelete = { onDelete(t) }, onMoved = onClose, onOpen = onOpen)
+            Details(env, list, lists, tasks, t, onDelete = { onDelete(t) }, onMoved = onClose, onOpen = onOpen, canReorder = canReorder)
         }
     }
 }
@@ -275,24 +279,31 @@ private fun SwipeRow(onDelete: () -> Unit, content: @Composable () -> Unit) {
     })
     SwipeToDismissBox(state, backgroundContent = {
         Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.errorContainer).padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Ic.Delete, tr("Delete"), tint = MaterialTheme.colorScheme.onErrorContainer)
+            Icon(Ic.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
             Spacer(Modifier.weight(1f))
-            Icon(Ic.Delete, tr("Delete"), tint = MaterialTheme.colorScheme.onErrorContainer)
+            Icon(Ic.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
         }
     }) { content() }
 }
 
 /** A round tick box, larger than the text so it's easy to hit. */
 @Composable
-fun Tick(done: Boolean, tag: String, onClick: () -> Unit) {
+fun Tick(done: Boolean, tag: String, label: String? = null, onClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
-    Box(Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onClick).testTag(tag), contentAlignment = Alignment.Center) {
+    // A checkbox to a screen reader: "Buy milk, checkbox, not checked" (cold UX review U-T2).
+    Box(
+        Modifier.size(48.dp).clip(CircleShape) // 48 dp: the smallest comfortable tap (U-T14)
+            .toggleable(value = done, role = Role.Checkbox, onValueChange = { onClick() })
+            .semantics { if (label != null) contentDescription = label }
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
         Box(
             Modifier.size(22.dp).clip(CircleShape)
                 .background(if (done) c.primary else Color.Transparent)
                 .border(2.dp, if (done) c.primary else c.outline, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { if (done) Icon(Ic.Check, tr("Done"), tint = c.onPrimary, modifier = Modifier.size(16.dp)) }
+        ) { if (done) Icon(Ic.Check, null, tint = c.onPrimary, modifier = Modifier.size(16.dp)) }
     }
 }
 
@@ -309,7 +320,7 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
             .padding(start = (4 + t.depth.toInt() * 28).dp, end = 12.dp).heightIn(min = 52.dp).testTag("task-" + t.title),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Tick(t.done, "done-" + t.title, onToggle)
+        Tick(t.done, "done-" + t.title, t.title, onToggle)
         val marks = c.onSurfaceVariant
         Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
             Text(
@@ -348,7 +359,7 @@ private fun TaskRow(env: Env, listId: String, t: TaskItem, dragging: Boolean, se
 @Composable
 private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Boolean, focus: FocusRequester) {
     val node = env.node
-    var text by remember(list.id) { mutableStateOf("") }
+    var text by androidx.compose.runtime.saveable.rememberSaveable(list.id) { mutableStateOf("") }
     var ignoreWhen by remember(list.id) { mutableStateOf(false) }
     val parsed = if (ignoreWhen || shopping) null else parseWhen(text)
     val suggested = if (shopping) suggestions(tasks, text) else emptyList()
@@ -369,6 +380,7 @@ private fun AddBar(env: Env, list: ListItem, tasks: List<TaskItem>, shopping: Bo
         val id = runCatching { node.addTask(list.id, title, null) }.getOrNull()
         if (id != null && parsed != null) runCatching { node.setReminder(list.id, id, parsed.at.millis().toULong()) }
         if (id != null && parsed?.repeat != null) runCatching { node.setRepeat(list.id, id, parsed.repeat) }
+        if (id != null && parsed != null) env.reminders.onSet()
         text = ""; ignoreWhen = false
         env.changed()
     }
@@ -390,7 +402,9 @@ internal fun AddField(text: String, onText: (String) -> Unit, parsed: When?, onI
         if (parsed != null) {
             InputChip(
                 true, onIgnore,
-                label = { Text(tr("Remind {when}", "when" to whenLabel(parsed.at)) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "")) },
+                // The title that will be saved is shown too: the when-words come out of it (cold UX review U-T8).
+                label = { Text(tr("Remind {when}", "when" to whenLabel(parsed.at)) + (parsed.repeat?.let { ", " + Repeat.label(it).lowercase() } ?: "") +
+                    (parsed.title.takeIf { it.isNotBlank() && it != text.trim() }?.let { " · " + tr("saves as \"{title}\"", "title" to it) } ?: "")) },
                 leadingIcon = { Icon(Ic.Bell, null, Modifier.size(16.dp)) },
                 trailingIcon = { Icon(Ic.Close, tr("Don't remind"), Modifier.size(16.dp)) },
                 modifier = Modifier.testTag("whenChip"),
