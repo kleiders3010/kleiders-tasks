@@ -30,6 +30,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge() // the app draws behind the status and navigation bars and pads itself
         super.onCreate(savedInstanceState)
+        // A list shared earlier stays nowhere (safety round 6, APP-RULES 84; Sobres does the same since round 5).
+        if (savedInstanceState == null) java.io.File(cacheDir, "exports").deleteRecursively()
         opened.value = ourLink(intent)
         QrScanner.prepare(this) // play: fetch Google's scanner module before anyone taps Scan
         setContent {
@@ -80,7 +82,8 @@ class MainActivity : ComponentActivity() {
             }, onScan = { QrScanner.scan(this, it) }, openedCode = opened.value, onSettings = { app.applyBackgroundSync(it.syncInBackground) }, onRestore = { pick.launch(arrayOf("*/*")) }, onExport = { l ->
                 // Both formats at once: readable Markdown as text (Obsidian, notes apps,
                 // email) and the re-importable .tasklist file attached.
-                val dir = java.io.File(cacheDir, "exports").apply { mkdirs() }
+                // Only the export being shared stays: older copies go first.
+                val dir = java.io.File(cacheDir, "exports").apply { listFiles()?.forEach { it.delete() }; mkdirs() }
                 val file = java.io.File(dir, com.jurisgames.tasks.core.exportFileStem(l.name) + ".tasklist")
                 file.writeBytes(node.exportListFile(l.id))
                 val uri = androidx.core.content.FileProvider.getUriForFile(this, "$packageName.files", file)
