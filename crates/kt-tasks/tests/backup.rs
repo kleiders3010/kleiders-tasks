@@ -180,3 +180,39 @@ fn a_tasklist_file_round_trips() {
     assert!(b.import_list_file(None, b"KTL1 not really").is_err());
     assert!(b.import_list_file(None, &a.backup(30).unwrap()).is_err(), "a backup isn't a list file");
 }
+
+#[test]
+fn a_backup_password_locks_the_file() {
+    use kt_engine::replica::backup;
+    let ra = root("pw-a");
+    let a = App::open(&ra.join("identity"), &ra.join("data"), sandbox()).unwrap();
+    let diary = a.create_list(None, "Diary").unwrap();
+    a.edit(&diary, |d| tk::add_task(d, None, "private note").map_err(Into::into)).unwrap();
+    assert!(!a.has_backup_password());
+    assert!(a.set_backup_password(Some("short")).is_err(), "too short");
+
+    a.set_backup_password(Some("correct horse")).unwrap();
+    assert!(a.has_backup_password());
+    let file = a.backup(30).unwrap();
+    // pinned: a locked backup is format KTB2 and opens only with its password (audit T11)
+    assert_eq!(&file[..4], b"KTB2");
+    assert!(backup::needs_password(&file));
+    assert!(backup::open(&file).is_err());
+    assert!(backup::open_with(&file, Some("wrong horse")).is_err());
+    let words = b"private note";
+    assert!(!file.windows(words.len()).any(|w| w == words), "nothing in the clear");
+    let rn = root("pw-new");
+    assert!(App::restore(&rn.join("identity"), &rn.join("data"), sandbox(), &file).is_err(), "no password, no restore");
+
+    // The right password restores it, and the new device keeps the password for its own backups.
+    let (n, _) = App::restore_with(&rn.join("identity"), &rn.join("data"), sandbox(), &file, Some("correct horse")).unwrap();
+    assert_eq!(titles(&n, "Diary"), ["private note"]);
+    assert!(n.has_backup_password());
+    let again = n.backup(30).unwrap();
+    assert!(backup::open_with(&again, Some("correct horse")).is_ok());
+
+    // Removing the password goes back to the plain sealed file.
+    n.set_backup_password(None).unwrap();
+    assert!(!n.has_backup_password());
+    assert_eq!(&n.backup(30).unwrap()[..4], b"KTB1");
+}

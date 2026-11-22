@@ -27,7 +27,7 @@ import java.io.File
  * `-Dkt.home=DIR -Dkt.worker=PATH -Dkt.p2p=false -Dkt.relays=ws://...`.
  * A backup file given as `backup` is restored (first launch, nothing made yet).
  */
-fun openNode(backup: ByteArray? = null): KtNode {
+fun openNode(backup: ByteArray? = null, password: String? = null): KtNode {
     val base = System.getProperty("kt.home")?.let { File(it) } ?: run {
         val appData = System.getenv("APPDATA") ?: (System.getProperty("user.home") + "/.local/share")
         File(appData, "JurisTasks")
@@ -43,14 +43,14 @@ fun openNode(backup: ByteArray? = null): KtNode {
     val name = System.getProperty("kt.deviceName") ?: System.getenv("COMPUTERNAME") ?: runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrDefault("")
     val options = NodeOptions(Platform.DESKTOP, relays, p2p, p2p, bind, name, backups)
     return if (backup == null) KtNode.open(identity.absolutePath, data.absolutePath, worker, options)
-    else KtNode.openRestoring(identity.absolutePath, data.absolutePath, worker, options, backup)
+    else KtNode.openRestoring(identity.absolutePath, data.absolutePath, worker, options, backup, password)
 }
 
 /** Replace a fresh node with one restored from `backup` (falls back to the old one on failure). */
-fun restoreNode(old: KtNode, backup: ByteArray): Result<KtNode> {
+fun restoreNode(old: KtNode, backup: ByteArray, password: String? = null): Result<KtNode> {
     old.stopLive()
     old.close()
-    return runCatching { openNode(backup) }
+    return runCatching { openNode(backup, password) }
 }
 
 private fun isWindows() = System.getProperty("os.name").lowercase().contains("win")
@@ -87,6 +87,13 @@ fun main(args: Array<String>) {
     first.startLive()
     application {
         var node by remember { mutableStateOf(first) }
+        fun restoreInto(bytes: ByteArray, password: String?) {
+            node = restoreNode(node, bytes, password).getOrElse { e ->
+                System.err.println("restore failed: ${e.message}") // prototype: no error UI yet
+                openNode()
+            }
+            node.startLive()
+        }
         var visible by remember { mutableStateOf(!background) }
         val trayState = androidx.compose.ui.window.rememberTrayState()
         // Reminders (§12): the tray app shows them when they're due.
@@ -162,13 +169,12 @@ fun main(args: Array<String>) {
                 val dialog = FileDialog(null as Frame?, tr("Restore from a backup file"), FileDialog.LOAD).apply { isVisible = true }
                 val file = dialog.file?.let { File(dialog.directory, it) }
                 if (file != null) {
-                    node = restoreNode(node, file.readBytes()).getOrElse { e ->
-                        System.err.println("restore failed: ${e.message}") // prototype: no error UI yet
-                        openNode()
-                    }
-                    node.startLive()
+                    val bytes = file.readBytes()
+                    // A password-locked backup: the app asks for its password first (audit T11).
+                    if (com.jurisgames.tasks.core.backupNeedsPassword(bytes)) com.jurisgames.tasks.ui.PendingRestore.bytes = bytes
+                    else restoreInto(bytes, null)
                 }
-            }, onExport = { l ->
+            }, onRestoreWith = { bytes, pw -> restoreInto(bytes, pw) }, onExport = { l ->
                 // Both formats side by side: readable Markdown and the re-importable file.
                 val dialog = FileDialog(null as Frame?, tr("Export {name}", "name" to l.name), FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }
                 val md = dialog.file?.let { File(dialog.directory, it) }
