@@ -187,14 +187,18 @@ fun StyleDialog(node: KtNode, list: ListItem, onDone: () -> Unit, onClose: () ->
                     val choices: List<Double?> = listOf<Double?>(null) + listHues()
                     for (h in choices) {
                         val selected = hue == h
+                        // a 48 dp target around the 40 dp dot (APP-RULES 140, 209)
                         Box(
-                            Modifier.size(40.dp)
-                                .background(argb(accentColor(look.themeId, h, vivid, look.dark)), CircleShape)
-                                .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            Modifier.size(48.dp)
                                 .selectable(selected, role = androidx.compose.ui.semantics.Role.RadioButton) { hue = h }
                                 .semantics { contentDescription = hueName(h) }
                                 .testTag("hue-" + (h?.toInt()?.toString() ?: "grey")),
-                        )
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.size(40.dp)
+                                .background(argb(accentColor(look.themeId, h, vivid, look.dark)), CircleShape)
+                                .border(if (selected) 3.dp else 0.dp, MaterialTheme.colorScheme.onSurface, CircleShape))
+                        }
                     }
                 }
                 TextButton(onClick = { more = !more }, modifier = Modifier.testTag("moreColors")) { Text(tr("More colors…")) }
