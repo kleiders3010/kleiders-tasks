@@ -14,8 +14,8 @@ android {
         applicationId = "com.jurisgames.tasks"
         minSdk = 26
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.0.12"
+        versionCode = 15
+        versionName = "1.0.13"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "@string/app_name"
         // The Rust core is built for these only (scripts/build-android-libs.sh); JNA's
