@@ -40,12 +40,12 @@ fun userError(e: Throwable?, fallback: String): String {
 
 /** The engine's messages that reach people, in the app's own words (the keys are the engine's text). */
 val CORE_WORDS: Map<String?, String> = mapOf(
-    "not a backup file" to "This isn't a Tasks backup file.",
+    "not a backup file" to "This isn't a Tasks backup file.",  // built: a Rust core message (crates/), translated by tr() at run time
     "wrong backup password" to "Wrong backup password.",
-    "password too short" to "The password is too short.",
-    "no link code found for these words: check them, or it may have expired" to "No link code has these words. Check them; a code also stops working after a while.",
+    "password too short" to "The password is too short.",  // built: a Rust core message (crates/), translated by tr() at run time
+    "no link code found for these words: check them, or it may have expired" to "No link code has these words. Check them; a code also stops working after a while.",  // built: a Rust core message (crates/), translated by tr() at run time
     "This is a device link code, not an invite. Open ☰ › Link to my other device." to "This is a device link code, not an invite. Open ☰ › Link to my other device.",
-    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación a una lista, no un vínculo de dispositivo. Abrí ☰ › Unirme a una lista compartida.",
+    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación a una lista, no un vínculo de dispositivo. Abrí ☰ › Unirme a una lista compartida.",  // built: a Rust core message (crates/), translated by tr() at run time
     "This isn't a Tasks backup file." to "This isn't a Tasks backup file.",
 )
 
@@ -87,7 +87,7 @@ val ES: Map<String, String> = mapOf(
     "Your backup has a password" to "Tu copia tiene contraseña",
     "That password doesn't open this backup." to "Esa contraseña no abre esta copia.",
     "wrong backup password" to "Contraseña de la copia incorrecta",
-    "password too short" to "La contraseña es muy corta",
+    "password too short" to "La contraseña es muy corta",  // built: a Rust core message (crates/), translated by tr() at run time
     "Restore" to "Restaurar",
     "Change it" to "Cambiarla",
     "Set one" to "Poner una",
@@ -102,7 +102,6 @@ val ES: Map<String, String> = mapOf(
     "Clear" to "Limpiar", // not "Borrar": that is Delete (U-T24)
     "Starred" to "Destacadas",
     "Star" to "Destacar",
-    "Nothing starred" to "Nada destacado",
     "Assign to" to "Asignar a",
     "Not assigned" to "Sin asignar",
     "Assigned to me" to "Asignadas a mí",
@@ -124,7 +123,6 @@ val ES: Map<String, String> = mapOf(
     "Add an item" to "Agregar un artículo",
     "Add" to "Agregar",
     "Add your first task below" to "Agregá tu primera tarea abajo",
-    "Nothing here yet" to "Todavía no hay nada",
     "Completed" to "Completadas",
     "Completed ({n})" to "Completadas ({n})",
     "Done" to "Listo",
@@ -142,7 +140,6 @@ val ES: Map<String, String> = mapOf(
     "“{title}” again {when}" to "“{title}” otra vez {when}",
     "Deleted “{title}”" to "Se borró “{title}”",
     "Deleted {name}" to "Se borró {name}",
-    "Couldn't share" to "No se pudo compartir",
     "Couldn't share. Check your connection and try again." to "No se pudo compartir. Revisá la conexión y probá de nuevo.",
     "Couldn't save. Try again." to "No se pudo guardar. Probá de nuevo.",
     "Couldn't undo. Try again." to "No se pudo deshacer. Probá de nuevo.",
@@ -283,11 +280,11 @@ val ES: Map<String, String> = mapOf(
     "Start with computer" to "Abrir al iniciar la computadora",
     "Appearance" to "Apariencia",
     "Use wallpaper colors" to "Usar los colores del fondo de pantalla",
-    "Default" to "Predeterminado",
-    "Forest" to "Bosque",
-    "Ocean" to "Océano",
-    "Sunset" to "Atardecer",
-    "Paper" to "Papel",
+    "Default" to "Predeterminado",  // built: a Rust core message (crates/), translated by tr() at run time
+    "Forest" to "Bosque",  // built: a Rust core message (crates/), translated by tr() at run time
+    "Ocean" to "Océano",  // built: a Rust core message (crates/), translated by tr() at run time
+    "Sunset" to "Atardecer",  // built: a Rust core message (crates/), translated by tr() at run time
+    "Paper" to "Papel",  // built: a Rust core message (crates/), translated by tr() at run time
     "Thanks! Your message was sent." to "¡Gracias! Tu mensaje se envió.",
     "Version {v}" to "Versión {v}",
     "Diagnostics" to "Diagnóstico",
@@ -324,12 +321,7 @@ val ES: Map<String, String> = mapOf(
     "Paste" to "Pegar",
     "or scan a QR code" to "o escaneá un código QR",
     "This can take a minute, keep the app open" to "Puede tardar un minuto, dejá la app abierta",
-    "Waiting and loading" to "Esperando y cargando",
     "Finding the list…" to "Buscando la lista…",
-    "Asking around…" to "Preguntando por ahí…",
-    "Knocking on doors…" to "Golpeando puertas…",
-    "Following the trail…" to "Siguiendo el rastro…",
-    "Almost there, probably…" to "Ya casi, seguramente…",
     "Not found yet. You can close this: the app keeps looking and tells you when you're in." to
         "Todavía no apareció. Podés cerrar esto: la app sigue buscando y te avisa cuando entres.",
     "You're in: {group}" to "Entraste: {group}",
@@ -370,7 +362,6 @@ val ES: Map<String, String> = mapOf(
     "Show QR code" to "Mostrar código QR",
     "Works until {date}" to "Sirve hasta el {date}",
     "Looking…" to "Buscando…",
-    "This joins {name}'s lists: {summary}" to "Esto se une a las listas de {name}: {summary}",
     "Linking gives that device everything: all the lists on this device, and a place in every list you share. Only go on if you made this code yourself on your other device." to
         "Vincular le da todo a ese dispositivo: todas las listas de este dispositivo y un lugar en cada lista que compartís. Seguí solo si hiciste este código vos en tu otro dispositivo.",
     "It calls itself “{name}” ({summary})" to "Se llama a sí mismo “{name}” ({summary})",
@@ -385,23 +376,18 @@ val ES: Map<String, String> = mapOf(
         "Code or link from your other device" to "Código o enlace de tu otro dispositivo",
     "Scan QR code" to "Escanear código QR",
     // messages from the core
-    "no link code found for these words: check them, or it may have expired" to "No hay un código de vínculo con esas palabras: revisalas, o puede haber vencido",
-    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación, no un vínculo de dispositivo: usá ☰ › Unirme a una lista compartida",
+    "no link code found for these words: check them, or it may have expired" to "No hay un código de vínculo con esas palabras: revisalas, o puede haber vencido",  // built: a Rust core message (crates/), translated by tr() at run time
+    "This is an invite to a list, not a device link. Open ☰ › Join a shared list." to "Esto es una invitación, no un vínculo de dispositivo: usá ☰ › Unirme a una lista compartida",  // built: a Rust core message (crates/), translated by tr() at run time
     "This is a device link code, not an invite. Open ☰ › Link to my other device." to "Esto es un código para vincular un dispositivo, no una invitación. Abrí ☰ › Vincular con mi otro dispositivo.",
-    "not a Tasks backup file" to "No es un archivo de copia de Tasks",
 
     // undo someone's changes
     "Undo someone's changes" to "Deshacer los cambios de alguien",
     "Whose changes?" to "¿Cambios de quién?",
     "Made in…" to "Hechos en…",
-    "hour" to "la última hora",
     "day" to "el último día",
-    "3 days" to "los últimos 3 días",
-    "30 days" to "los últimos 30 días",
     "Nothing to undo" to "No hay nada para deshacer",
     "Put back {n} change" to "Se deshizo {n} cambio",
     "Put back {n} changes" to "Se deshicieron {n} cambios",
-    "Couldn't undo" to "No se pudo deshacer",
 
     // phone and computer
     "Changes by others" to "Cambios de otros",
@@ -417,7 +403,6 @@ val ES: Map<String, String> = mapOf(
     "Couldn't read that image" to "No se pudo leer esa imagen",
     "Imported {name}" to "Se importó {name}",
     "Not a list file" to "No es un archivo de lista",
-    "Restore failed" to "No se pudo restaurar",
     "Share invite" to "Compartir invitación",
     "Export {name}" to "Exportar {name}",
     "Updates only while the app is open" to "Solo se actualiza con la app abierta",
