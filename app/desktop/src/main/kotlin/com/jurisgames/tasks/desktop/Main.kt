@@ -177,7 +177,11 @@ fun main(args: Array<String>) {
             }, onSaveBackup = {
                 // every list in one file, the format Restore reads (locked with the backup password if one is set)
                 val dialog = FileDialog(null as Frame?, tr("Save a backup file"), FileDialog.SAVE).apply { file = "Tasks-${java.time.LocalDate.now()}.ktbackup"; isVisible = true }
-                dialog.file?.let { File(dialog.directory, it) }?.let { f -> runCatching { node.writeBackup(f.path) } }
+                // and says how it went (S4-4: a failed save said nothing)
+                dialog.file?.let { File(dialog.directory, it) }?.let { f ->
+                    val ok = runCatching { node.writeBackup(f.path) }.isSuccess
+                    com.jurisgames.tasks.ui.Notice.text = if (ok) tr("Backup saved") else tr("Couldn't save the backup")
+                }
             }, onRestoreWith = { bytes, pw -> restoreInto(bytes, pw) }, onExport = { l ->
                 // Both formats side by side: readable Markdown and the re-importable file.
                 val dialog = FileDialog(null as Frame?, tr("Export {name}", "name" to l.name), FileDialog.SAVE).apply { file = "${com.jurisgames.tasks.core.exportFileStem(l.name)}.md"; isVisible = true }

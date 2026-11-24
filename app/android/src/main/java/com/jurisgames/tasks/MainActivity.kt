@@ -91,16 +91,20 @@ class MainActivity : ComponentActivity() {
             // every list in one file she keeps (Drive, Downloads), the format Restore reads (Ciclo review U-C12)
             val saveBackup = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
                 if (uri != null) scope.launch {
+                    var touched = false
                     val ok = withContext(Dispatchers.IO) {
                         runCatching {
                             val tmp = java.io.File(cacheDir, "backup-out.ktbackup")
                             try {
                                 node.writeBackup(tmp.path)
+                                touched = true
                                 contentResolver.openOutputStream(uri)!!.use { out -> tmp.inputStream().use { it.copyTo(out) } }
                             } finally { tmp.delete() }
                         }.isSuccess
                     }
-                    if (!ok) runCatching { android.provider.DocumentsContract.deleteDocument(contentResolver, uri) } // never an empty file (APP-RULE 226)
+                    // never an empty file (APP-RULE 226), but never someone's older file either: only one we began writing or an empty one (S4-3)
+                    val empty = { runCatching { contentResolver.openAssetFileDescriptor(uri, "r")!!.use { it.length == 0L } }.getOrDefault(false) }
+                    if (!ok && (touched || withContext(Dispatchers.IO) { empty() })) runCatching { android.provider.DocumentsContract.deleteDocument(contentResolver, uri) }
                     Toast.makeText(this@MainActivity, if (ok) tr("Backup saved") else tr("Couldn't save the backup"), Toast.LENGTH_LONG).show()
                 }
             }
