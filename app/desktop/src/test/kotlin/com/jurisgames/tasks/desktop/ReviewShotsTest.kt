@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.Density
@@ -40,7 +41,8 @@ internal fun androidx.compose.ui.test.ComposeUiTest.captureAll(w: Int, h: Int): 
 
 /**
  * Not a check: the screens in the order a new person meets them, phone (360x640 at 2x) and computer
- * (1280x720), for cold reviews next to other to-do apps. Only with -Pshots=<folder>.
+ * (1280x720), for cold reviews next to other to-do apps. Pictures only with -Pshots=<folder>; the phone screens always
+ * run as the small-phone fit check (APP-RULES 196).
  */
 @OptIn(ExperimentalTestApi::class)
 class ReviewShotsTest {
@@ -86,7 +88,8 @@ class ReviewShotsTest {
     }
 
     private fun shot(name: String, pc: Boolean, fresh: Boolean = false, steps: androidx.compose.ui.test.ComposeUiTest.() -> Unit) {
-        out ?: return
+        // without -Pshots the phone screens still run, as APP-RULES 196's check: every fixed button on screen (PhoneFit.kt)
+        if (out == null && pc) return
         val n = if (fresh) node() else sample()
         val (w, h, d) = if (pc) Triple(1280, 720, 1f) else Triple(720, 1280, 2f)
         runDesktopComposeUiTest(width = w, height = h) {
@@ -95,7 +98,8 @@ class ReviewShotsTest {
             else waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("task-Call the bank")).fetchSemanticsNodes().isNotEmpty() }
             steps()
             waitForIdle()
-            ImageIO.write(captureAll(w, h), "png", File(out, "$name.png"))
+            if (!pc) buttonsFit(w, name, OPEN_LISTS[name] ?: 1).let { check(it.isEmpty()) { it.joinToString("\n") } }
+            if (out != null) ImageIO.write(captureAll(w, h), "png", File(out, "$name.png"))
         }
         n.close()
     }
@@ -119,15 +123,20 @@ class ReviewShotsTest {
     @Test fun c10() = shot("10-pc-list", true) { }
     @Test fun c11() = shot("11-pc-task-details", true) { onNodeWithTag("task-Plan the trip").performClick() }
     @Test fun c12() = shot("12-pc-share-list", true) { onNodeWithTag("share").performClick(); waitForIdle(); onNodeWithTag("shareCreate").performClick() }
-    @Test fun p13() = shot("13-phone-starred", false) { onNodeWithTag("starredView").performClick() }
+    @Test fun p13() = shot("13-phone-starred", false) { onNodeWithTag("starredView").performScrollTo().performClick() }
     @Test fun c14() = shot("14-pc-starred", true) { onNodeWithTag("starredView").performClick() }
     @Test fun c15() = shot("15-pc-list-more", true) { onNodeWithTag("listMenu").performClick() }
-    @Test fun p16() = shot("16-phone-upcoming", false) { onNodeWithTag("upcomingView").performClick() }
+    @Test fun p16() = shot("16-phone-upcoming", false) { onNodeWithTag("upcomingView").performScrollTo().performClick() }
     @Test fun c17() = shot("17-pc-upcoming", true) { onNodeWithTag("upcomingView").performClick() }
-    @Test fun p18() = shot("18-phone-search-notes", false) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("bus") }
-    @Test fun p20() = shot("20-phone-my-day", false) { onNodeWithTag("dayView").performClick() }
-    @Test fun p21() = shot("21-phone-my-day-suggestions", false) { onNodeWithTag("dayView").performClick(); waitForIdle(); onNodeWithTag("dayIdeas").performClick() }
+    @Test fun p18() = shot("18-phone-search-notes", false) { onNodeWithTag("searchView").performScrollTo().performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("bus") }
+    @Test fun p20() = shot("20-phone-my-day", false) { onNodeWithTag("dayView").performScrollTo().performClick() }
+    @Test fun p21() = shot("21-phone-my-day-suggestions", false) { onNodeWithTag("dayView").performScrollTo().performClick(); waitForIdle(); onNodeWithTag("dayIdeas").performClick() }
     @Test fun c22() = shot("22-pc-my-day", true) { onNodeWithTag("dayView").performClick() }
     @Test fun c23() = shot("23-pc-task-details-my-day", true) { onNodeWithTag("task-Call the bank").performClick() }
     @Test fun c19() = shot("19-pc-search", true) { onNodeWithTag("searchView").performClick(); waitForIdle(); onNodeWithTag("searchField").performTextInput("re") }
+
+    // sideways-scrolling rows each phone screen may have (open-ended lists only, APP-RULES 196)
+    // the list chips (lists, then the views; phones also have them in the menu) on every screen once there are lists;
+    // the shopping list adds its "buy again" chips
+    private val OPEN_LISTS = mapOf("01-phone-first-start" to 0, "02-phone-typing-a-task" to 0, "09-phone-shopping-list" to 2)
 }
