@@ -159,7 +159,7 @@ val ES: Map<String, String> = mapOf(
     "Date" to "Fecha",
     "Starred recently" to "Destacadas hace poco",
     "Delete completed ({n})" to "Borrar completadas ({n})",
-    "Deleted {n} completed" to "Se borraron {n} completadas",
+    "Deleted {n} completed" to "Se borraron {n} completadas", "Deleted 1 completed" to "Se borró 1 completada",
     "Not starred" to "Sin destacar",
     "Has a star" to "Destacada",
     "Notifications are off for Tasks, so this won't ring." to "Las notificaciones de Tasks están apagadas, así que esto no va a sonar.",

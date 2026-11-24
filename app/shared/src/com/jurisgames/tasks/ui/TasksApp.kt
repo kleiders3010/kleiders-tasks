@@ -669,7 +669,7 @@ private fun ListPane(
                         val ids = doneNow.map { it.id }
                         clearing.addAll(ids)
                         paneScope.launch {
-                            val r = snackbar.showSnackbar(tr("Deleted {n} completed", "n" to ids.size.toString()), actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
+                            val r = snackbar.showSnackbar((if (ids.size == 1) tr("Deleted 1 completed") else tr("Deleted {n} completed", "n" to ids.size.toString())), actionLabel = tr("Undo"), duration = SnackbarDuration.Long)
                             if (r != SnackbarResult.ActionPerformed) for (id in ids) runCatching { node.deleteTask(list.id, id) }
                             clearing.removeAll(ids)
                             env.changed()
